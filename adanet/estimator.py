@@ -306,10 +306,12 @@ class Estimator(tf.estimator.Estimator):
 
     self._evaluation_name = None
 
-    # The `Estimator` is only responsible for bookkeeping across iterations.
-    # Create a separate `tf.estimator.Estimator` instance that is responsible
+    # This `Estimator` is responsible for bookkeeping across iterations, and
     # for training the base learners in both a local and distributed setting.
-    self._estimator = tf.estimator.Estimator(
+    # Subclassing improves future-proofing against new private methods being
+    # added to `tf.estimator.Estimator` that are expected to be callable by
+    # external functions, such as in b/110435640.
+    super(Estimator, self).__init__(
         model_fn=self._model_fn,
         params={
             self._Keys.BASE_LEARNER_BUILDER_GENERATOR:
@@ -317,30 +319,6 @@ class Estimator(tf.estimator.Estimator):
         },
         config=config,
         model_dir=model_dir)
-
-  @property
-  def model_dir(self):
-    """Returns the model_dir where all outputs are written."""
-
-    return self._estimator.model_dir
-
-  @property
-  def config(self):
-    """Returns the config."""
-
-    return self._estimator.config
-
-  @property
-  def params(self):
-    """Returns the params that will be passed to model_fn."""
-
-    return self._estimator.params
-
-  @property
-  def model_fn(self):
-    """Returns the model_fn which is bound to self.params."""
-
-    return self._estimator.model_fn
 
   def _latest_checkpoint_iteration_number(self):
     """Returns the iteration number from the latest checkpoint."""
@@ -384,7 +362,7 @@ class Estimator(tf.estimator.Estimator):
       tf.logging.info("Beginning training AdaNet iteration %s",
                       current_iteration)
       self._iteration_ended = False
-      result = self._estimator.train(
+      result = super(Estimator, self).train(
           input_fn=input_fn,
           hooks=hooks,
           max_steps=max_steps,
@@ -469,7 +447,7 @@ class Estimator(tf.estimator.Estimator):
     # variable values come from the same checkpoint during evaluation.
     self._evaluation_checkpoint_path = checkpoint_path
     self._evaluation_name = name
-    result = self._estimator.evaluate(
+    result = super(Estimator, self).evaluate(
         input_fn,
         steps=steps,
         hooks=hooks,
@@ -477,73 +455,6 @@ class Estimator(tf.estimator.Estimator):
         name=name)
     self._evaluation_checkpoint_path = None
     return result
-
-  def predict(self,
-              input_fn,
-              predict_keys=None,
-              hooks=None,
-              checkpoint_path=None,
-              yield_single_examples=True):
-    """See `tf.estimator.Estimator` predict."""
-
-    return self._estimator.predict(
-        input_fn=input_fn,
-        predict_keys=predict_keys,
-        hooks=hooks,
-        checkpoint_path=checkpoint_path,
-        yield_single_examples=yield_single_examples)
-
-  def export_savedmodel(self,
-                        export_dir_base,
-                        serving_input_receiver_fn,
-                        assets_extra=None,
-                        as_text=False,
-                        checkpoint_path=None,
-                        strip_default_attrs=False):
-    """See `tf.estimator.Estimator`."""
-
-    return self._estimator.export_savedmodel(
-        export_dir_base=export_dir_base,
-        serving_input_receiver_fn=serving_input_receiver_fn,
-        assets_extra=assets_extra,
-        as_text=as_text,
-        checkpoint_path=checkpoint_path,
-        strip_default_attrs=strip_default_attrs)
-
-  def _export_all_saved_models(self,
-                               export_dir_base,
-                               input_receiver_fn_map,
-                               assets_extra=None,
-                               as_text=False,
-                               checkpoint_path=None,
-                               strip_default_attrs=False):
-    """See `tf.estimator.Estimator`."""
-    return self._estimator._export_all_saved_models(  # pylint: disable=protected-access
-        export_dir_base=export_dir_base,
-        input_receiver_fn_map=input_receiver_fn_map,
-        assets_extra=assets_extra,
-        as_text=as_text,
-        checkpoint_path=checkpoint_path,
-        strip_default_attrs=strip_default_attrs)
-
-  def _export_saved_model_for_mode(self,
-                                   export_dir_base,
-                                   input_receiver_fn,
-                                   assets_extra=None,
-                                   as_text=False,
-                                   checkpoint_path=None,
-                                   strip_default_attrs=False,
-                                   mode=tf.estimator.ModeKeys.PREDICT):
-    """See `tf.estimator.Estimator`."""
-
-    return self._estimator._export_saved_model_for_mode(  # pylint: disable=protected-access
-        export_dir_base=export_dir_base,
-        input_receiver_fn=input_receiver_fn,
-        assets_extra=assets_extra,
-        as_text=as_text,
-        checkpoint_path=checkpoint_path,
-        strip_default_attrs=strip_default_attrs,
-        mode=mode)
 
   def _call_adanet_model_fn(self, input_fn, mode, params):
     """Calls model_fn with the given mode and parameters."""

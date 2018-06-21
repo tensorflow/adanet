@@ -1020,5 +1020,53 @@ class DifferentFeaturesPerModeTest(parameterized.TestCase, tf.test.TestCase):
         serving_input_receiver_fn=serving_input_fn)
 
 
+class ExportSavedModelForModeTest(parameterized.TestCase, tf.test.TestCase):
+  """Tests b/110435640."""
+
+  def setUp(self):
+    # Setup and cleanup test directory.
+    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
+    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
+
+  def tearDown(self):
+    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
+
+  def test_export_saved_model_for_mode(self):
+    """Tests new SavedModel exporting functionality."""
+
+    run_config = tf.estimator.RunConfig(tf_random_seed=42)
+    base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
+        [_DNNBaseLearnerBuilder("dnn")])
+    estimator = Estimator(
+        head=_head(),
+        base_learner_builder_generator=base_learner_builder_generator,
+        max_iteration_steps=1,
+        model_dir=self.test_subdirectory,
+        config=run_config)
+
+    features = {"x": [[1., 0.]]}
+    labels = [[1.]]
+    train_input_fn = _dummy_feature_dict_input_fn(features, labels)
+
+    # Train.
+    estimator.train(input_fn=train_input_fn, max_steps=2)
+
+    # Export SavedModel.
+    def serving_input_fn():
+      """Input fn for serving export, starting from serialized example."""
+      serialized_example = tf.placeholder(
+          dtype=tf.string, shape=(None), name="serialized_example")
+      for key, value in features.items():
+        features[key] = tf.constant(value)
+      return tf.estimator.export.ServingInputReceiver(
+          features=features, receiver_tensors=serialized_example)
+
+    tf.contrib.estimator.export_saved_model_for_mode(
+        estimator,
+        export_dir_base=self.test_subdirectory,
+        input_receiver_fn=serving_input_fn,
+        mode=tf.estimator.ModeKeys.PREDICT)
+
+
 if __name__ == "__main__":
   tf.test.main()
