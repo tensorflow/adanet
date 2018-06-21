@@ -23,13 +23,13 @@ import errno
 import os
 import time
 
-from adanet.adanet.candidate import _CandidateBuilder
-from adanet.adanet.ensemble import _EnsembleBuilder
-from adanet.adanet.freezer import _EnsembleFreezer
-from adanet.adanet.input_utils import make_placeholder_input_fn
-from adanet.adanet.iteration import _IterationBuilder
-from adanet.adanet.summary import _ScopedSummary
-from adanet.adanet.timer import _CountDownTimer
+from adanet.candidate import _CandidateBuilder
+from adanet.ensemble import _EnsembleBuilder
+from adanet.freezer import _EnsembleFreezer
+from adanet.input_utils import make_placeholder_input_fn
+from adanet.iteration import _IterationBuilder
+from adanet.summary import _ScopedSummary
+from adanet.timer import _CountDownTimer
 import numpy as np
 import six
 import tensorflow as tf

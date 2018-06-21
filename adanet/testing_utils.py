@@ -19,10 +19,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.adanet.base_learner import BaseLearner
-from adanet.adanet.candidate import _Candidate
-from adanet.adanet.ensemble import Ensemble
-from adanet.adanet.ensemble import WeightedBaseLearner
+from adanet.base_learner import BaseLearner
+from adanet.candidate import _Candidate
+from adanet.ensemble import Ensemble
+from adanet.ensemble import WeightedBaseLearner
 import tensorflow as tf
 
 

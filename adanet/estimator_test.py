@@ -23,12 +23,12 @@ import os
 import shutil
 
 from absl.testing import parameterized
-from adanet.adanet.base_learner import BaseLearner
-from adanet.adanet.base_learner import BaseLearnerBuilder
-from adanet.adanet.base_learner import SimpleBaseLearnerBuilderGenerator
-from adanet.adanet.estimator import Estimator
-from adanet.adanet.evaluator import Evaluator
-import adanet.adanet.testing_utils as tu
+from adanet.base_learner import BaseLearner
+from adanet.base_learner import BaseLearnerBuilder
+from adanet.base_learner import SimpleBaseLearnerBuilderGenerator
+from adanet.estimator import Estimator
+from adanet.evaluator import Evaluator
+import adanet.testing_utils as tu
 import tensorflow as tf
 
 

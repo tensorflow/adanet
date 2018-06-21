@@ -21,7 +21,7 @@ from __future__ import print_function
 
 import collections
 
-from adanet.adanet.summary import _ScopedSummary
+from adanet.summary import _ScopedSummary
 import tensorflow as tf
 
 

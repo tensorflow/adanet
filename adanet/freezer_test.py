@@ -23,10 +23,10 @@ import os
 import shutil
 
 from absl.testing import parameterized
-from adanet.adanet.base_learner import BaseLearner
-from adanet.adanet.ensemble import WeightedBaseLearner
-from adanet.adanet.freezer import _EnsembleFreezer
-import adanet.adanet.testing_utils as tu
+from adanet.base_learner import BaseLearner
+from adanet.ensemble import WeightedBaseLearner
+from adanet.freezer import _EnsembleFreezer
+import adanet.testing_utils as tu
 import tensorflow as tf
 
 

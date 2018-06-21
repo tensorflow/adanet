@@ -21,7 +21,7 @@ from __future__ import print_function
 
 import time
 
-from adanet.adanet.timer import _CountDownTimer
+from adanet.timer import _CountDownTimer
 import tensorflow as tf
 
 
