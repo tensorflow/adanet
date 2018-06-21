@@ -42,7 +42,6 @@ py_test(
         ":estimator",
         ":evaluator",
         ":testing_utils",
-        "@absl_py//absl/flags",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -152,7 +151,6 @@ py_test(
         ":ensemble",
         ":freezer",
         ":testing_utils",
-        "@absl_py//absl/flags",
         "@absl_py//absl/testing:parameterized",
     ],
 )

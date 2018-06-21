@@ -19,10 +19,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl.testing import parameterized
 from adanet.adanet.input_utils import make_placeholder_input_fn
 import tensorflow as tf
-
-from absl.testing import parameterized
 
 
 class InputUtilsTest(parameterized.TestCase, tf.test.TestCase):

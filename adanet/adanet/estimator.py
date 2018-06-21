@@ -35,7 +35,7 @@ import six
 import tensorflow as tf
 
 
-class _StopAfterTrainingHook(tf.training.SessionRunHook):
+class _StopAfterTrainingHook(tf.train.SessionRunHook):
   """Hook that requests stop once iteration is over."""
 
   def __init__(self, iteration, after_fn):
@@ -56,7 +56,7 @@ class _StopAfterTrainingHook(tf.training.SessionRunHook):
     """See `SessionRunHook`."""
 
     del run_context  # Unused
-    return tf.training.SessionRunArgs(self._iteration.is_over)
+    return tf.train.SessionRunArgs(self._iteration.is_over)
 
   def after_run(self, run_context, run_values):
     """See `SessionRunHook`."""
@@ -68,7 +68,7 @@ class _StopAfterTrainingHook(tf.training.SessionRunHook):
     self._after_fn()
 
 
-class _EvalMetricSaverHook(tf.training.SessionRunHook):
+class _EvalMetricSaverHook(tf.train.SessionRunHook):
   """A hook for writing evaluation metrics as summaries to disk."""
 
   def __init__(self, name, eval_metric_ops, output_dir):
@@ -96,7 +96,7 @@ class _EvalMetricSaverHook(tf.training.SessionRunHook):
     """See `SessionRunHook`."""
 
     del run_context  # Unused
-    return tf.training.SessionRunArgs(self._eval_metric_ops)
+    return tf.train.SessionRunArgs(self._eval_metric_ops)
 
   def _dict_to_str(self, dictionary):
     """Get a `str` representation of a `dict`.

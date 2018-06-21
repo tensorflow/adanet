@@ -22,7 +22,7 @@ from __future__ import print_function
 import os
 import shutil
 
-from absl import flags
+from absl.testing import parameterized
 from adanet.adanet.base_learner import BaseLearner
 from adanet.adanet.base_learner import BaseLearnerBuilder
 from adanet.adanet.base_learner import SimpleBaseLearnerBuilderGenerator
@@ -30,8 +30,6 @@ from adanet.adanet.estimator import Estimator
 from adanet.adanet.evaluator import Evaluator
 import adanet.adanet.testing_utils as tu
 import tensorflow as tf
-
-from absl.testing import parameterized
 
 
 class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
@@ -247,7 +245,7 @@ class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
     # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(flags.FLAGS.test_tmpdir, self.id())
+    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
     os.mkdir(self.test_subdirectory)
 
@@ -585,7 +583,7 @@ class CheckpointTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
     # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(flags.FLAGS.test_tmpdir, self.id())
+    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
     os.mkdir(self.test_subdirectory)
 
@@ -706,7 +704,7 @@ class SummaryWriterTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
     # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(flags.FLAGS.test_tmpdir, self.id())
+    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
     os.mkdir(self.test_subdirectory)
 
@@ -935,7 +933,7 @@ class DifferentFeaturesPerModeTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
     # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(flags.FLAGS.test_tmpdir, self.id())
+    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
 
   def tearDown(self):

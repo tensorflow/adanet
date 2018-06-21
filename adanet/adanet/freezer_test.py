@@ -22,14 +22,12 @@ from __future__ import print_function
 import os
 import shutil
 
-from absl import flags
+from absl.testing import parameterized
 from adanet.adanet.base_learner import BaseLearner
 from adanet.adanet.ensemble import WeightedBaseLearner
 from adanet.adanet.freezer import _EnsembleFreezer
 import adanet.adanet.testing_utils as tu
 import tensorflow as tf
-
-from absl.testing import parameterized
 
 
 def _extract_feature(features):
@@ -159,7 +157,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
     # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(flags.FLAGS.test_tmpdir,
+    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir,
                                           "EnsembleFreezerTest")
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
     os.mkdir(self.test_subdirectory)

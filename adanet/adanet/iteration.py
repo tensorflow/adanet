@@ -229,7 +229,7 @@ class _IterationBuilder(object):
       if mode == tf.estimator.ModeKeys.TRAIN:
         # AdaNet is responsible for incrementing the global step, not the
         # candidates it trains.
-        increment_global_step = tf.assign_add(tf.get_global_step(), 1)
+        increment_global_step = tf.assign_add(tf.train.get_global_step(), 1)
         train_ops.append(increment_global_step)
       for candidate in candidates:
         train_ops.append(candidate.update_op)

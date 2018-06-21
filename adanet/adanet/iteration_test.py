@@ -19,6 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl.testing import parameterized
 from adanet.adanet.base_learner import BaseLearner
 from adanet.adanet.base_learner import BaseLearnerBuilder
 from adanet.adanet.candidate import _Candidate
@@ -27,8 +28,6 @@ from adanet.adanet.iteration import _Iteration
 from adanet.adanet.iteration import _IterationBuilder
 import adanet.adanet.testing_utils as tu
 import tensorflow as tf
-
-from absl.testing import parameterized
 
 
 class _FakeSummary(object):

@@ -19,11 +19,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl.testing import parameterized
 from adanet.adanet.evaluator import Evaluator
 import adanet.adanet.testing_utils as tu
 import tensorflow as tf
-
-from absl.testing import parameterized
 
 
 def _fake_ensembles_0(input_fn):
