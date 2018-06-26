@@ -23,6 +23,7 @@ from absl.testing import parameterized
 from adanet.base_learner import BaseLearner
 from adanet.base_learner import BaseLearnerBuilder
 from adanet.ensemble import _EnsembleBuilder
+from adanet.ensemble import MixtureWeightType
 import adanet.testing_utils as tu
 import tensorflow as tf
 
@@ -162,6 +163,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
     builder = _EnsembleBuilder(
         head=tf.contrib.estimator.binary_classification_head(
             loss_reduction=tf.losses.Reduction.SUM),
+        mixture_weight_type=MixtureWeightType.MATRIX,
         adanet_lambda=adanet_lambda,
         adanet_beta=adanet_beta,
         use_bias=use_bias)

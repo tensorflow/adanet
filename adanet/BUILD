@@ -41,9 +41,10 @@ py_test(
     name = "estimator_test",
     size = "large",
     srcs = ["estimator_test.py"],
-    shard_count = 5,
+    shard_count = 10,
     deps = [
         ":base_learner",
+        ":ensemble",
         ":estimator",
         ":evaluator",
         ":testing_utils",

@@ -25,6 +25,7 @@ import time
 
 from adanet.candidate import _CandidateBuilder
 from adanet.ensemble import _EnsembleBuilder
+from adanet.ensemble import MixtureWeightType
 from adanet.freezer import _EnsembleFreezer
 from adanet.input_utils import make_placeholder_input_fn
 from adanet.iteration import _IterationBuilder
@@ -200,6 +201,7 @@ class Estimator(tf.estimator.Estimator):
                head,
                base_learner_builder_generator,
                max_iteration_steps,
+               mixture_weight_type=MixtureWeightType.MATRIX,
                adanet_lambda=0.,
                adanet_beta=0.,
                evaluator=None,
@@ -220,6 +222,28 @@ class Estimator(tf.estimator.Estimator):
       max_iteration_steps: Total number of steps for which to train candidates
         per iteration. If `OutOfRange` or `StopIteration` occurs in the middle,
         training stops before `max_iteration_steps` steps.
+      mixture_weight_type: The `adanet.MixtureWeightType` defining which mixture
+        weight type to learn in the linear combination of base learner outputs.
+
+        A `SCALAR` mixture weight is a rank 0 tensor. It performs an element-
+        wise multiplication with its base learner's outputs, broadcasting itself
+        to the latter's shape. This mixture weight is the simplest to learn, the
+        quickest to train, and most likely to generalize well.
+
+        A `VECTOR` mixture weight is a tensor of shape [k] where k is the
+        ensemble's logits dimension as defined by `head`. It is similar to
+        `SCALAR` in that it performs an element-wise multiplication with its
+        base learner's outputs, but is more flexible in learning a base
+        learner's preferences per class.
+
+        A `MATRIX` mixture weight is a tensor of shape [a, b] where a is the
+        number of outputs from the base learner and b is the number of outputs
+        from the ensemble. This weight matrix-multiplies the base learner's
+        outputs. This mixture weight offers the most flexibility and
+        expressivity, allowing base learners to have outputs of different
+        dimensionalities. However, it also has the most trainable parameters
+        (a*b), and is therefore the most sensitive to learning rates and
+        regularization.
       adanet_lambda: Float multiplier 'lambda' for applying L1 regularization to
         base learners' mixture weights 'w' in the ensemble proportional to their
         complexity. See Equation (4) in the AdaNet paper.
@@ -289,6 +313,7 @@ class Estimator(tf.estimator.Estimator):
 
     self._ensemble_builder = _EnsembleBuilder(
         head=head,
+        mixture_weight_type=mixture_weight_type,
         adanet_lambda=adanet_lambda,
         adanet_beta=adanet_beta,
         use_bias=use_bias)

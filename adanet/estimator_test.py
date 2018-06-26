@@ -26,6 +26,7 @@ from absl.testing import parameterized
 from adanet.base_learner import BaseLearner
 from adanet.base_learner import BaseLearnerBuilder
 from adanet.base_learner import SimpleBaseLearnerBuilderGenerator
+from adanet.ensemble import MixtureWeightType
 from adanet.estimator import Estimator
 from adanet.evaluator import Evaluator
 import adanet.testing_utils as tu
@@ -38,10 +39,12 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
   def __init__(self,
                name,
                mixture_weight_learning_rate=3.,
+               return_penultimate_layer=True,
                layer_size=1,
                seed=13):
     self._name = name
     self._mixture_weight_learning_rate = mixture_weight_learning_rate
+    self._return_penultimate_layer = return_penultimate_layer
     self._layer_size = layer_size
     self._seed = seed
 
@@ -83,6 +86,8 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
         # `freeze_training_graph` is `True`.
         persisted_tensors["hidden_layer"] = 2 * hidden_layer
 
+    last_layer = hidden_layer
+
     with tf.variable_scope("logits"):
       logits = tf.layers.dense(
           hidden_layer,
@@ -93,7 +98,7 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
       summary.scalar("scalar", 3)
 
     return BaseLearner(
-        last_layer=hidden_layer,
+        last_layer=last_layer if self._return_penultimate_layer else logits,
         logits=logits,
         complexity=3,
         persisted_tensors=persisted_tensors)
@@ -310,6 +315,34 @@ class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
           .34461,
   }, {
       "testcase_name":
+          "single_builder_scalar_mixture_weight",
+      "base_learner_builder_generator":
+          SimpleBaseLearnerBuilderGenerator(
+              [_DNNBaseLearnerBuilder("dnn", return_penultimate_layer=False)]),
+      "max_iteration_steps":
+          200,
+      "mixture_weight_type":
+          MixtureWeightType.SCALAR,
+      "want_accuracy":
+          1.,
+      "want_loss":
+          3.1415e-6,
+  }, {
+      "testcase_name":
+          "single_builder_vector_mixture_weight",
+      "base_learner_builder_generator":
+          SimpleBaseLearnerBuilderGenerator(
+              [_DNNBaseLearnerBuilder("dnn", return_penultimate_layer=False)]),
+      "max_iteration_steps":
+          200,
+      "mixture_weight_type":
+          MixtureWeightType.VECTOR,
+      "want_accuracy":
+          1.,
+      "want_loss":
+          3.1415e-6,
+  }, {
+      "testcase_name":
           "single_builder_replicate_ensemble_in_training",
       "base_learner_builder_generator":
           SimpleBaseLearnerBuilderGenerator([_DNNBaseLearnerBuilder("dnn")]),
@@ -412,6 +445,7 @@ class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
                      want_accuracy,
                      want_loss,
                      max_iteration_steps,
+                     mixture_weight_type=MixtureWeightType.MATRIX,
                      evaluator=None,
                      use_bias=True,
                      replicate_ensemble_in_training=False,
@@ -425,6 +459,7 @@ class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
         max_iteration_steps=max_iteration_steps,
+        mixture_weight_type=mixture_weight_type,
         evaluator=evaluator,
         use_bias=use_bias,
         replicate_ensemble_in_training=replicate_ensemble_in_training,

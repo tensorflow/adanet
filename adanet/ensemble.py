@@ -152,14 +152,36 @@ class Ensemble(
         export_outputs=export_outputs)
 
 
+class MixtureWeightType(object):
+  """Mixture weight types available for learning base learner contributions.
+
+  The following mixture weight types are defined:
+
+  * `SCALAR`: A rank 0 `Tensor` mixture weight.
+  * `VECTOR`: A rank 1 `Tensor` mixture weight.
+  * `MATRIX`: A rank 2 `Tensor` mixture weight.
+  """
+
+  SCALAR = "scalar"
+  VECTOR = "vector"
+  MATRIX = "matrix"
+
+
 class _EnsembleBuilder(object):
   """Builds `Ensemble` instances."""
 
-  def __init__(self, head, adanet_lambda, adanet_beta, use_bias=True):
+  def __init__(self,
+               head,
+               mixture_weight_type,
+               adanet_lambda,
+               adanet_beta,
+               use_bias=True):
     """Returns an initialized `_EnsembleBuilder`.
 
     Args:
       head: A `tf.contrib.estimator.Head` instance.
+      mixture_weight_type: The `adanet.MixtureWeightType` defining which mixture
+        weight type to learn.
       adanet_lambda: Float multiplier 'lambda' for applying L1 regularization to
         base learners' mixture weights 'w' in the ensemble proportional to their
         complexity. See Equation (4) in the AdaNet paper.
@@ -173,6 +195,7 @@ class _EnsembleBuilder(object):
     """
 
     self._head = head
+    self._mixture_weight_type = mixture_weight_type
     self._adanet_lambda = adanet_lambda
     self._adanet_beta = adanet_beta
     self._use_bias = use_bias
@@ -420,6 +443,10 @@ class _EnsembleBuilder(object):
 
     Returns:
       A `WeightedBaseLearner` instance.
+
+    Raises:
+      ValueError: When the base learner's last layer and logits dimension do
+        not match and requiring a SCALAR or VECTOR mixture weight.
     """
 
     # Treat base learners as if their weights are frozen, and ensure that
@@ -427,17 +454,30 @@ class _EnsembleBuilder(object):
     last_layer = tf.stop_gradient(base_learner.last_layer)
 
     weight_shape = None
+    last_layer_size = last_layer.get_shape().as_list()[-1]
     if weight_initializer is None:
       weight_initializer = tf.zeros_initializer()
-      last_layer_size = base_learner.last_layer.get_shape().as_list()[-1]
-      weight_shape = [last_layer_size, logits_dimension]
+      if self._mixture_weight_type == MixtureWeightType.SCALAR:
+        weight_shape = []
+      if self._mixture_weight_type == MixtureWeightType.VECTOR:
+        weight_shape = [logits_dimension]
+      if self._mixture_weight_type == MixtureWeightType.MATRIX:
+        weight_shape = [last_layer_size, logits_dimension]
 
     with tf.variable_scope("logits"):
       weight = tf.get_variable(
           name="mixture_weight",
           shape=weight_shape,
           initializer=weight_initializer)
-      logits = tf.matmul(last_layer, weight)
+      if self._mixture_weight_type == MixtureWeightType.MATRIX:
+        logits = tf.matmul(last_layer, weight)
+      else:
+        if last_layer_size != logits_dimension:
+          raise ValueError(
+              "BaseLearner's last_layer must have the same number of outputs "
+              "as logits when using SCALAR or VECTOR mixture weights. Got {} "
+              "and {} respectively.".format(last_layer_size, logits_dimension))
+        logits = tf.multiply(last_layer, weight)
     return WeightedBaseLearner(
         base_learner=base_learner, logits=logits, weight=weight)
 
