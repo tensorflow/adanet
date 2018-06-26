@@ -31,6 +31,7 @@ py_library(
         ":freezer",
         ":input_utils",
         ":iteration",
+        ":report_accessor",
         ":summary",
         ":timer",
         "@six_archive//:six",
@@ -44,9 +45,11 @@ py_test(
     shard_count = 10,
     deps = [
         ":base_learner",
+        ":base_learner_report",
         ":ensemble",
         ":estimator",
         ":evaluator",
+        ":report_materializer",
         ":testing_utils",
         "@absl_py//absl/testing:parameterized",
     ],
@@ -88,6 +91,7 @@ py_library(
     name = "iteration",
     srcs = ["iteration.py"],
     deps = [
+        ":base_learner_report",
         ":summary",
     ],
 )

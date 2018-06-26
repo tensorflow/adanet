@@ -148,19 +148,19 @@ def _create_iteration_report_pb(iteration_number,
 class _ReportAccessor(object):
   """Store and retrieve adanet.IterationReport protos."""
 
-  def __init__(self, run_report_dir, filename="run_report.tfrecord"):
+  def __init__(self, report_dir, filename="iteration_reports.tfrecord"):
     """Creates a `_ReportAccessor` instance.
 
     Args:
-      run_report_dir: Directory to store the report.
+      report_dir: Directory to store the report.
       filename: Name of the file.
 
     Returns:
       A `_ReportAccessor` instance.
     """
 
-    tf.gfile.MkDir(run_report_dir)
-    self._full_filepath = os.path.join(run_report_dir, filename)
+    tf.gfile.MakeDirs(report_dir)
+    self._full_filepath = os.path.join(report_dir, filename)
 
   def write_iteration_report(self, iteration_number,
                              materialized_base_learner_reports):

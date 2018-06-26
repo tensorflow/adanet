@@ -118,7 +118,11 @@ class MaterializedBaseLearnerReport(
         ["hparams", "attributes", "metrics", "included_in_final_ensemble"])):
   """A container for data collected about a `BaseLearner`."""
 
-  def __new__(cls, hparams, attributes, metrics, included_in_final_ensemble):
+  def __new__(cls,
+              hparams,
+              attributes,
+              metrics,
+              included_in_final_ensemble=False):
     """Creates a validated `MaterializedBaseLearnerReport` instance.
 
     Args:

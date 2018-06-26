@@ -29,6 +29,7 @@ from adanet.ensemble import MixtureWeightType
 from adanet.freezer import _EnsembleFreezer
 from adanet.input_utils import make_placeholder_input_fn
 from adanet.iteration import _IterationBuilder
+from adanet.report_accessor import _ReportAccessor
 from adanet.summary import _ScopedSummary
 from adanet.timer import _CountDownTimer
 import numpy as np
@@ -192,6 +193,7 @@ class Estimator(tf.estimator.Estimator):
   class _Keys(object):
     CURRENT_ITERATION = "current_iteration"
     EVALUATE_ENSEMBLES = "evaluate_ensembles"
+    MATERIALIZE_REPORT = "materialize_report"
     FREEZE_ENSEMBLE = "freeze_ensemble"
     FROZEN_ENSEMBLE_NAME = "previous_ensemble"
     INCREMENT_ITERATION = "increment_iteration"
@@ -205,11 +207,13 @@ class Estimator(tf.estimator.Estimator):
                adanet_lambda=0.,
                adanet_beta=0.,
                evaluator=None,
+               report_materializer=None,
                use_bias=True,
                replicate_ensemble_in_training=False,
                adanet_loss_decay=.9,
                worker_wait_timeout_secs=7200,
                model_dir=None,
+               report_dir=None,
                config=None):
     """Initializes an `Estimator`.
 
@@ -254,6 +258,10 @@ class Estimator(tf.estimator.Estimator):
         mode using the training set, or a holdout set. When `None`, they are
         compared using a moving average of their `Ensemble`'s AdaNet loss during
         training.
+      report_materializer: A `ReportMaterializer` for materializing the
+        `BaseLearnerReport`s obtained from the `BaseLearnerBuilder`s' in each
+        AdaNet iteration in to `MaterializedBaseLearnerReport`s. When `None`,
+        does not materialize any `BaseLearnerReport`s.
       use_bias: Whether to add a bias term to the ensemble's logits. Adding a
         bias allows the ensemble to learn a shift in the data, often leading to
         more stable training and better predictions.
@@ -285,6 +293,10 @@ class Estimator(tf.estimator.Estimator):
       model_dir: Directory to save model parameters, graph and etc. This can
         also be used to load checkpoints from the directory into a estimator to
         continue training a previously saved model.
+      report_dir: Directory where the `MaterializedBaseLearnerReport`s
+        materialized by `report_materializer` would be saved.
+        If `report_materializer` is None, this will not save
+        anything. If `None`, defaults to "<model_dir>/report".
       config: `RunConfig` object to configure the runtime settings.
 
     Returns:
@@ -325,6 +337,7 @@ class Estimator(tf.estimator.Estimator):
     self._freezer = _EnsembleFreezer()
     self._evaluation_checkpoint_path = None
     self._evaluator = evaluator
+    self._report_materializer = report_materializer
 
     self._replicate_ensemble_in_training = replicate_ensemble_in_training
     self._worker_wait_timeout_secs = worker_wait_timeout_secs
@@ -344,6 +357,12 @@ class Estimator(tf.estimator.Estimator):
         },
         config=config,
         model_dir=model_dir)
+
+    # This is defined after base Estimator's init so that report_accessor can
+    # use the same temporary model_dir as the underlying Estimator even if
+    # model_dir is not provided.
+    report_dir = report_dir or os.path.join(self._model_dir, "report")
+    self._report_accessor = _ReportAccessor(report_dir)
 
   def _latest_checkpoint_iteration_number(self):
     """Returns the iteration number from the latest checkpoint."""
@@ -493,10 +512,12 @@ class Estimator(tf.estimator.Estimator):
   def _prepare_next_iteration(self):
     """Prepares the next iteration.
 
-    This method calls model_fn three times:
+    This method calls model_fn up to four times:
       1. To evaluate all candidate ensembles to find the best one.
-      2. To freeze the best ensemble's subgraph.
-      3. To overwrite the model directory's checkpoint with the next iteration's
+      2. To materialize reports and store them to disk (if report_materializer
+         exists).
+      3. To freeze the best ensemble's subgraph.
+      4. To overwrite the model directory's checkpoint with the next iteration's
          ops.
     """
 
@@ -508,6 +529,14 @@ class Estimator(tf.estimator.Estimator):
     else:
       input_fn = self._placeholder_input_fn
     self._call_adanet_model_fn(input_fn, tf.estimator.ModeKeys.EVAL, params)
+
+    # Then, if report_materializer exists, materialize and store the base
+    # learner reports.
+    if self._report_materializer:
+      params = self.params.copy()
+      params[self._Keys.MATERIALIZE_REPORT] = True
+      self._call_adanet_model_fn(self._report_materializer.input_fn,
+                                 tf.estimator.ModeKeys.EVAL, params)
 
     # Then freeze the best ensemble's graph in predict mode.
     params = self.params.copy()
@@ -641,6 +670,40 @@ class Estimator(tf.estimator.Estimator):
     tf.logging.info("The best ensemble is '%s' at index %s",
                     best_candidate.ensemble.name, index)
     return index
+
+  def _materialize_report(self, current_iteration):
+    """Generates reports as defined by `BaseLearnerBuilder`s.
+
+    Materializes the Tensors and metrics defined in the `BaseLearnerBuilder`s'
+    `build_base_learner_report` method using `ReportMaterializer`, and stores
+    them to disk using `_ReportAccessor`.
+
+    Args:
+      current_iteration: Current `_Iteration`.
+    """
+
+    latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
+    tf.logging.info("Starting metric logging for iteration %s",
+                    current_iteration.number)
+
+    included_base_learner_indices = [self._best_ensemble_index]
+    with tf.Session() as sess:
+      init = tf.group(tf.global_variables_initializer(),
+                      tf.local_variables_initializer(), tf.tables_initializer())
+      sess.run(init)
+      saver = tf.train.Saver(sharded=True)
+      saver.restore(sess, latest_checkpoint)
+      coord = tf.train.Coordinator()
+      tf.train.start_queue_runners(sess=sess, coord=coord)
+      materialized_base_learner_reports = (
+          self._report_materializer.materialize_base_learner_reports(
+              sess, current_iteration.base_learner_reports,
+              included_base_learner_indices))
+      self._report_accessor.write_iteration_report(
+          current_iteration.number, materialized_base_learner_reports)
+
+    tf.logging.info("Finished saving base learner reports for iteration %s",
+                    current_iteration.number)
 
   def _training_hooks(self, current_iteration, training):
     """Returns training hooks for this iteration.
@@ -882,7 +945,13 @@ class Estimator(tf.estimator.Estimator):
         scaffold=tf.train.Scaffold(summary_op=adanet_summary.merge_all()),
         export_outputs=iteraton_estimator_spec.export_outputs)
 
-    if self._Keys.FREEZE_ENSEMBLE in params:
+    if self._Keys.EVALUATE_ENSEMBLES in params:
+      self._best_ensemble_index = self._get_best_ensemble_index(
+          current_iteration)
+    elif self._Keys.MATERIALIZE_REPORT in params:
+      assert self._best_ensemble_index is not None
+      self._materialize_report(current_iteration)
+    elif self._Keys.FREEZE_ENSEMBLE in params:
       assert self._best_ensemble_index is not None
       new_frozen_graph_filename = self._frozen_graph_filename(
           iteration_number, training)
@@ -897,8 +966,5 @@ class Estimator(tf.estimator.Estimator):
           "Overwriting checkpoint with new graph for iteration %s to %s",
           iteration_number, latest_checkpoint)
       self._overwrite_checkpoint(iteration_number_tensor, iteration_number)
-    elif self._Keys.EVALUATE_ENSEMBLES in params:
-      self._best_ensemble_index = self._get_best_ensemble_index(
-          current_iteration)
 
     return estimator_spec

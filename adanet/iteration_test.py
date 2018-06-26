@@ -22,6 +22,7 @@ from __future__ import print_function
 from absl.testing import parameterized
 from adanet.base_learner import BaseLearner
 from adanet.base_learner import BaseLearnerBuilder
+from adanet.base_learner_report import BaseLearnerReport
 from adanet.candidate import _Candidate
 from adanet.ensemble import Ensemble
 from adanet.iteration import _Iteration
@@ -44,6 +45,7 @@ class _FakeSummary(object):
 
 class IterationTest(parameterized.TestCase, tf.test.TestCase):
 
+  # pylint: disable=g-long-lambda
   @parameterized.named_parameters({
       "testcase_name": "single_candidate",
       "number": 0,
@@ -87,9 +89,31 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
       "is_over": True,
+  }, {
+      "testcase_name":
+          "pass_base_learner_report",
+      "number":
+          1,
+      "candidates": [tu.dummy_candidate()],
+      "estimator_spec":
+          tu.dummy_estimator_spec(),
+      "best_candidate_index":
+          0,
+      "is_over":
+          True,
+      "base_learner_reports_fn": lambda: [
+          BaseLearnerReport(
+              hparams={"dropout": 1.0},
+              attributes={"name": tf.constant("foo")},
+              metrics={"moo": (tf.constant("moo1"), tf.constant("moo2"))})
+      ],
   })
   def test_new(self, number, candidates, estimator_spec, best_candidate_index,
-               is_over):
+               is_over, base_learner_reports_fn=None):
+    if base_learner_reports_fn is None:
+      base_learner_reports = []
+    else:
+      base_learner_reports = base_learner_reports_fn()
     with self.test_session():
       iteration = _Iteration(
           number=number,
@@ -97,12 +121,14 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
           estimator_spec=estimator_spec,
           best_candidate_index=best_candidate_index,
           summaries=[],
-          is_over=is_over)
+          is_over=is_over,
+          base_learner_reports=base_learner_reports)
       self.assertEqual(iteration.number, number)
       self.assertEqual(iteration.candidates, candidates)
       self.assertEqual(iteration.estimator_spec, estimator_spec)
       self.assertEqual(iteration.best_candidate_index, best_candidate_index)
       self.assertEqual(iteration.is_over, is_over)
+      self.assertEqual(iteration.base_learner_reports, base_learner_reports)
 
   @parameterized.named_parameters({
       "testcase_name": "negative_number",
@@ -160,9 +186,19 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": None,
       "is_over": True,
+  }, {
+      "testcase_name": "none_base_learner_reports",
+      "number": 0,
+      "candidates": lambda: [tu.dummy_candidate()],
+      "estimator_spec": tu.dummy_estimator_spec(),
+      "best_candidate_index": None,
+      "is_over": True,
+      "base_learner_reports": None,
   })
   def test_new_errors(self, number, candidates, estimator_spec,
-                      best_candidate_index, is_over):
+                      best_candidate_index, is_over, base_learner_reports=None):
+    if base_learner_reports is None:
+      base_learner_reports = []
     with self.test_session():
       with self.assertRaises(ValueError):
         _Iteration(
@@ -171,7 +207,8 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
             estimator_spec=estimator_spec,
             best_candidate_index=best_candidate_index,
             summaries=[],
-            is_over=is_over)
+            is_over=is_over,
+            base_learner_reports=base_learner_reports)
 
 
 class _FakeBaseLearnerBuilder(BaseLearnerBuilder):
@@ -189,7 +226,7 @@ class _FakeBaseLearnerBuilder(BaseLearnerBuilder):
     return self._random_seed
 
   def build_base_learner(self, features, logits_dimension, training, summary,
-                         previous_ensemble):
+                         previous_ensemble=None):
     del features  # Unused
     del training  # Unused
     del summary  # Unused
@@ -229,7 +266,7 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
     return self._name
 
   def build_base_learner(self, features, logits_dimension, training, summary,
-                         previous_ensemble):
+                         previous_ensemble=None):
     del summary  # Unused
     seed = self._seed
     with tf.variable_scope("dnn"):

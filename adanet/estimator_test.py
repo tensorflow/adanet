@@ -26,9 +26,12 @@ from absl.testing import parameterized
 from adanet.base_learner import BaseLearner
 from adanet.base_learner import BaseLearnerBuilder
 from adanet.base_learner import SimpleBaseLearnerBuilderGenerator
+from adanet.base_learner_report import BaseLearnerReport
+from adanet.base_learner_report import MaterializedBaseLearnerReport
 from adanet.ensemble import MixtureWeightType
 from adanet.estimator import Estimator
 from adanet.evaluator import Evaluator
+from adanet.report_materializer import ReportMaterializer
 import adanet.testing_utils as tu
 import tensorflow as tf
 
@@ -112,6 +115,15 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
     optimizer = tf.train.GradientDescentOptimizer(
         learning_rate=self._mixture_weight_learning_rate)
     return optimizer.minimize(loss, var_list=var_list)
+
+  def build_base_learner_report(self):
+    return BaseLearnerReport(
+        hparams={"layer_size": self._layer_size},
+        attributes={"complexity": tf.constant(3, dtype=tf.int32)},
+        metrics={
+            "moo": (tf.constant(3, dtype=tf.int32),
+                    tf.constant(3, dtype=tf.int32))
+        })
 
 
 class _SimpleBaseLearnerBuilder(BaseLearnerBuilder):
@@ -439,6 +451,25 @@ class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
           1.,
       "want_loss":
           .00780,
+  }, {
+      "testcase_name":
+          "report_materializer",
+      "base_learner_builder_generator":
+          SimpleBaseLearnerBuilderGenerator([
+              _DNNBaseLearnerBuilder("dnn"),
+              _DNNBaseLearnerBuilder("dnn2", layer_size=3)
+          ]),
+      "evaluator":
+          Evaluator(input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=3),
+      "report_materializer":
+          ReportMaterializer(
+              input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=3),
+      "max_iteration_steps":
+          200,
+      "want_accuracy":
+          1.,
+      "want_loss":
+          .00176,
   })
   def test_lifecycle(self,
                      base_learner_builder_generator,
@@ -447,6 +478,7 @@ class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
                      max_iteration_steps,
                      mixture_weight_type=MixtureWeightType.MATRIX,
                      evaluator=None,
+                     report_materializer=None,
                      use_bias=True,
                      replicate_ensemble_in_training=False,
                      hooks=None,
@@ -461,6 +493,7 @@ class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
         max_iteration_steps=max_iteration_steps,
         mixture_weight_type=mixture_weight_type,
         evaluator=evaluator,
+        report_materializer=report_materializer,
         use_bias=use_bias,
         replicate_ensemble_in_training=replicate_ensemble_in_training,
         model_dir=self.test_subdirectory,
@@ -1101,6 +1134,337 @@ class ExportSavedModelForModeTest(parameterized.TestCase, tf.test.TestCase):
         export_dir_base=self.test_subdirectory,
         input_receiver_fn=serving_input_fn,
         mode=tf.estimator.ModeKeys.PREDICT)
+
+
+class ReportGenerationTest(parameterized.TestCase, tf.test.TestCase):
+  """Tests report generation."""
+
+  def setUp(self):
+    # Setup and cleanup test directory.
+    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
+    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
+    os.mkdir(self.test_subdirectory)
+
+  def tearDown(self):
+    shutil.rmtree(self.test_subdirectory, ignore_errors=False)
+
+  @parameterized.named_parameters(
+      {
+          "testcase_name":
+              "one_iteration_one_base_learner",
+          "base_learner_builder_generator":
+              SimpleBaseLearnerBuilderGenerator(
+                  [_DNNBaseLearnerBuilder("dnn", layer_size=1)]),
+          "num_iterations":
+              1,
+          "want_materialized_iteration_reports": [[
+              MaterializedBaseLearnerReport(
+                  hparams={"layer_size": 1},
+                  attributes={
+                      "name": "dnn",
+                      "complexity": 3,
+                  },
+                  metrics={
+                      "moo": 3,
+                  },
+                  included_in_final_ensemble=False,  # unused by test
+              ),
+          ]],
+      },
+      {
+          "testcase_name":
+              "three_iterations_one_base_learner",
+          "base_learner_builder_generator":
+              SimpleBaseLearnerBuilderGenerator(
+                  [_DNNBaseLearnerBuilder("dnn", layer_size=1)]),
+          "num_iterations":
+              3,
+          "want_materialized_iteration_reports": [
+              [
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 1},
+                      attributes={
+                          "name": "dnn",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                      included_in_final_ensemble=False,  # usused by test
+                  )
+              ],
+              [
+                  MaterializedBaseLearnerReport(
+                      hparams={},
+                      attributes={
+                          "name": "previous_ensemble",
+                      },
+                      metrics={},
+                      included_in_final_ensemble=False,  # unused by test
+                  ),
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 1},
+                      attributes={
+                          "name": "dnn",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                      included_in_final_ensemble=False,  # unused by test
+                  ),
+              ],
+              [
+                  MaterializedBaseLearnerReport(
+                      hparams={},
+                      attributes={
+                          "name": "previous_ensemble",
+                      },
+                      metrics={},
+                      included_in_final_ensemble=False,  # unused by test
+                  ),
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 1},
+                      attributes={
+                          "name": "dnn",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                      included_in_final_ensemble=False,  # unused by test
+                  ),
+              ],
+          ],
+      },
+      {
+          "testcase_name":
+              "one_iteration_three_base_learners",
+          "base_learner_builder_generator":
+              SimpleBaseLearnerBuilderGenerator([
+                  _DNNBaseLearnerBuilder("dnn_1", layer_size=1),
+                  _DNNBaseLearnerBuilder("dnn_2", layer_size=2),
+                  _DNNBaseLearnerBuilder("dnn_3", layer_size=3)
+              ]),
+          "num_iterations":
+              1,
+          "want_materialized_iteration_reports": [
+              [
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 1},
+                      attributes={
+                          "name": "dnn_1",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                  ),
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 2},
+                      attributes={
+                          "name": "dnn_2",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                  ),
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 3},
+                      attributes={
+                          "name": "dnn_3",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                  ),
+              ],
+          ],
+      },
+      {
+          "testcase_name":
+              "three_iterations_three_base_learners",
+          "base_learner_builder_generator":
+              SimpleBaseLearnerBuilderGenerator([
+                  _DNNBaseLearnerBuilder("dnn_1", layer_size=1),
+                  _DNNBaseLearnerBuilder("dnn_2", layer_size=2),
+                  _DNNBaseLearnerBuilder("dnn_3", layer_size=3)
+              ]),
+          "num_iterations":
+              3,
+          "want_materialized_iteration_reports": [
+              [
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 1},
+                      attributes={
+                          "name": "dnn_1",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                  ),
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 2},
+                      attributes={
+                          "name": "dnn_2",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                  ),
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 3},
+                      attributes={
+                          "name": "dnn_3",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                  ),
+              ],
+              [
+                  MaterializedBaseLearnerReport(
+                      hparams={},
+                      attributes={
+                          "name": "previous_ensemble",
+                      },
+                      metrics={},
+                  ),
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 1},
+                      attributes={
+                          "name": "dnn_1",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                  ),
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 2},
+                      attributes={
+                          "name": "dnn_2",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                  ),
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 3},
+                      attributes={
+                          "name": "dnn_3",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                  ),
+              ],
+              [
+                  MaterializedBaseLearnerReport(
+                      hparams={},
+                      attributes={
+                          "name": "previous_ensemble",
+                      },
+                      metrics={},
+                  ),
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 1},
+                      attributes={
+                          "name": "dnn_1",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                  ),
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 2},
+                      attributes={
+                          "name": "dnn_2",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                  ),
+                  MaterializedBaseLearnerReport(
+                      hparams={"layer_size": 3},
+                      attributes={
+                          "name": "dnn_3",
+                          "complexity": 3,
+                      },
+                      metrics={
+                          "moo": 3,
+                      },
+                  ),
+              ],
+          ],
+      })
+  def testReportGeneration(self, base_learner_builder_generator, num_iterations,
+                           want_materialized_iteration_reports):
+    max_iteration_steps = 10
+    max_steps = max_iteration_steps * num_iterations
+
+    train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
+    estimator = Estimator(
+        head=_head(),
+        base_learner_builder_generator=base_learner_builder_generator,
+        max_iteration_steps=max_iteration_steps,
+        report_materializer=ReportMaterializer(
+            input_fn=train_input_fn, steps=10),
+        model_dir=self.test_subdirectory)
+
+    report_accessor = estimator._report_accessor
+
+    estimator.train(input_fn=train_input_fn, max_steps=max_steps)
+
+    materialized_iteration_reports = list(
+        report_accessor.read_iteration_reports())
+    self.assertEqual(num_iterations, len(materialized_iteration_reports))
+    for i in range(num_iterations):
+      want_materialized_base_learner_reports = (
+          want_materialized_iteration_reports[i])
+      materialized_base_learner_reports = materialized_iteration_reports[i]
+      self.assertEqual(
+          len(want_materialized_base_learner_reports),
+          len(materialized_base_learner_reports))
+      for (want_materialized_base_learner_report,
+           materialized_base_learner_report) in zip(
+               want_materialized_base_learner_reports,
+               materialized_base_learner_reports):
+        self.assertEqual(want_materialized_base_learner_report.hparams,
+                         materialized_base_learner_report.hparams)
+        for metric_key in want_materialized_base_learner_report.metrics:
+          self.assertEqual(
+              want_materialized_base_learner_report.metrics[metric_key],
+              materialized_base_learner_report.metrics[metric_key])
+        self.assertIn("adanet_loss", materialized_base_learner_report.metrics)
+
+      # Compute argmin adanet loss.
+      argmin_adanet_loss = 0
+      smallest_known_adanet_loss = float("inf")
+      for j, materialized_base_learner_report in enumerate(
+          materialized_base_learner_reports):
+        if (smallest_known_adanet_loss >
+            materialized_base_learner_report.metrics["adanet_loss"]):
+          smallest_known_adanet_loss = (
+              materialized_base_learner_report.metrics["adanet_loss"])
+          argmin_adanet_loss = j
+
+      # Check that the base_learner with the lowest adanet loss is the one
+      # that is included in the final ensemble.
+      for j, materialized_base_learner_reports in enumerate(
+          materialized_base_learner_reports):
+        self.assertEqual(
+            j == argmin_adanet_loss,
+            materialized_base_learner_reports.included_in_final_ensemble)
 
 
 if __name__ == "__main__":

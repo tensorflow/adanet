@@ -168,6 +168,19 @@ class BaseLearnerBuilder(object):
       A train op.
     """
 
+  def build_base_learner_report(self):
+    """Returns a `BaseLearnerReport` to materialize and record.
+
+    This method will be called once after `build_base_learner`.
+    Do NOT depend on variables created in `build_base_learner_train_op` or
+    `build_mixture_weights_train_op`, because they are not called before
+    `build_base_learner_report` is called.
+
+    If it returns None, AdaNet records the name and standard eval metrics.
+    """
+
+    return None
+
 
 class BaseLearnerBuilderGenerator(object):
   """Interface for a base learner builder generator.

@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import collections
 
+from adanet.base_learner_report import BaseLearnerReport
 from adanet.summary import _ScopedSummary
 import tensorflow as tf
 
@@ -28,7 +29,7 @@ import tensorflow as tf
 class _Iteration(
     collections.namedtuple("_Iteration", [
         "number", "candidates", "estimator_spec", "best_candidate_index",
-        "summaries", "is_over"
+        "summaries", "is_over", "base_learner_reports"
     ])):
   """An AdaNet iteration.
 
@@ -40,7 +41,7 @@ class _Iteration(
   """
 
   def __new__(cls, number, candidates, estimator_spec, best_candidate_index,
-              summaries, is_over):
+              summaries, is_over, base_learner_reports):
     """Creates a validated `_Iteration` instance.
 
     Args:
@@ -55,6 +56,7 @@ class _Iteration(
       best_candidate_index: Int `Tensor` indicating the best candidate's index.
       summaries: List of `_ScopedSummary` instances for each candidate.
       is_over: Boolean `Tensor` indicating if iteration is over.
+      base_learner_reports: List of `BaseLearnerReport`s, one per candidate.
 
     Raises:
       ValueError: If validation fails.
@@ -68,6 +70,8 @@ class _Iteration(
       raise ValueError("estimator_spec is required")
     if best_candidate_index is None:
       raise ValueError("best_candidate_index is required")
+    if not isinstance(base_learner_reports, list):
+      raise ValueError("base_learner_reports must be a list")
     return super(_Iteration, cls).__new__(
         cls,
         number=number,
@@ -75,7 +79,8 @@ class _Iteration(
         estimator_spec=estimator_spec,
         best_candidate_index=best_candidate_index,
         summaries=summaries,
-        is_over=is_over)
+        is_over=is_over,
+        base_learner_reports=base_learner_reports)
 
 
 class _IterationBuilder(object):
@@ -141,6 +146,7 @@ class _IterationBuilder(object):
       seen_builder_names = {}
       candidates = []
       summaries = []
+      base_learner_reports = []
 
       # TODO: Consolidate building base learner into
       # candidate_builder.
@@ -155,6 +161,23 @@ class _IterationBuilder(object):
             is_previous_best=True)
         candidates.append(previous_best_candidate)
         summaries.append(previous_ensemble_summary)
+
+        # Generate base learner reports.
+        if mode != tf.estimator.ModeKeys.PREDICT:
+          base_learner_report = BaseLearnerReport(
+              hparams={},
+              attributes={},
+              metrics=(
+                  previous_ensemble.eval_metric_ops.copy()
+                  if previous_ensemble.eval_metric_ops is not None
+                  else {}),
+          )
+          base_learner_report.attributes["name"] = tf.constant(
+              "previous_ensemble")
+          base_learner_report.metrics["adanet_loss"] = tf.metrics.mean(
+              previous_ensemble.adanet_loss)
+          base_learner_reports.append(base_learner_report)
+
       for base_learner_builder in base_learner_builders:
         if base_learner_builder.name in seen_builder_names:
           raise ValueError("Two ensembles have the same name '{}'".format(
@@ -173,6 +196,21 @@ class _IterationBuilder(object):
         candidate = self._candidate_builder.build_candidate(
             ensemble=ensemble, mode=mode, summary=summary)
         candidates.append(candidate)
+
+        # Generate base learner reports.
+        if mode != tf.estimator.ModeKeys.PREDICT:
+          base_learner_report = base_learner_builder.build_base_learner_report()
+          if not base_learner_report:
+            base_learner_report = BaseLearnerReport(
+                hparams={}, attributes={}, metrics={})
+          if ensemble.eval_metric_ops is not None:
+            for metric_name, metric in ensemble.eval_metric_ops.items():
+              base_learner_report.metrics[metric_name] = metric
+          base_learner_report.attributes["name"] = tf.constant(
+              base_learner_builder.name)
+          base_learner_report.metrics["adanet_loss"] = tf.metrics.mean(
+              ensemble.adanet_loss)
+          base_learner_reports.append(base_learner_report)
 
       # The iteration is over once all candidates are done training.
       with tf.variable_scope("is_over"):
@@ -203,7 +241,8 @@ class _IterationBuilder(object):
           estimator_spec=estimator_spec,
           best_candidate_index=best_candidate_index,
           summaries=summaries,
-          is_over=is_over)
+          is_over=is_over,
+          base_learner_reports=base_learner_reports)
 
   def _create_train_op(self, candidates, mode):
     """Returns the train op for this set of candidates.
