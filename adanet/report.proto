@@ -1,0 +1,45 @@
+// Format for data collected about BaseLearners explored in an AdaNet run.
+
+syntax = "proto3";
+
+package adanet;
+
+message Value {
+  oneof value {
+    string string_value = 1;
+    float float_value = 2;
+    int32 int_value = 3;
+  }
+}
+
+message BaseLearnerReport {
+  // HParams defining the BaseLearner being added to the previous_ensemble.
+  // Think of these as constructor parameters to a BaseLearnerBuilder.
+  // e.g., learning_rate=1e-5, dropout=0.2, num_layers=3
+  map<string, Value> hparams = 1;
+
+  // Attributes for the BaseLearner, which may be computed before or after
+  // training for analysis. This differs from hparams in that the values of
+  // attribute may change over the course of training, while hparams are
+  // fixed once the BaseLearnerBuilder is constructed.
+  // e.g., name="linear", trainable_weights=5003, weight_norms=23.4
+  map<string, Value> attributes = 2;
+
+  // Metrics for the BaseLearner, which are measurements on a model that are
+  // evaluated over a particular dataset. This differs from attributes in that
+  // the values of metrics can depend on the dataset that the metrics are
+  // evaluated on, while attributes are fixed once the BaseLearner is trained.
+  // e.g., adanet_loss=0.52, loss=0.51
+  map<string, Value> metrics = 3;
+
+  // Whether the base learner was chosen by Adanet.
+  bool included_in_final_ensemble = 4;
+}
+
+message IterationReport {
+  // Zero-indexed AdaNet iteration number.
+  int32 iteration_number = 1;
+
+  // All the base_learner_reports in this iteration.
+  repeated BaseLearnerReport base_learner_reports = 2;
+}

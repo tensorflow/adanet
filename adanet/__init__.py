@@ -23,6 +23,8 @@ from adanet.base_learner import BaseLearner
 from adanet.base_learner import BaseLearnerBuilder
 from adanet.base_learner import BaseLearnerBuilderGenerator
 from adanet.base_learner import SimpleBaseLearnerBuilderGenerator
+from adanet.base_learner_report import BaseLearnerReport
+from adanet.base_learner_report import MaterializedBaseLearnerReport
 from adanet.ensemble import Ensemble
 from adanet.ensemble import WeightedBaseLearner
 from adanet.estimator import Estimator

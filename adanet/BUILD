@@ -14,6 +14,7 @@ py_library(
     ],
     deps = [
         ":base_learner",
+        ":base_learner_report",
         ":ensemble",
         ":estimator",
         ":evaluator",
@@ -212,5 +213,79 @@ py_library(
         ":base_learner",
         ":candidate",
         ":ensemble",
+    ],
+)
+
+py_library(
+    name = "base_learner_report",
+    srcs = ["base_learner_report.py"],
+    deps = [
+        "@six_archive//:six",
+    ],
+)
+
+py_test(
+    name = "base_learner_report_test",
+    srcs = ["base_learner_report_test.py"],
+    deps = [
+        ":base_learner_report",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+proto_library(
+    name = "report_proto",
+    srcs = ["report.proto"],
+    visibility = [
+    ],
+)
+
+
+
+load("@protobuf_bzl//:protobuf.bzl", "py_proto_library")
+py_proto_library(
+    name = "report_pb2",
+    srcs = ["report.proto"],
+    default_runtime = "@com_google_protobuf//:protobuf_python",
+    protoc = "@com_google_protobuf//:protoc",
+    visibility = [
+    ],
+)
+
+py_library(
+    name = "report_accessor",
+    srcs = ["report_accessor.py"],
+    deps = [
+        ":base_learner_report",
+        ":report_pb2",
+        "@six_archive//:six",
+    ],
+)
+
+py_test(
+    name = "report_accessor_test",
+    srcs = ["report_accessor_test.py"],
+    deps = [
+        ":base_learner_report",
+        ":report_accessor",
+    ],
+)
+
+py_library(
+    name = "report_materializer",
+    srcs = ["report_materializer.py"],
+    deps = [
+        ":base_learner_report",
+    ],
+)
+
+py_test(
+    name = "report_materializer_test",
+    srcs = ["report_materializer_test.py"],
+    deps = [
+        ":base_learner_report",
+        ":report_materializer",
+        ":testing_utils",
+        "@absl_py//absl/testing:parameterized",
     ],
 )
