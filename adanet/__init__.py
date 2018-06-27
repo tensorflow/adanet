@@ -30,4 +30,5 @@ from adanet.ensemble import MixtureWeightType
 from adanet.ensemble import WeightedBaseLearner
 from adanet.estimator import Estimator
 from adanet.evaluator import Evaluator
+from adanet.report_materializer import ReportMaterializer
 from adanet.summary import Summary

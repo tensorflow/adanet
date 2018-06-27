@@ -18,6 +18,7 @@ py_library(
         ":ensemble",
         ":estimator",
         ":evaluator",
+        ":report_materializer",
         ":summary",
     ],
 )
