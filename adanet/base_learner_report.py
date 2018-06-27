@@ -34,7 +34,7 @@ class BaseLearnerReport(
     """Creates a validated `BaseLearnerReport` instance.
 
     Args:
-      hparams: A dict mapping strings to python strings, ints, or floats.
+      hparams: A dict mapping strings to python strings, ints, bools, or floats.
         It is meant to contain the constants that define the
         `BaseLearnerBuilder`, such as dropout, number of layers, or initial
         learning rate.
@@ -65,15 +65,15 @@ class BaseLearnerReport(
 
       if tensor.shape.ndims > 0:
         return False
-      return tensor.dtype in (tf.int32, tf.float32, tf.string)
+      return tensor.dtype in (tf.bool, tf.int32, tf.float32, tf.string)
 
     # Validate hparams
     for key, value in hparams.items():
-      if not (isinstance(value, int) or isinstance(value, float) or
-              isinstance(value, six.string_types)):
+      if not (isinstance(value, bool) or isinstance(value, int) or
+              isinstance(value, float) or isinstance(value, six.string_types)):
         raise ValueError(
             "hparam '{}' refers to invalid value {}, type {}. type must be "
-            "python primitive int, float, or string.".format(
+            "python primitive int, float, bool, or string.".format(
                 key, value, type(value)))
 
     # Validate attributes
@@ -131,11 +131,11 @@ class MaterializedBaseLearnerReport(
         that was used to construct this `BaseLearner`. It is meant to contain
         the arguments that defined the `BaseLearnerBuilder`, such as dropout,
         number of layers, or initial learning rate.
-      attributes: A dict mapping strings to python strings, ints, or floats.
-        These are python primitives that come from materialized Tensors; these
-        Tensors were defined by the author of the `BaseLearnerBuilder` that was
-        used to construct this `BaseLearner`. It is meant to contain properties
-        that may or may not change over the course of training the
+      attributes: A dict mapping strings to python strings, ints, bools, or
+        floats. These are python primitives that come from materialized Tensors;
+        these Tensors were defined by the author of the `BaseLearnerBuilder`
+        that was used to construct this `BaseLearner`. It is meant to contain
+        properties that may or may not change over the course of training the
         `BaseLearner`, such as the number of parameters, the Lipschitz constant,
         or the L_2 norm of the weights.
       metrics: A dict mapping strings to python strings, ints, or floats.

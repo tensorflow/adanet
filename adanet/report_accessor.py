@@ -50,7 +50,7 @@ def _iteration_report_pb_to_base_learner_reports(iteration_report_pb):
 
     Raises:
       ValueError: if proto.field_name has a value that's not an int_value,
-        float_value, or string_value.
+        float_value, bool_value, or string_value.
     """
 
     dictionary = {}
@@ -62,6 +62,8 @@ def _iteration_report_pb_to_base_learner_reports(iteration_report_pb):
         value = proto_field[key].float_value
       elif proto_field[key].HasField("string_value"):
         value = proto_field[key].string_value
+      elif proto_field[key].HasField("bool_value"):
+        value = proto_field[key].bool_value
       else:
         raise ValueError("{} map in base_learner_report_pb has invalid field. "
                          "key: {} value: {} type: {}".format(
@@ -103,15 +105,17 @@ def _create_base_learner_report_proto(materialized_base_learner_report):
 
     for key, value in dictionary.items():
       field = getattr(proto, field_name)
-      if isinstance(value, six.string_types):
+      if isinstance(value, bool):
+        field[key].bool_value = value
+      elif isinstance(value, six.string_types):
         field[key].string_value = value
       elif isinstance(value, int):
         field[key].int_value = value
       elif isinstance(value, float):
         field[key].float_value = value
       else:
-        raise ValueError("{} {}'s value must be an instance of string, int, or "
-                         "float, but its type is {}.".format(
+        raise ValueError("{} {}'s value must be an instance of string, int, "
+                         "bool, or float, but its type is {}.".format(
                              field_name, key, type(value)))
 
   base_learner_report_pb = report_proto.BaseLearnerReport()

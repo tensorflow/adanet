@@ -9,6 +9,7 @@ message Value {
     string string_value = 1;
     float float_value = 2;
     int32 int_value = 3;
+    bool bool_value = 4;
   }
 }
 

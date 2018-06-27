@@ -37,14 +37,17 @@ class ReportAccessorTest(tf.test.TestCase):
             hparams={
                 "p1": 1,
                 "p2": "hoo",
+                "p3": True,
             },
             attributes={
                 "a1": 1,
                 "a2": "aoo",
+                "a3": True,
             },
             metrics={
                 "m1": 1,
                 "m2": "moo",
+                "m3": True,
             },
             included_in_final_ensemble=True,
         ),
@@ -67,14 +70,17 @@ class ReportAccessorTest(tf.test.TestCase):
                 hparams={
                     "p1": 11,
                     "p2": "hoo",
+                    "p3": True,
                 },
                 attributes={
                     "a1": 11,
                     "a2": "aoo",
+                    "a3": True,
                 },
                 metrics={
                     "m1": 11,
                     "m2": "moo",
+                    "m3": True,
                 },
                 included_in_final_ensemble=False,
             ),
@@ -82,14 +88,17 @@ class ReportAccessorTest(tf.test.TestCase):
                 hparams={
                     "p1": 12,
                     "p2": "hoo",
+                    "p3": True,
                 },
                 attributes={
                     "a1": 12,
                     "a2": "aoo",
+                    "a3": True,
                 },
                 metrics={
                     "m1": 12,
                     "m2": "moo",
+                    "m3": True,
                 },
                 included_in_final_ensemble=True,
             ),
@@ -99,14 +108,17 @@ class ReportAccessorTest(tf.test.TestCase):
                 hparams={
                     "p1": 21,
                     "p2": "hoo",
+                    "p3": True,
                 },
                 attributes={
                     "a1": 21,
                     "a2": "aoo",
+                    "a3": True,
                 },
                 metrics={
                     "m1": 21,
                     "m2": "moo",
+                    "m3": True,
                 },
                 included_in_final_ensemble=True,
             ),
@@ -114,14 +126,17 @@ class ReportAccessorTest(tf.test.TestCase):
                 hparams={
                     "p1": 22,
                     "p2": "hoo",
+                    "p3": True,
                 },
                 attributes={
                     "a1": 22,
                     "a2": "aoo",
+                    "a3": True,
                 },
                 metrics={
                     "m1": 22,
                     "m2": "moo",
+                    "m3": True,
                 },
                 included_in_final_ensemble=False,
             ),
@@ -131,14 +146,17 @@ class ReportAccessorTest(tf.test.TestCase):
                 hparams={
                     "p1": 31,
                     "p2": "hoo",
+                    "p3": True,
                 },
                 attributes={
                     "a1": 31,
                     "a2": "aoo",
+                    "a3": True,
                 },
                 metrics={
                     "m1": 31,
                     "m2": "moo",
+                    "m3": True,
                 },
                 included_in_final_ensemble=False,
             ),
@@ -146,14 +164,17 @@ class ReportAccessorTest(tf.test.TestCase):
                 hparams={
                     "p1": 32,
                     "p2": "hoo",
+                    "p3": True,
                 },
                 attributes={
                     "a1": 32,
                     "a2": "aoo",
+                    "a3": True,
                 },
                 metrics={
                     "m1": 32,
                     "m2": "moo",
+                    "m3": True,
                 },
                 included_in_final_ensemble=True,
             ),
