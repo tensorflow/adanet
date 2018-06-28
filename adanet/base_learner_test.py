@@ -41,6 +41,20 @@ class BaseLearnerTest(parameterized.TestCase, tf.test.TestCase):
       "persisted_tensors": {
           "hidden_layer": tu.dummy_tensor(),
       },
+  }, {
+      "testcase_name": "nested_persisted_tensors",
+      "last_layer": tu.dummy_tensor(),
+      "logits": tu.dummy_tensor(),
+      "complexity": tu.dummy_tensor(),
+      "persisted_tensors": {
+          "hidden_layer": tu.dummy_tensor(),
+          "nested": {
+              "foo": tu.dummy_tensor(),
+              "nested": {
+                  "foo": tu.dummy_tensor(),
+              },
+          },
+      },
   })
   def test_new(self, last_layer, logits, complexity, persisted_tensors):
     with self.test_session():
@@ -86,6 +100,30 @@ class BaseLearnerTest(parameterized.TestCase, tf.test.TestCase):
       "logits": tu.dummy_tensor(),
       "complexity": tu.dummy_tensor(),
       "persisted_tensors": [1.],
+  }, {
+      "testcase_name": "empty_nested_persisted_tensors",
+      "last_layer": tu.dummy_tensor(),
+      "logits": tu.dummy_tensor(),
+      "complexity": tu.dummy_tensor(),
+      "persisted_tensors": {
+          "value": tu.dummy_tensor(),
+          "nested": {},
+      },
+  }, {
+      "testcase_name": "empty_nested_persisted_tensors_recursive",
+      "last_layer": tu.dummy_tensor(),
+      "logits": tu.dummy_tensor(),
+      "complexity": tu.dummy_tensor(),
+      "persisted_tensors": {
+          "value": tu.dummy_tensor(),
+          "nested": {
+              "value": tu.dummy_tensor(),
+              "nested": {
+                  "value": tu.dummy_tensor(),
+                  "nested": {},
+              },
+          },
+      },
   })
   def test_new_errors(self, last_layer, logits, complexity, persisted_tensors):
     with self.test_session():

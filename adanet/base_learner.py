@@ -23,6 +23,17 @@ import abc
 import collections
 
 
+def _validate_nested_persisted_tensors(persisted_tensors):
+  """Raises a ValueError when a nested dict is empty in persisted_tensors."""
+
+  for key, entry in persisted_tensors.items():
+    if not isinstance(entry, dict):
+      continue
+    if not entry:
+      raise ValueError("Got empty nested dictionary for key: '{}'".format(key))
+    _validate_nested_persisted_tensors(entry)
+
+
 class BaseLearner(
     collections.namedtuple(
         "BaseLearner",
@@ -61,7 +72,11 @@ class BaseLearner(
       A validated `BaseLearner` object.
 
     Raises:
-      ValueError: If validation fails.
+      ValueError: If last_layer is None.
+      ValueError: If logits is None.
+      ValueError: If complexity is None.
+      ValueError: If persited_tensors is not a dictionary.
+      ValueError: If persited_tensors contains an empty nested dictionary.
     """
 
     if last_layer is None:
@@ -72,6 +87,7 @@ class BaseLearner(
       raise ValueError("complexity not provided")
     if not isinstance(persisted_tensors, dict):
       raise ValueError("persisted_tensors must be a dict")
+    _validate_nested_persisted_tensors(persisted_tensors)
     return super(BaseLearner, cls).__new__(
         cls,
         last_layer=last_layer,
