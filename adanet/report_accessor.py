@@ -137,8 +137,7 @@ def _create_base_learner_report_proto(materialized_base_learner_report):
   return base_learner_report_pb
 
 
-def _create_iteration_report_pb(iteration_number,
-                                base_learner_report_pb_list):
+def _create_iteration_report_pb(iteration_number, base_learner_report_pb_list):
   """Creates an IterationReport proto."""
 
   iteration_report_pb = report_proto.IterationReport()
@@ -181,6 +180,8 @@ class _ReportAccessor(object):
                                         materialized_base_learner_reports),
     )
     self._append_iteration_report_pb(iteration_report_pb)
+    tf.logging.info("Wrote IterationReport for iteration %s to %s",
+                    iteration_number, self._full_filepath)
 
   def _append_iteration_report_pb(self, iteration_pb):
     """Appends an adanet.IterationReport proto to the end of the file."""

@@ -296,7 +296,7 @@ class Estimator(tf.estimator.Estimator):
       report_dir: Directory where the `MaterializedBaseLearnerReport`s
         materialized by `report_materializer` would be saved.
         If `report_materializer` is None, this will not save
-        anything. If `None`, defaults to "<model_dir>/report".
+        anything. If `None` or empty string, defaults to "<model_dir>/report".
       config: `RunConfig` object to configure the runtime settings.
 
     Returns:
