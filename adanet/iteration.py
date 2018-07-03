@@ -308,12 +308,10 @@ class _IterationBuilder(object):
       for metric_name, metric_ops in all_metrics.items():
         if len(metric_ops) != len(candidates):
           continue
-        # The metrics_ops tuple's second element is an op that mutates the
-        # first element. Since the op is called by its corresponding candidate,
-        # we don't need to include it in the best evaluation metrics.
-        values = zip(*metric_ops)[0]
+        values, ops = zip(*metric_ops)
         best_value = tf.stack(values)[best_candidate_index]
-        best_candidate_metric = (best_value, best_value)
+        best_op = tf.stack(ops)[best_candidate_index]
+        best_candidate_metric = (best_value, best_op)
         eval_metric_ops[metric_name] = best_candidate_metric
 
         # Include any evaluation metric shared among all the candidates in the

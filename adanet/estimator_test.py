@@ -35,6 +35,8 @@ from adanet.report_materializer import ReportMaterializer
 import adanet.testing_utils as tu
 import tensorflow as tf
 
+from tensorflow.python.estimator.export import export
+
 
 class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
   """A simple DNN base learner builder."""
@@ -1136,6 +1138,85 @@ class ExportSavedModelForModeTest(parameterized.TestCase, tf.test.TestCase):
         mode=tf.estimator.ModeKeys.PREDICT)
 
 
+class ExportSavedModelForEvalTest(parameterized.TestCase, tf.test.TestCase):
+  """Tests b/110991908."""
+
+  def setUp(self):
+    # Setup and cleanup test directory.
+    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
+    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
+
+  def tearDown(self):
+    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
+
+  def test_export_saved_model_for_mode(self):
+    """Tests new SavedModel exporting functionality."""
+
+    run_config = tf.estimator.RunConfig(tf_random_seed=42)
+    base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
+        [_DNNBaseLearnerBuilder("dnn")])
+    estimator = Estimator(
+        head=_head(),
+        base_learner_builder_generator=base_learner_builder_generator,
+        max_iteration_steps=1,
+        model_dir=self.test_subdirectory,
+        config=run_config)
+
+    features = {"x": [[1., 0.]]}
+    labels = [[1.]]
+    train_input_fn = _dummy_feature_dict_input_fn(features, labels)
+
+    # Train.
+    estimator.train(input_fn=train_input_fn, max_steps=2)
+
+    # Export SavedModel.
+    def serving_input_fn():
+      """Input fn for serving export, starting from serialized example."""
+      serialized_example = tf.placeholder(
+          dtype=tf.string, shape=(None), name="serialized_example")
+      for key, value in features.items():
+        features[key] = tf.constant(value)
+      return export.SupervisedInputReceiver(
+          features=features,
+          labels=tf.constant(labels),
+          receiver_tensors=serialized_example)
+
+    export_dir_base = os.path.join(self.test_subdirectory, "export")
+    tf.contrib.estimator.export_saved_model_for_mode(
+        estimator,
+        export_dir_base=export_dir_base,
+        input_receiver_fn=serving_input_fn,
+        mode=tf.estimator.ModeKeys.EVAL)
+
+    subdir = tf.gfile.ListDirectory(export_dir_base)[0]
+
+    with self.test_session() as sess:
+      meta_graph_def = tf.saved_model.loader.load(
+          sess, ["eval"], os.path.join(export_dir_base, subdir))
+      signature_def = meta_graph_def.signature_def.get("eval")
+
+      # Read zero metric.
+      self.assertAlmostEqual(
+          0.,
+          sess.run(
+              tf.saved_model.utils.get_tensor_from_tensor_info(
+                  signature_def.outputs["metrics/average_loss/value"])),
+          places=3)
+
+      # Run metric update op.
+      sess.run(
+          tf.saved_model.utils.get_tensor_from_tensor_info(
+              signature_def.outputs["metrics/average_loss/update_op"]))
+
+      # Read metric again; it should no longer be zero.
+      self.assertAlmostEqual(
+          .201,
+          sess.run(
+              tf.saved_model.utils.get_tensor_from_tensor_info(
+                  signature_def.outputs["metrics/average_loss/value"])),
+          places=3)
+
+
 class ReportGenerationTest(parameterized.TestCase, tf.test.TestCase):
   """Tests report generation."""
 
@@ -1248,40 +1329,38 @@ class ReportGenerationTest(parameterized.TestCase, tf.test.TestCase):
               ]),
           "num_iterations":
               1,
-          "want_materialized_iteration_reports": [
-              [
-                  MaterializedBaseLearnerReport(
-                      hparams={"layer_size": 1},
-                      attributes={
-                          "name": "dnn_1",
-                          "complexity": 3,
-                      },
-                      metrics={
-                          "moo": 3,
-                      },
-                  ),
-                  MaterializedBaseLearnerReport(
-                      hparams={"layer_size": 2},
-                      attributes={
-                          "name": "dnn_2",
-                          "complexity": 3,
-                      },
-                      metrics={
-                          "moo": 3,
-                      },
-                  ),
-                  MaterializedBaseLearnerReport(
-                      hparams={"layer_size": 3},
-                      attributes={
-                          "name": "dnn_3",
-                          "complexity": 3,
-                      },
-                      metrics={
-                          "moo": 3,
-                      },
-                  ),
-              ],
-          ],
+          "want_materialized_iteration_reports": [[
+              MaterializedBaseLearnerReport(
+                  hparams={"layer_size": 1},
+                  attributes={
+                      "name": "dnn_1",
+                      "complexity": 3,
+                  },
+                  metrics={
+                      "moo": 3,
+                  },
+              ),
+              MaterializedBaseLearnerReport(
+                  hparams={"layer_size": 2},
+                  attributes={
+                      "name": "dnn_2",
+                      "complexity": 3,
+                  },
+                  metrics={
+                      "moo": 3,
+                  },
+              ),
+              MaterializedBaseLearnerReport(
+                  hparams={"layer_size": 3},
+                  attributes={
+                      "name": "dnn_3",
+                      "complexity": 3,
+                  },
+                  metrics={
+                      "moo": 3,
+                  },
+              ),
+          ]],
       },
       {
           "testcase_name":
