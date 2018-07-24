@@ -494,6 +494,8 @@ class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
         base_learner_builder_generator=base_learner_builder_generator,
         max_iteration_steps=max_iteration_steps,
         mixture_weight_type=mixture_weight_type,
+        mixture_weight_initializer=tf.zeros_initializer(),
+        warm_start_mixture_weights=True,
         evaluator=evaluator,
         report_materializer=report_materializer,
         use_bias=use_bias,
@@ -580,6 +582,8 @@ class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
             _SimpleBaseLearnerBuilder(
                 name="simple", feature_columns=[feature_column])
         ]),
+        mixture_weight_initializer=tf.zeros_initializer(),
+        warm_start_mixture_weights=True,
         max_iteration_steps=1,
         model_dir=self.test_subdirectory)
 
@@ -642,6 +646,8 @@ class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
       estimator = Estimator(
           head=_head(),
           base_learner_builder_generator=base_learner_builder_generator,
+          mixture_weight_initializer=tf.zeros_initializer(),
+          warm_start_mixture_weights=True,
           max_iteration_steps=max_iteration_steps,
           model_dir=self.test_subdirectory)
       train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
@@ -695,6 +701,8 @@ class CheckpointTest(parameterized.TestCase, tf.test.TestCase):
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_initializer=tf.zeros_initializer(),
+        warm_start_mixture_weights=True,
         max_iteration_steps=max_iteration_steps,
         config=config,
         model_dir=self.test_subdirectory)
@@ -790,6 +798,8 @@ class SummaryWriterTest(parameterized.TestCase, tf.test.TestCase):
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_initializer=tf.zeros_initializer(),
+        warm_start_mixture_weights=True,
         max_iteration_steps=10,
         config=run_config,
         model_dir=self.test_subdirectory)
@@ -915,6 +925,8 @@ class SummaryWriterTest(parameterized.TestCase, tf.test.TestCase):
     estimator = Estimator(
         head=head,
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_initializer=tf.zeros_initializer(),
+        warm_start_mixture_weights=True,
         max_iteration_steps=6,
         config=run_config,
         model_dir=self.test_subdirectory)
@@ -977,6 +989,8 @@ class MembersOverrideTest(tf.test.TestCase):
     adanet = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_initializer=tf.zeros_initializer(),
+        warm_start_mixture_weights=True,
         max_iteration_steps=10,
         config=config)
     self.assertIsNotNone(adanet)
@@ -1056,6 +1070,8 @@ class DifferentFeaturesPerModeTest(parameterized.TestCase, tf.test.TestCase):
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_initializer=tf.zeros_initializer(),
+        warm_start_mixture_weights=True,
         max_iteration_steps=1,
         model_dir=self.test_subdirectory,
         config=run_config)
@@ -1110,6 +1126,8 @@ class ExportSavedModelForModeTest(parameterized.TestCase, tf.test.TestCase):
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_initializer=tf.zeros_initializer(),
+        warm_start_mixture_weights=True,
         max_iteration_steps=1,
         model_dir=self.test_subdirectory,
         config=run_config)
@@ -1158,6 +1176,8 @@ class ExportSavedModelForEvalTest(parameterized.TestCase, tf.test.TestCase):
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_initializer=tf.zeros_initializer(),
+        warm_start_mixture_weights=True,
         max_iteration_steps=1,
         model_dir=self.test_subdirectory,
         config=run_config)
@@ -1495,6 +1515,8 @@ class ReportGenerationTest(parameterized.TestCase, tf.test.TestCase):
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_initializer=tf.zeros_initializer(),
+        warm_start_mixture_weights=True,
         max_iteration_steps=max_iteration_steps,
         report_materializer=ReportMaterializer(
             input_fn=train_input_fn, steps=10),

@@ -204,6 +204,8 @@ class Estimator(tf.estimator.Estimator):
                base_learner_builder_generator,
                max_iteration_steps,
                mixture_weight_type=MixtureWeightType.MATRIX,
+               mixture_weight_initializer=None,
+               warm_start_mixture_weights=False,
                adanet_lambda=0.,
                adanet_beta=0.,
                evaluator=None,
@@ -248,6 +250,18 @@ class Estimator(tf.estimator.Estimator):
         dimensionalities. However, it also has the most trainable parameters
         (a*b), and is therefore the most sensitive to learning rates and
         regularization.
+      mixture_weight_initializer: The initializer for mixture_weights. When
+        `None`, the default is different according to `mixture_weight_type`:
+        * `SCALAR`: Initializes to 1/N where N is the number of base learners
+          in the ensemble giving a uniform average.
+        * `VECTOR`: Initializes each entry to 1/N where N is the number of base
+          learners in the ensemble giving a uniform average.
+        * `MATRIX`: Uses `tf.glorot_uniform_initializer`.
+      warm_start_mixture_weights: Whether, at the beginning of an iteration, to
+        initialize the mixture weights of the base learners from the previous
+        ensemble to their learned value at the previous iteration, as opposed to
+        retraining them from scratch. Takes precedence over the value for
+        `mixture_weight_initializer` for base learners from previous iterations.
       adanet_lambda: Float multiplier 'lambda' for applying L1 regularization to
         base learners' mixture weights 'w' in the ensemble proportional to their
         complexity. See Equation (4) in the AdaNet paper.
@@ -326,6 +340,8 @@ class Estimator(tf.estimator.Estimator):
     self._ensemble_builder = _EnsembleBuilder(
         head=head,
         mixture_weight_type=mixture_weight_type,
+        mixture_weight_initializer=mixture_weight_initializer,
+        warm_start_mixture_weights=warm_start_mixture_weights,
         adanet_lambda=adanet_lambda,
         adanet_beta=adanet_beta,
         use_bias=use_bias)

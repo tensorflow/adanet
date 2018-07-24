@@ -173,8 +173,10 @@ class _EnsembleBuilder(object):
   def __init__(self,
                head,
                mixture_weight_type,
-               adanet_lambda,
-               adanet_beta,
+               mixture_weight_initializer=None,
+               warm_start_mixture_weights=False,
+               adanet_lambda=0.,
+               adanet_beta=0.,
                use_bias=True):
     """Returns an initialized `_EnsembleBuilder`.
 
@@ -182,6 +184,18 @@ class _EnsembleBuilder(object):
       head: A `tf.contrib.estimator.Head` instance.
       mixture_weight_type: The `adanet.MixtureWeightType` defining which mixture
         weight type to learn.
+      mixture_weight_initializer: The initializer for mixture_weights. When
+        `None`, the default is different according to `mixture_weight_type`:
+        * `SCALAR`: Initializes to 1/N where N is the number of base learners
+          in the ensemble giving a uniform average.
+        * `VECTOR`: Initializes each entry to 1/N where N is the number of base
+          learners in the ensemble giving a uniform average.
+        * `MATRIX`: Uses `tf.glorot_uniform_initializer`.
+      warm_start_mixture_weights: Whether, at the beginning of an iteration, to
+        initialize the mixture weights of the base learners from the previous
+        ensemble to their learned value at the previous iteration, as opposed to
+        retraining them from scratch. Takes precedence over the value for
+        `mixture_weight_initializer` for base learners from previous iterations.
       adanet_lambda: Float multiplier 'lambda' for applying L1 regularization to
         base learners' mixture weights 'w' in the ensemble proportional to their
         complexity. See Equation (4) in the AdaNet paper.
@@ -196,6 +210,8 @@ class _EnsembleBuilder(object):
 
     self._head = head
     self._mixture_weight_type = mixture_weight_type
+    self._mixture_weight_initializer = mixture_weight_initializer
+    self._warm_start_mixture_weights = warm_start_mixture_weights
     self._adanet_lambda = adanet_lambda
     self._adanet_beta = adanet_beta
     self._use_bias = use_bias
@@ -233,14 +249,20 @@ class _EnsembleBuilder(object):
     with tf.variable_scope("ensemble_{}".format(base_learner_builder.name)):
       weighted_base_learners = []
       iteration = 0
+      num_base_learners = 1
       if ensemble:
+        num_base_learners += len(ensemble.weighted_base_learners)
         for weighted_base_learner in ensemble.weighted_base_learners:
+          weight_initializer = None
+          if self._warm_start_mixture_weights:
+            weight_initializer = weighted_base_learner.weight
           with tf.variable_scope("weighted_base_learner_{}".format(iteration)):
             weighted_base_learners.append(
                 self._build_weighted_base_learner(
                     weighted_base_learner.base_learner,
                     self._head.logits_dimension,
-                    weight_initializer=weighted_base_learner.weight))
+                    num_base_learners,
+                    weight_initializer=weight_initializer))
           iteration += 1
         bias = self._create_bias(
             self._head.logits_dimension, prior=ensemble.bias)
@@ -260,8 +282,8 @@ class _EnsembleBuilder(object):
           var_list = list(
               set(trainable_vars_after) - set(trainable_vars_before))
         weighted_base_learners.append(
-            self._build_weighted_base_learner(base_learner,
-                                              self._head.logits_dimension))
+            self._build_weighted_base_learner(
+                base_learner, self._head.logits_dimension, num_base_learners))
 
       return self.build_ensemble(
           name=base_learner_builder.name,
@@ -429,15 +451,25 @@ class _EnsembleBuilder(object):
         eval_metric_ops=eval_metric_ops,
         export_outputs=adanet_weighted_ensemble_spec.export_outputs)
 
+  def _select_mixture_weight_initializer(self, num_base_learners):
+    if self._mixture_weight_initializer:
+      return self._mixture_weight_initializer
+    if (self._mixture_weight_type == MixtureWeightType.SCALAR or
+        self._mixture_weight_type == MixtureWeightType.VECTOR):
+      return tf.constant_initializer(1. / num_base_learners)
+    return tf.glorot_uniform_initializer()
+
   def _build_weighted_base_learner(self,
                                    base_learner,
                                    logits_dimension,
+                                   num_base_learners,
                                    weight_initializer=None):
     """Builds an `WeightedBaseLearner`.
 
     Args:
       base_learner: The `BaseLearner` to weight.
       logits_dimension: The number of outputs from the logits.
+      num_base_learners: The number of base learners in the ensemble.
       weight_initializer: Initializer for the weight variable. Can be a
         `Constant` prior weight to use for warm-starting.
 
@@ -456,7 +488,8 @@ class _EnsembleBuilder(object):
     weight_shape = None
     last_layer_size = last_layer.get_shape().as_list()[-1]
     if weight_initializer is None:
-      weight_initializer = tf.zeros_initializer()
+      weight_initializer = self._select_mixture_weight_initializer(
+          num_base_learners)
       if self._mixture_weight_type == MixtureWeightType.SCALAR:
         weight_shape = []
       if self._mixture_weight_type == MixtureWeightType.VECTOR:

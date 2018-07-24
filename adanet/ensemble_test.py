@@ -33,9 +33,11 @@ class _BaseLearnerBuilder(BaseLearnerBuilder):
   def __init__(self,
                base_learner_train_op_fn,
                mixture_weights_train_op_fn,
+               use_logits_last_layer,
                seed=42):
     self._base_learner_train_op_fn = base_learner_train_op_fn
     self._mixture_weights_train_op_fn = mixture_weights_train_op_fn
+    self._use_logits_last_layer = use_logits_last_layer
     self._seed = seed
 
   @property
@@ -54,7 +56,7 @@ class _BaseLearnerBuilder(BaseLearnerBuilder):
         units=1,
         kernel_initializer=tf.glorot_uniform_initializer(seed=self._seed))
     return BaseLearner(
-        last_layer=last_layer,
+        last_layer=logits if self._use_logits_last_layer else last_layer,
         logits=logits,
         complexity=2,
         persisted_tensors={})
@@ -86,6 +88,45 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.016], [.117]],
       "want_loss": 1.338,
       "want_adanet_loss": 1.338,
+      "want_complexity_regularization": 0.,
+      "want_mixture_weight_vars": 1,
+  }, {
+      "testcase_name": "default_mixture_weight_initializer_scalar",
+      "mixture_weight_initializer": None,
+      "mixture_weight_type": MixtureWeightType.SCALAR,
+      "use_logits_last_layer": True,
+      "want_logits": [[.580], [.914]],
+      "want_loss": 1.362,
+      "want_adanet_loss": 1.362,
+      "want_complexity_regularization": 0.,
+      "want_mixture_weight_vars": 1,
+  }, {
+      "testcase_name": "default_mixture_weight_initializer_vector",
+      "mixture_weight_initializer": None,
+      "mixture_weight_type": MixtureWeightType.VECTOR,
+      "use_logits_last_layer": True,
+      "want_logits": [[.580], [.914]],
+      "want_loss": 1.362,
+      "want_adanet_loss": 1.362,
+      "want_complexity_regularization": 0.,
+      "want_mixture_weight_vars": 1,
+  }, {
+      "testcase_name": "default_mixture_weight_initializer_matrix",
+      "mixture_weight_initializer": None,
+      "mixture_weight_type": MixtureWeightType.MATRIX,
+      "want_logits": [[.805], [.946]],
+      "want_loss": 1.503,
+      "want_adanet_loss": 1.503,
+      "want_complexity_regularization": 0.,
+      "want_mixture_weight_vars": 1,
+  }, {
+      "testcase_name": "default_mixture_weight_initializer_matrix_on_logits",
+      "mixture_weight_initializer": None,
+      "mixture_weight_type": MixtureWeightType.MATRIX,
+      "use_logits_last_layer": True,
+      "want_logits": [[-.827], [-1.303]],
+      "want_loss": 1.906,
+      "want_adanet_loss": 1.906,
       "want_complexity_regularization": 0.,
       "want_mixture_weight_vars": 1,
   }, {
@@ -147,23 +188,41 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_adanet_loss": 1.397,
       "want_complexity_regularization": .043,
       "want_mixture_weight_vars": 3,
+  }, {
+      "testcase_name": "previous_ensemble_no_warm_start",
+      "ensemble_fn": lambda: tu.dummy_ensemble("test", random_seed=1),
+      "warm_start_mixture_weights": False,
+      "adanet_lambda": .01,
+      "adanet_beta": .1,
+      "want_logits": [[.007], [.079]],
+      "want_loss": 1.351,
+      "want_adanet_loss": 1.367,
+      "want_complexity_regularization": .016,
+      "want_mixture_weight_vars": 2,
   })
-  def test_append_new_base_learner(self,
-                                   want_logits,
-                                   want_complexity_regularization,
-                                   want_loss=None,
-                                   want_adanet_loss=None,
-                                   want_mixture_weight_vars=None,
-                                   adanet_lambda=0.,
-                                   adanet_beta=0.,
-                                   ensemble_fn=lambda: None,
-                                   use_bias=False,
-                                   mode=tf.estimator.ModeKeys.TRAIN):
+  def test_append_new_base_learner(
+      self,
+      want_logits,
+      want_complexity_regularization,
+      want_loss=None,
+      want_adanet_loss=None,
+      want_mixture_weight_vars=None,
+      adanet_lambda=0.,
+      adanet_beta=0.,
+      ensemble_fn=lambda: None,
+      use_bias=False,
+      use_logits_last_layer=False,
+      mixture_weight_type=MixtureWeightType.MATRIX,
+      mixture_weight_initializer=tf.zeros_initializer(),
+      warm_start_mixture_weights=True,
+      mode=tf.estimator.ModeKeys.TRAIN):
     seed = 64
     builder = _EnsembleBuilder(
         head=tf.contrib.estimator.binary_classification_head(
             loss_reduction=tf.losses.Reduction.SUM),
-        mixture_weight_type=MixtureWeightType.MATRIX,
+        mixture_weight_type=mixture_weight_type,
+        mixture_weight_initializer=mixture_weight_initializer,
+        warm_start_mixture_weights=warm_start_mixture_weights,
         adanet_lambda=adanet_lambda,
         adanet_beta=adanet_beta,
         use_bias=use_bias)
@@ -183,8 +242,9 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
     ensemble = builder.append_new_base_learner(
         ensemble=ensemble_fn(),
-        base_learner_builder=_BaseLearnerBuilder(
-            _base_learner_train_op_fn, _mixture_weights_train_op_fn, seed),
+        base_learner_builder=_BaseLearnerBuilder(_base_learner_train_op_fn,
+                                                 _mixture_weights_train_op_fn,
+                                                 use_logits_last_layer, seed),
         summary=_FakeSummary(),
         features=features,
         labels=labels,
