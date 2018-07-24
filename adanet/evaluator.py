@@ -21,7 +21,6 @@ from __future__ import print_function
 
 import math
 
-import numpy as np
 import tensorflow as tf
 
 
@@ -75,37 +74,38 @@ class Evaluator(object):
       Index of the candidate with the lowest AdaNet loss.
     """
 
-    total = None
     evals_completed = 0
+    logging_frequency = (1 if (self.steps is None or self.steps < 10) else
+                         math.floor(self.steps / 10.))
+    adanet_losses = [
+        tf.metrics.mean(ensemble.adanet_loss) for ensemble in ensembles
+    ]
+    sess.run(tf.local_variables_initializer())
     while True:
       if self.steps is not None and evals_completed == self.steps:
         break
       try:
-        losses = sess.run([ensemble.adanet_loss for ensemble in ensembles])
-        if total is not None:
-          total += np.array(losses)
-        else:
-          total = np.array(losses)
-
         evals_completed += 1
-        log_frequency = (1 if (self.steps is None or self.steps < 10) else
-                         math.floor(self.steps / 10.))
         if self.steps is None:
           tf.logging.info("Ensemble evaluation [%d]", evals_completed)
-        elif (evals_completed % log_frequency == 0 or
+        elif (evals_completed % logging_frequency == 0 or
               self.steps == evals_completed):
           tf.logging.info("Ensemble evaluation [%d/%d]", evals_completed,
                           self.steps)
+        sess.run(adanet_losses)
       except tf.errors.OutOfRangeError:
-        tf.logging.info("Encountered end of input during ensemble evaluation")
+        tf.logging.info("Encountered end of input after %d evaluations",
+                        evals_completed)
         break
 
-    assert len(total) == len(ensembles)
-
+    # Losses are metric op tuples. Evaluating the first element is idempotent.
+    adanet_losses = [loss[0] for loss in adanet_losses]
+    evaluated_adanet_losses, best_ensemble_index = sess.run(
+        (adanet_losses, tf.argmin(adanet_losses)))
     values = []
     for i in range(len(ensembles)):
       metric_name = "adanet_loss"
       values.append("{}/{} = {:.6f}".format(metric_name, ensembles[i].name,
-                                            total[i]))
+                                            evaluated_adanet_losses[i]))
     tf.logging.info("Computed ensemble metrics: %s", ", ".join(values))
-    return np.argmin(total)
+    return best_ensemble_index
