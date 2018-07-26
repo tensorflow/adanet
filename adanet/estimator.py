@@ -232,24 +232,24 @@ class Estimator(tf.estimator.Estimator):
         weight type to learn in the linear combination of base learner outputs.
 
         A `SCALAR` mixture weight is a rank 0 tensor. It performs an element-
-        wise multiplication with its base learner's outputs, broadcasting itself
-        to the latter's shape. This mixture weight is the simplest to learn, the
-        quickest to train, and most likely to generalize well.
+        wise multiplication with its base learner's logits. This mixture weight
+        is the simplest to learn, the quickest to train, and most likely to
+        generalize well.
 
         A `VECTOR` mixture weight is a tensor of shape [k] where k is the
         ensemble's logits dimension as defined by `head`. It is similar to
         `SCALAR` in that it performs an element-wise multiplication with its
-        base learner's outputs, but is more flexible in learning a base
+        base learner's logits, but is more flexible in learning a base
         learner's preferences per class.
 
         A `MATRIX` mixture weight is a tensor of shape [a, b] where a is the
-        number of outputs from the base learner and b is the number of outputs
-        from the ensemble. This weight matrix-multiplies the base learner's
-        outputs. This mixture weight offers the most flexibility and
-        expressivity, allowing base learners to have outputs of different
-        dimensionalities. However, it also has the most trainable parameters
-        (a*b), and is therefore the most sensitive to learning rates and
-        regularization.
+        number of outputs from the base learner's `last_layer` and b is the
+        number of outputs from the ensemble's `logits`. This weight
+        matrix-multiplies the base learner's `last_layer`. This mixture weight
+        offers the most flexibility and expressivity, allowing base learners to
+        have outputs of different dimensionalities. However, it also has the
+        most trainable parameters (a*b), and is therefore the most sensitive to
+        learning rates and regularization.
       mixture_weight_initializer: The initializer for mixture_weights. When
         `None`, the default is different according to `mixture_weight_type`:
         * `SCALAR`: Initializes to 1/N where N is the number of base learners

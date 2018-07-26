@@ -50,13 +50,21 @@ class BaseLearner(
 
     Args:
       last_layer: A `Tensor` output of the last layer of the base learner, i.e
-        the layer before the logits layer. The AdaNet algorithm takes care of
-        computing ensemble mixture weights, and regularizing it using the base
-        learner's complexity. Represented by 'h' in the AdaNet paper.
-      logits: Temporary logits `Tensor` for training the base learner. NOTE:
-        These logits are not used in the ensemble's outputs, instead AdaNet
-        learns its own logits (mixture weights) from the base learner's
-        `last_layers` with complexity regularization.
+        the layer before the logits layer. When the mixture weight type is
+        `MATRIX`, the AdaNet algorithm takes care of computing ensemble mixture
+        weights matrices (one per base learner) that multiply the various
+        last layers of the ensemble's base learners, and regularize them using
+        their base learner's complexity. This field is represented by 'h' in the
+        AdaNet paper.
+      logits: logits `Tensor` for training the base learner. NOTE:
+        These logits are not used in the ensemble's outputs if the mixture
+        weight type is `MATRIX`, instead AdaNet learns its own logits
+        (mixture weights) from the base learner's `last_layers` with complexity
+        regularization. The logits are used in the ensemble only when the
+        mixture weights type is `SCALAR` or `VECTOR`.
+        Even though the logits are not used in the ensemble in some cases, they
+        should always be supplied as adanet uses the logits to train the base
+        learners.
       complexity: A scalar representing the complexity of the base learner's
         architecture. It is used for choosing the best base learner at each
         iteration, and for regularizing the weighted outputs of more complex

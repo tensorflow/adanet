@@ -505,12 +505,8 @@ class _EnsembleBuilder(object):
       if self._mixture_weight_type == MixtureWeightType.MATRIX:
         logits = tf.matmul(last_layer, weight)
       else:
-        if last_layer_size != logits_dimension:
-          raise ValueError(
-              "BaseLearner's last_layer must have the same number of outputs "
-              "as logits when using SCALAR or VECTOR mixture weights. Got {} "
-              "and {} respectively.".format(last_layer_size, logits_dimension))
-        logits = tf.multiply(last_layer, weight)
+        logits = tf.multiply(base_learner.logits, weight)
+
     return WeightedBaseLearner(
         base_learner=base_learner, logits=logits, weight=weight)
 
