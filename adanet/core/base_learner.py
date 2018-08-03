@@ -125,6 +125,7 @@ class BaseLearnerBuilder(object):
                          features,
                          logits_dimension,
                          training,
+                         iteration_step,
                          summary,
                          previous_ensemble=None):
     """Returns the candidate `BaseLearner` to add to the ensemble.
@@ -139,7 +140,10 @@ class BaseLearnerBuilder(object):
         Typically, logits have for shape `[batch_size, logits_dimension]`.
       training: A python boolean indicating whether the graph is in training
         mode or prediction mode.
-      summary: An `adanet.Summary` for registering summaries for Tensorboard.
+      iteration_step: Integer `Tensor` representing the step since the
+        beginning of the current iteration, as opposed to the global step.
+      summary: An `adanet.Summary` for scoping summaries to individual base
+        learners in Tensorboard.
       previous_ensemble: The best `Ensemble` from iteration t-1. The created
         base learner will extend the previous ensemble to form the `Ensemble`
         at iteration t.
@@ -149,7 +153,8 @@ class BaseLearnerBuilder(object):
     """
 
   @abc.abstractmethod
-  def build_base_learner_train_op(self, loss, var_list, labels, summary):
+  def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
+                                  summary):
     """Returns an op for training a new base learner.
 
     This method will be called once after `build_base_learner`.
@@ -161,7 +166,10 @@ class BaseLearnerBuilder(object):
       var_list: List of base learner `tf.Variable` parameters to update as
         part of the training operation.
       labels: Labels `Tensor`.
-      summary: An `adanet.Summary` for registering summaries for Tensorboard.
+      iteration_step: Integer `Tensor` representing the step since the
+        beginning of the current iteration, as opposed to the global step.
+      summary: An `adanet.Summary` for scoping summaries to individual base
+        learners in Tensorboard.
 
     Returns:
       A train op.
@@ -169,7 +177,7 @@ class BaseLearnerBuilder(object):
 
   @abc.abstractmethod
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
-                                     summary):
+                                     iteration_step, summary):
     """Returns an op for training the ensemble's mixture weights.
 
     Allows AdaNet to learn the mixture weights of each base learner
@@ -186,7 +194,10 @@ class BaseLearnerBuilder(object):
       logits: The ensemble's logits `Tensor` from applying the mixture weights
         and bias to the ensemble's base learners.
       labels: Labels `Tensor`.
-      summary: An `adanet.Summary` for registering summaries for Tensorboard.
+      iteration_step: Integer `Tensor` representing the step since the
+        beginning of the current iteration, as opposed to the global step.
+      summary: An `adanet.Summary` for scoping summaries to individual base
+        learners in Tensorboard.
 
     Returns:
       A train op.

@@ -219,6 +219,7 @@ class _EnsembleBuilder(object):
   def append_new_base_learner(self,
                               ensemble,
                               base_learner_builder,
+                              iteration_step,
                               summary,
                               features,
                               mode,
@@ -237,6 +238,8 @@ class _EnsembleBuilder(object):
       ensemble: The recipient `Ensemble` for the `BaseLearner`.
       base_learner_builder: A `adanet.BaseLearnerBuilder` instance which defines
         how to train the base learner and ensemble mixture weights.
+      iteration_step: Integer `Tensor` representing the step since the
+        beginning of the current iteration, as opposed to the global step.
       summary: A `_ScopedSummary` instance for recording ensemble summaries.
       features: Input `dict` of `Tensor` objects.
       mode: Estimator's `ModeKeys`.
@@ -276,6 +279,7 @@ class _EnsembleBuilder(object):
               features=features,
               logits_dimension=self._head.logits_dimension,
               training=mode == tf.estimator.ModeKeys.TRAIN,
+              iteration_step=iteration_step,
               summary=summary,
               previous_ensemble=ensemble)
           trainable_vars_after = tf.trainable_variables()
@@ -303,6 +307,7 @@ class _EnsembleBuilder(object):
                      bias,
                      features,
                      mode,
+                     iteration_step=None,
                      labels=None,
                      base_learner_builder=None,
                      var_list=None):
@@ -317,6 +322,8 @@ class _EnsembleBuilder(object):
       bias: `Tensor` bias vector for the ensemble logits.
       features: Input `dict` of `Tensor` objects.
       mode: Estimator `ModeKeys` indicating training, evaluation, or inference.
+      iteration_step: Integer `Tensor` representing the step since the
+        beginning of the current iteration, as opposed to the global step.
       labels: Labels `Tensor`, or `dict` of same. Can be None during inference.
       base_learner_builder: A `adanet.BaseLearnerBuilder` instance which defines
         how to train the base learner and ensemble mixture weights.
@@ -424,6 +431,7 @@ class _EnsembleBuilder(object):
                 loss=base_learner_spec.loss,
                 var_list=var_list,
                 labels=labels,
+                iteration_step=iteration_step,
                 summary=summary))
       ensemble_var_list = [w.weight for w in weighted_base_learners]
       if self._use_bias:
@@ -434,6 +442,7 @@ class _EnsembleBuilder(object):
             var_list=ensemble_var_list,
             logits=ensemble_logits,
             labels=labels,
+            iteration_step=iteration_step,
             summary=summary)
       train_op = tf.group(base_learner_train_op, ensemble_train_op)
 
@@ -457,6 +466,7 @@ class _EnsembleBuilder(object):
     if (self._mixture_weight_type == MixtureWeightType.SCALAR or
         self._mixture_weight_type == MixtureWeightType.VECTOR):
       return tf.constant_initializer(1. / num_base_learners)
+    # TODO: Changes matrix default to zeros_initializer.
     return tf.glorot_uniform_initializer()
 
   def _build_weighted_base_learner(self,

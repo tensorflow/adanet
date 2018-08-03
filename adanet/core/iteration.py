@@ -29,7 +29,7 @@ import tensorflow as tf
 class _Iteration(
     collections.namedtuple("_Iteration", [
         "number", "candidates", "estimator_spec", "best_candidate_index",
-        "summaries", "is_over", "base_learner_reports"
+        "summaries", "is_over", "base_learner_reports", "step"
     ])):
   """An AdaNet iteration.
 
@@ -41,7 +41,7 @@ class _Iteration(
   """
 
   def __new__(cls, number, candidates, estimator_spec, best_candidate_index,
-              summaries, is_over, base_learner_reports):
+              summaries, is_over, base_learner_reports, step):
     """Creates a validated `_Iteration` instance.
 
     Args:
@@ -57,6 +57,7 @@ class _Iteration(
       summaries: List of `_ScopedSummary` instances for each candidate.
       is_over: Boolean `Tensor` indicating if iteration is over.
       base_learner_reports: List of `BaseLearnerReport`s, one per candidate.
+      step: Integer `Tensor` indicating the current step of the iteration.
 
     Raises:
       ValueError: If validation fails.
@@ -72,6 +73,8 @@ class _Iteration(
       raise ValueError("best_candidate_index is required")
     if not isinstance(base_learner_reports, list):
       raise ValueError("base_learner_reports must be a list")
+    if step is None:
+      raise ValueError("step is required")
     return super(_Iteration, cls).__new__(
         cls,
         number=number,
@@ -80,7 +83,8 @@ class _Iteration(
         best_candidate_index=best_candidate_index,
         summaries=summaries,
         is_over=is_over,
-        base_learner_reports=base_learner_reports)
+        base_learner_reports=base_learner_reports,
+        step=step)
 
 
 class _IterationBuilder(object):
@@ -167,16 +171,22 @@ class _IterationBuilder(object):
           base_learner_report = BaseLearnerReport(
               hparams={},
               attributes={},
-              metrics=(
-                  previous_ensemble.eval_metric_ops.copy()
-                  if previous_ensemble.eval_metric_ops is not None
-                  else {}),
+              metrics=(previous_ensemble.eval_metric_ops.copy() if
+                       previous_ensemble.eval_metric_ops is not None else {}),
           )
           base_learner_report.attributes["name"] = tf.constant(
               "previous_ensemble")
           base_learner_report.metrics["adanet_loss"] = tf.metrics.mean(
               previous_ensemble.adanet_loss)
           base_learner_reports.append(base_learner_report)
+
+      # Iteration step to use instead of global step.
+      iteration_step = tf.get_variable(
+          "step",
+          shape=[],
+          initializer=tf.zeros_initializer(),
+          trainable=False,
+          dtype=tf.int64)
 
       for base_learner_builder in base_learner_builders:
         if base_learner_builder.name in seen_builder_names:
@@ -192,7 +202,9 @@ class _IterationBuilder(object):
             summary=summary,
             features=features,
             mode=mode,
-            labels=labels)
+            iteration_step=iteration_step,
+            labels=labels,
+        )
         candidate = self._candidate_builder.build_candidate(
             ensemble=ensemble, mode=mode, summary=summary)
         candidates.append(candidate)
@@ -227,11 +239,12 @@ class _IterationBuilder(object):
                                                         best_candidate_index)
       export_outputs = self._best_export_outputs(
           candidates, best_candidate_index, mode, best_predictions)
+
       estimator_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           predictions=best_predictions,
           loss=best_loss,
-          train_op=self._create_train_op(candidates, mode),
+          train_op=self._create_train_op(candidates, mode, iteration_step),
           eval_metric_ops=best_eval_metric_ops,
           export_outputs=export_outputs)
 
@@ -242,9 +255,10 @@ class _IterationBuilder(object):
           best_candidate_index=best_candidate_index,
           summaries=summaries,
           is_over=is_over,
-          base_learner_reports=base_learner_reports)
+          base_learner_reports=base_learner_reports,
+          step=iteration_step.read_value())
 
-  def _create_train_op(self, candidates, mode):
+  def _create_train_op(self, candidates, mode, step):
     """Returns the train op for this set of candidates.
 
     This train op combines the train ops from all the candidates into a single
@@ -256,6 +270,8 @@ class _IterationBuilder(object):
       candidates: List of `_Candidate` instances to train.
       mode: Defines whether this is training, evaluation or inference.
         The train op is only non-None during `TRAIN`. See `ModeKeys`.
+      step: Integer `Variable` for the current step of the iteration, as opposed
+        to the global step.
 
     Returns:
       A `Tensor` train op.
@@ -265,17 +281,19 @@ class _IterationBuilder(object):
       return None
     with tf.variable_scope("train_op"):
       train_ops = []
+      step_ops = []
       if mode == tf.estimator.ModeKeys.TRAIN:
         # AdaNet is responsible for incrementing the global step, not the
         # candidates it trains.
-        increment_global_step = tf.assign_add(tf.train.get_global_step(), 1)
-        train_ops.append(increment_global_step)
+        step_ops.append(tf.assign_add(tf.train.get_global_step(), 1))
+        step_ops.append(tf.assign_add(step, 1))
       for candidate in candidates:
         train_ops.append(candidate.update_op)
         if candidate.ensemble.train_op is not None:
           # The train op of a previous ensemble is None even during `TRAIN`.
           train_ops.append(candidate.ensemble.train_op)
-      return tf.group(*train_ops)
+      with tf.control_dependencies(train_ops):
+        return tf.group(*step_ops)
 
   def _best_eval_metric_ops(self, candidates, best_candidate_index):
     """Returns the eval metric ops of the best candidate.

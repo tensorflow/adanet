@@ -61,6 +61,7 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
                          features,
                          logits_dimension,
                          training,
+                         iteration_step,
                          summary,
                          previous_ensemble=None):
     seed = self._seed
@@ -108,12 +109,13 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
         complexity=3,
         persisted_tensors=persisted_tensors)
 
-  def build_base_learner_train_op(self, loss, var_list, labels, summary):
+  def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
+                                  summary):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=3.)
     return optimizer.minimize(loss, var_list=var_list)
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
-                                     summary):
+                                     iteration_step, summary):
     optimizer = tf.train.GradientDescentOptimizer(
         learning_rate=self._mixture_weight_learning_rate)
     return optimizer.minimize(loss, var_list=var_list)
@@ -144,6 +146,7 @@ class _SimpleBaseLearnerBuilder(BaseLearnerBuilder):
                          features,
                          logits_dimension,
                          training,
+                         iteration_step,
                          summary,
                          previous_ensemble=None):
     seed = self._seed
@@ -169,12 +172,13 @@ class _SimpleBaseLearnerBuilder(BaseLearnerBuilder):
         persisted_tensors={},
     )
 
-  def build_base_learner_train_op(self, loss, var_list, labels, summary):
+  def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
+                                  summary):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=3.)
     return optimizer.minimize(loss, var_list=var_list)
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
-                                     summary):
+                                     iteration_step, summary):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=3.)
     return optimizer.minimize(loss, var_list=var_list)
 
@@ -195,6 +199,7 @@ class _LinearBaseLearnerBuilder(BaseLearnerBuilder):
                          features,
                          logits_dimension,
                          training,
+                         iteration_step,
                          summary,
                          previous_ensemble=None):
 
@@ -210,12 +215,13 @@ class _LinearBaseLearnerBuilder(BaseLearnerBuilder):
         persisted_tensors={},
     )
 
-  def build_base_learner_train_op(self, loss, var_list, labels, summary):
+  def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
+                                  summary):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
     return optimizer.minimize(loss, var_list=var_list)
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
-                                     summary):
+                                     iteration_step, summary):
     optimizer = tf.train.GradientDescentOptimizer(
         learning_rate=self._mixture_weight_learning_rate)
     return optimizer.minimize(loss, var_list=var_list)

@@ -108,8 +108,14 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
               metrics={"moo": (tf.constant("moo1"), tf.constant("moo2"))})
       ],
   })
-  def test_new(self, number, candidates, estimator_spec, best_candidate_index,
-               is_over, base_learner_reports_fn=None):
+  def test_new(self,
+               number,
+               candidates,
+               estimator_spec,
+               best_candidate_index,
+               is_over,
+               base_learner_reports_fn=None,
+               step=0):
     if base_learner_reports_fn is None:
       base_learner_reports = []
     else:
@@ -122,83 +128,55 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
           best_candidate_index=best_candidate_index,
           summaries=[],
           is_over=is_over,
-          base_learner_reports=base_learner_reports)
+          base_learner_reports=base_learner_reports,
+          step=step)
       self.assertEqual(iteration.number, number)
       self.assertEqual(iteration.candidates, candidates)
       self.assertEqual(iteration.estimator_spec, estimator_spec)
       self.assertEqual(iteration.best_candidate_index, best_candidate_index)
       self.assertEqual(iteration.is_over, is_over)
       self.assertEqual(iteration.base_learner_reports, base_learner_reports)
+      self.assertEqual(iteration.step, step)
 
   @parameterized.named_parameters({
       "testcase_name": "negative_number",
       "number": -1,
-      "candidates": lambda: [tu.dummy_candidate()],
-      "estimator_spec": tu.dummy_estimator_spec(),
-      "best_candidate_index": 0,
-      "is_over": True,
   }, {
       "testcase_name": "float_number",
       "number": 1.213,
-      "candidates": lambda: [tu.dummy_candidate()],
-      "estimator_spec": tu.dummy_estimator_spec(),
-      "best_candidate_index": 0,
-      "is_over": True,
   }, {
       "testcase_name": "none_number",
       "number": None,
-      "candidates": lambda: [tu.dummy_candidate()],
-      "estimator_spec": tu.dummy_estimator_spec(),
-      "best_candidate_index": 0,
-      "is_over": True,
   }, {
       "testcase_name": "empty_candidates",
-      "number": 0,
       "candidates": lambda: [],
-      "estimator_spec": tu.dummy_estimator_spec(),
-      "best_candidate_index": 0,
-      "is_over": True,
   }, {
       "testcase_name": "none_candidates",
-      "number": 0,
       "candidates": lambda: None,
-      "estimator_spec": tu.dummy_estimator_spec(),
-      "best_candidate_index": 0,
-      "is_over": True,
   }, {
       "testcase_name": "non_list_candidates",
-      "number": 0,
       "candidates": lambda: {"foo": tu.dummy_candidate()},
-      "estimator_spec": tu.dummy_estimator_spec(),
-      "best_candidate_index": 0,
-      "is_over": True,
   }, {
       "testcase_name": "none_estimator_spec",
-      "number": 0,
-      "candidates": lambda: [tu.dummy_candidate()],
       "estimator_spec": None,
-      "best_candidate_index": 0,
-      "is_over": True,
   }, {
       "testcase_name": "none_best_candidate_index",
-      "number": 0,
-      "candidates": lambda: [tu.dummy_candidate()],
-      "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": None,
-      "is_over": True,
   }, {
       "testcase_name": "none_base_learner_reports",
-      "number": 0,
-      "candidates": lambda: [tu.dummy_candidate()],
-      "estimator_spec": tu.dummy_estimator_spec(),
-      "best_candidate_index": None,
-      "is_over": True,
-      "base_learner_reports": None,
+      "base_learner_reports": lambda: None,
+  }, {
+      "testcase_name": "none_step",
+      "step": None,
   })
-  def test_new_errors(self, number, candidates, estimator_spec,
-                      best_candidate_index, is_over, base_learner_reports=None):
-    if base_learner_reports is None:
-      base_learner_reports = []
+  def test_new_errors(self,
+                      number=0,
+                      candidates=lambda: [tu.dummy_candidate()],
+                      estimator_spec=tu.dummy_estimator_spec(),
+                      best_candidate_index=0,
+                      is_over=True,
+                      base_learner_reports=lambda: [],
+                      step=0):
     with self.test_session():
       with self.assertRaises(ValueError):
         _Iteration(
@@ -208,7 +186,8 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
             best_candidate_index=best_candidate_index,
             summaries=[],
             is_over=is_over,
-            base_learner_reports=base_learner_reports)
+            base_learner_reports=base_learner_reports(),
+            step=step)
 
 
 class _FakeBaseLearnerBuilder(BaseLearnerBuilder):
@@ -225,13 +204,13 @@ class _FakeBaseLearnerBuilder(BaseLearnerBuilder):
   def seed(self):
     return self._random_seed
 
-  def build_base_learner(self, features, logits_dimension, training, summary,
+  def build_base_learner(self,
+                         features,
+                         logits_dimension,
+                         training,
+                         iteration_step,
+                         summary,
                          previous_ensemble=None):
-    del features  # Unused
-    del training  # Unused
-    del summary  # Unused
-    del previous_ensemble  # Unused
-
     base_learner = BaseLearner(
         last_layer=tu.dummy_tensor(),
         logits=tu.dummy_tensor([2, logits_dimension]),
@@ -239,11 +218,12 @@ class _FakeBaseLearnerBuilder(BaseLearnerBuilder):
         persisted_tensors={"random_seed": self._random_seed})
     return base_learner
 
-  def build_base_learner_train_op(self, loss, var_list, labels, summary):
+  def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
+                                  summary):
     return None
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
-                                     summary):
+                                     iteration_step, summary):
     return None
 
 
@@ -265,9 +245,13 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
   def name(self):
     return self._name
 
-  def build_base_learner(self, features, logits_dimension, training, summary,
+  def build_base_learner(self,
+                         features,
+                         logits_dimension,
+                         training,
+                         iteration_step,
+                         summary,
                          previous_ensemble=None):
-    del summary  # Unused
     seed = self._seed
     with tf.variable_scope("dnn"):
       persisted_tensors = {}
@@ -299,10 +283,12 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
         persisted_tensors=persisted_tensors,
     )
 
-  def train_base_learner(self, loss, var_list, logits, labels, summary):
+  def train_base_learner(self, loss, var_list, logits, labels, iteration_step,
+                         summary):
     return self._train_op_fn(loss, var_list)
 
-  def train_mixture_weights(self, loss, var_list, logits, labels, summary):
+  def train_mixture_weights(self, loss, var_list, logits, labels,
+                            iteration_step, summary):
     return self._train_op_fn(loss, var_list)
 
 
@@ -318,12 +304,13 @@ class _FakeEnsembleBuilder(object):
     if eval_metric_ops_fn:
       self._eval_metric_ops_fn = eval_metric_ops_fn
 
-  def append_new_base_learner(self, ensemble, base_learner_builder, summary,
-                              features, mode, labels):
+  def append_new_base_learner(self, ensemble, base_learner_builder,
+                              iteration_step, summary, features, mode, labels):
     del summary
     del mode
     del features
     del labels
+    del iteration_step
 
     num_base_learners = 0
     if ensemble:
@@ -755,6 +742,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
       if mode == tf.estimator.ModeKeys.TRAIN:
         sess.run(iteration.estimator_spec.train_op)
         self.assertEqual(1, sess.run(global_step))
+        self.assertEqual(1, sess.run(iteration.step))
 
   @parameterized.named_parameters({
       "testcase_name": "empty_base_learner_builders",
@@ -819,10 +807,11 @@ class _HeadEnsembleBuilder(object):
   def __init__(self, head):
     self._head = head
 
-  def append_new_base_learner(self, ensemble, base_learner_builder, summary,
-                              features, mode, labels):
+  def append_new_base_learner(self, ensemble, base_learner_builder,
+                              iteration_step, summary, features, mode, labels):
     del ensemble
     del base_learner_builder
+    del iteration_step
     del summary
 
     logits = [[.5]]

@@ -965,6 +965,8 @@ class Estimator(tf.estimator.Estimator):
 
     adanet_summary = _ScopedSummary("global", skip_summaries)
     adanet_summary.scalar("iteration/adanet/iteration", iteration_number_tensor)
+    adanet_summary.scalar("iteration_step/adanet/iteration_step",
+                          current_iteration.step)
     if current_iteration.estimator_spec.loss is not None:
       adanet_summary.scalar("loss", current_iteration.estimator_spec.loss)
       adanet_summary.scalar("loss/adanet/adanet_weighted_ensemble",

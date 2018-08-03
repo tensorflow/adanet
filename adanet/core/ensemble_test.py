@@ -48,6 +48,7 @@ class _BaseLearnerBuilder(BaseLearnerBuilder):
                          features,
                          logits_dimension,
                          training,
+                         iteration_step,
                          summary,
                          previous_ensemble=None):
     last_layer = tu.dummy_tensor(shape=(2, 3))
@@ -61,11 +62,12 @@ class _BaseLearnerBuilder(BaseLearnerBuilder):
         complexity=2,
         persisted_tensors={})
 
-  def build_base_learner_train_op(self, loss, var_list, labels, summary):
+  def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
+                                  summary):
     return self._base_learner_train_op_fn(loss, var_list)
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
-                                     summary):
+                                     iteration_step, summary):
     return self._mixture_weights_train_op_fn(loss, var_list)
 
 
@@ -114,9 +116,9 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "testcase_name": "default_mixture_weight_initializer_matrix",
       "mixture_weight_initializer": None,
       "mixture_weight_type": MixtureWeightType.MATRIX,
-      "want_logits": [[.805], [.946]],
-      "want_loss": 1.503,
-      "want_adanet_loss": 1.503,
+      "want_logits": [[-.413], [.668]],
+      "want_loss": .921,
+      "want_adanet_loss": .921,
       "want_complexity_regularization": 0.,
       "want_mixture_weight_vars": 1,
   }, {
@@ -124,9 +126,9 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "mixture_weight_initializer": None,
       "mixture_weight_type": MixtureWeightType.MATRIX,
       "use_logits_last_layer": True,
-      "want_logits": [[-.827], [-1.303]],
-      "want_loss": 1.906,
-      "want_adanet_loss": 1.906,
+      "want_logits": [[.799], [1.260]],
+      "want_loss": 1.420,
+      "want_adanet_loss": 1.420,
       "want_complexity_regularization": 0.,
       "want_mixture_weight_vars": 1,
   }, {
@@ -247,6 +249,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
                                                  use_logits_last_layer, seed),
         summary=_FakeSummary(),
         features=features,
+        iteration_step=tf.train.get_or_create_global_step(),
         labels=labels,
         mode=mode)
 
