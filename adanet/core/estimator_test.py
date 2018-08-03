@@ -1494,7 +1494,7 @@ class EstimatorReportGenerationTest(EstimatorTestCase):
         warm_start_mixture_weights=True,
         max_iteration_steps=max_iteration_steps,
         report_materializer=ReportMaterializer(
-            input_fn=train_input_fn, steps=10),
+            input_fn=train_input_fn, steps=1),
         model_dir=self.test_subdirectory)
 
     report_accessor = estimator._report_accessor
