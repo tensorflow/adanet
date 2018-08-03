@@ -260,7 +260,7 @@ def _head():
       loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
 
-class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
+class EstimatorTestCase(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
     # Setup and cleanup test directory.
@@ -270,6 +270,9 @@ class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
 
   def tearDown(self):
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
+
+
+class EstimatorTest(EstimatorTestCase):
 
   @parameterized.named_parameters({
       "testcase_name":
@@ -654,17 +657,31 @@ class EstimatorTest(parameterized.TestCase, tf.test.TestCase):
       estimator.train(input_fn=train_input_fn, steps=steps, max_steps=max_steps)
 
 
-class CheckpointTest(parameterized.TestCase, tf.test.TestCase):
+class EstimatorCallingModelFnDirectlyTest(EstimatorTestCase):
+  """Tests b/112108745. Warn users not to call model_fn directly."""
+
+  def test_calling_model_fn_directly(self):
+    base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
+        [_DNNBaseLearnerBuilder("dnn")])
+    estimator = Estimator(
+        head=_head(),
+        base_learner_builder_generator=base_learner_builder_generator,
+        max_iteration_steps=3,
+        model_dir=self.test_subdirectory)
+    model_fn = estimator.model_fn
+    train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
+    tf.train.create_global_step()
+    features, labels = train_input_fn()
+    with self.assertRaises(UserWarning):
+      model_fn(
+          features=features,
+          mode=tf.estimator.ModeKeys.TRAIN,
+          labels=labels,
+          config={})
+
+
+class EstimatorCheckpointTest(EstimatorTestCase):
   """Tests estimator checkpoints."""
-
-  def setUp(self):
-    # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
-    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
-    os.mkdir(self.test_subdirectory)
-
-  def tearDown(self):
-    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
 
   @parameterized.named_parameters({
       "testcase_name": "single_iteration",
@@ -777,17 +794,8 @@ class _EvalMetricsHead(object):
         train_op=train_op_fn(1))
 
 
-class SummaryWriterTest(parameterized.TestCase, tf.test.TestCase):
+class EstimatorSummaryWriterTest(EstimatorTestCase):
   """Test that Tensorboard summaries get written correctly."""
-
-  def setUp(self):
-    # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
-    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
-    os.mkdir(self.test_subdirectory)
-
-  def tearDown(self):
-    shutil.rmtree(self.test_subdirectory, ignore_errors=False)
 
   def test_summaries(self):
     """Tests that summaries are written to candidate directory."""
@@ -977,7 +985,7 @@ class SummaryWriterTest(parameterized.TestCase, tf.test.TestCase):
           msg="{} should be under 'eval'.".format(metric))
 
 
-class MembersOverrideTest(tf.test.TestCase):
+class EstimatorMembersOverrideTest(EstimatorTestCase):
   """Tests b/77494544 fix."""
 
   def test_assert_members_are_not_overridden(self):
@@ -1012,16 +1020,8 @@ def _dummy_feature_dict_input_fn(features, labels):
   return _input_fn
 
 
-class DifferentFeaturesPerModeTest(parameterized.TestCase, tf.test.TestCase):
+class EstimatorDifferentFeaturesPerModeTest(EstimatorTestCase):
   """Tests b/109751254."""
-
-  def setUp(self):
-    # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
-    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
-
-  def tearDown(self):
-    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
 
   @parameterized.named_parameters({
       "testcase_name": "extra_train_features",
@@ -1106,18 +1106,10 @@ class DifferentFeaturesPerModeTest(parameterized.TestCase, tf.test.TestCase):
         serving_input_receiver_fn=serving_input_fn)
 
 
-class ExportSavedModelForModeTest(parameterized.TestCase, tf.test.TestCase):
+class EstimatorExportSavedModelForPredictTest(EstimatorTestCase):
   """Tests b/110435640."""
 
-  def setUp(self):
-    # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
-    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
-
-  def tearDown(self):
-    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
-
-  def test_export_saved_model_for_mode(self):
+  def test_export_saved_model_for_predict(self):
     """Tests new SavedModel exporting functionality."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
@@ -1156,18 +1148,10 @@ class ExportSavedModelForModeTest(parameterized.TestCase, tf.test.TestCase):
         mode=tf.estimator.ModeKeys.PREDICT)
 
 
-class ExportSavedModelForEvalTest(parameterized.TestCase, tf.test.TestCase):
+class EstimatorExportSavedModelForEvalTest(EstimatorTestCase):
   """Tests b/110991908."""
 
-  def setUp(self):
-    # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
-    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
-
-  def tearDown(self):
-    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
-
-  def test_export_saved_model_for_mode(self):
+  def test_export_saved_model_for_eval(self):
     """Tests new SavedModel exporting functionality."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
@@ -1237,17 +1221,8 @@ class ExportSavedModelForEvalTest(parameterized.TestCase, tf.test.TestCase):
           places=3)
 
 
-class ReportGenerationTest(parameterized.TestCase, tf.test.TestCase):
+class EstimatorReportGenerationTest(EstimatorTestCase):
   """Tests report generation."""
-
-  def setUp(self):
-    # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
-    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
-    os.mkdir(self.test_subdirectory)
-
-  def tearDown(self):
-    shutil.rmtree(self.test_subdirectory, ignore_errors=False)
 
   @parameterized.named_parameters(
       {

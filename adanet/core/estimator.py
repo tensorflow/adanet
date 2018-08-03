@@ -19,6 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from contextlib import contextmanager
 import errno
 import os
 import time
@@ -360,6 +361,8 @@ class Estimator(tf.estimator.Estimator):
 
     self._evaluation_name = None
 
+    self._inside_adanet_training_loop = False
+
     # This `Estimator` is responsible for bookkeeping across iterations, and
     # for training the base learners in both a local and distributed setting.
     # Subclassing improves future-proofing against new private methods being
@@ -398,6 +401,14 @@ class Estimator(tf.estimator.Estimator):
     return tf.contrib.framework.load_variable(latest_checkpoint,
                                               tf.GraphKeys.GLOBAL_STEP)
 
+  @contextmanager
+  def _train_loop_context(self):
+    """Tracks where the context is within the AdaNet train loop."""
+
+    self._inside_adanet_training_loop = True
+    yield
+    self._inside_adanet_training_loop = False
+
   def train(self,
             input_fn,
             hooks=None,
@@ -417,80 +428,83 @@ class Estimator(tf.estimator.Estimator):
     # Each iteration of this AdaNet loop represents an `_Iteration`. The
     # current iteration number is stored as a variable in the checkpoint so
     # that training can be stopped and started at anytime.
-    while True:
-      current_iteration = self._latest_checkpoint_iteration_number()
-      tf.logging.info("Beginning training AdaNet iteration %s",
-                      current_iteration)
-      self._iteration_ended = False
-      result = super(Estimator, self).train(
-          input_fn=input_fn,
-          hooks=hooks,
-          max_steps=max_steps,
-          saving_listeners=saving_listeners)
+    with self._train_loop_context():
+      while True:
+        current_iteration = self._latest_checkpoint_iteration_number()
+        tf.logging.info("Beginning training AdaNet iteration %s",
+                        current_iteration)
+        self._iteration_ended = False
+        result = super(Estimator, self).train(
+            input_fn=input_fn,
+            hooks=hooks,
+            max_steps=max_steps,
+            saving_listeners=saving_listeners)
 
-      # If training ended because the maximum number of training steps occurred,
-      # exit training.
-      if self._latest_checkpoint_global_step() >= max_steps:
-        return result
-
-      # If training ended for any reason other than the iteration ending,
-      # exit training.
-      if not self._iteration_ended:
-        return result
-
-      # The chief prepares the next AdaNet iteration, and increments the
-      # iteration number by 1.
-      if self.config.is_chief:
-        # As the chief, store the train hooks and make a placeholder input_fn in
-        # order to use them when preparing the next iteration.
-        self._train_hooks = hooks
-        self._placeholder_input_fn = make_placeholder_input_fn(input_fn)
-        self._prepare_next_iteration()
-
-      # This inner loop serves mainly for synchronizing the workers with the
-      # chief during distributed training. Workers that finish training early
-      # wait for the chief to prepare the next iteration and increment the
-      # iteration number. Workers that are slow to finish training quickly move
-      # onto the next iteration. And workers that go offline and return online
-      # after training ended terminate gracefully.
-      wait_for_chief = not self.config.is_chief
-      timer = _CountDownTimer(self._worker_wait_timeout_secs)
-      while wait_for_chief:
-        # If the chief hits max_steps, it will stop training itself and not
-        # increment the iteration number, so this is how the worker knows to
-        # exit if it wakes up and the chief is gone.
-        # TODO: Support steps parameter.
+        # If training ended because the maximum number of training steps
+        # occurred, exit training.
         if self._latest_checkpoint_global_step() >= max_steps:
           return result
 
-        # In distributed training, a worker may end training before the chief
-        # overwrites the checkpoint with the incremented iteration number. If
-        # that is the case, it should wait for the chief to do so. Otherwise
-        # the worker will get stuck waiting for its weights to be initialized.
-        next_iteration = self._latest_checkpoint_iteration_number()
-        if next_iteration > current_iteration:
-          break
-
-        # Check timeout when waiting for potentially downed chief.
-        if timer.secs_remaining() == 0:
-          tf.logging.error(
-              "Chief job did not prepare next iteration after %s secs. It may "
-              "have been preempted, been turned down, or crashed. This worker "
-              "is now exiting training.", self._worker_wait_timeout_secs)
+        # If training ended for any reason other than the iteration ending,
+        # exit training.
+        if not self._iteration_ended:
           return result
-        tf.logging.info("Waiting for chief to finish")
-        time.sleep(5)
 
-      tf.logging.info("Finished training Adanet iteration %s",
-                      current_iteration)
+        # The chief prepares the next AdaNet iteration, and increments the
+        # iteration number by 1.
+        if self.config.is_chief:
+          # As the chief, store the train hooks and make a placeholder input_fn
+          # in order to use them when preparing the next iteration.
+          self._train_hooks = hooks
+          self._placeholder_input_fn = make_placeholder_input_fn(input_fn)
+          self._prepare_next_iteration()
 
-      # Stagger starting workers to prevent training instability.
-      if not self.config.is_chief:
-        task_id = self.config.task_id or 0
-        # Wait 5 secs more for each new worker up to 60 secs.
-        delay_secs = min(60, task_id * 5)
-        tf.logging.info("Waiting %d secs before starting training.", delay_secs)
-        time.sleep(delay_secs)
+        # This inner loop serves mainly for synchronizing the workers with the
+        # chief during distributed training. Workers that finish training early
+        # wait for the chief to prepare the next iteration and increment the
+        # iteration number. Workers that are slow to finish training quickly
+        # move onto the next iteration. And workers that go offline and return
+        # online after training ended terminate gracefully.
+        wait_for_chief = not self.config.is_chief
+        timer = _CountDownTimer(self._worker_wait_timeout_secs)
+        while wait_for_chief:
+          # If the chief hits max_steps, it will stop training itself and not
+          # increment the iteration number, so this is how the worker knows to
+          # exit if it wakes up and the chief is gone.
+          # TODO: Support steps parameter.
+          if self._latest_checkpoint_global_step() >= max_steps:
+            return result
+
+          # In distributed training, a worker may end training before the chief
+          # overwrites the checkpoint with the incremented iteration number. If
+          # that is the case, it should wait for the chief to do so. Otherwise
+          # the worker will get stuck waiting for its weights to be initialized.
+          next_iteration = self._latest_checkpoint_iteration_number()
+          if next_iteration > current_iteration:
+            break
+
+          # Check timeout when waiting for potentially downed chief.
+          if timer.secs_remaining() == 0:
+            tf.logging.error(
+                "Chief job did not prepare next iteration after %s secs. It "
+                "may have been preempted, been turned down, or crashed. This "
+                "worker is now exiting training.",
+                self._worker_wait_timeout_secs)
+            return result
+          tf.logging.info("Waiting for chief to finish")
+          time.sleep(5)
+
+        tf.logging.info("Finished training Adanet iteration %s",
+                        current_iteration)
+
+        # Stagger starting workers to prevent training instability.
+        if not self.config.is_chief:
+          task_id = self.config.task_id or 0
+          # Wait 5 secs more for each new worker up to 60 secs.
+          delay_secs = min(60, task_id * 5)
+          tf.logging.info("Waiting %d secs before starting training.",
+                          delay_secs)
+          time.sleep(delay_secs)
 
   def evaluate(self,
                input_fn,
@@ -864,15 +878,23 @@ class Estimator(tf.estimator.Estimator):
 
     Returns:
       A `EstimatorSpec` instance.
+
+    Raises:
+      UserWarning: When calling model_fn directly in TRAIN mode.
     """
+
+    training = mode == tf.estimator.ModeKeys.TRAIN
+    if training and not self._inside_adanet_training_loop:
+      raise UserWarning(
+          "The adanet.Estimator's model_fn should not be called directly in "
+          "TRAIN mode, because its behavior is undefined outside the context "
+          "of its `train` method.")
 
     # Wrap features so that their ops always have the same names for when
     # freezing and loading ensembles.
     features = self._freezer.wrapped_features(features)
 
     iteration_number = self._latest_checkpoint_iteration_number()
-
-    training = mode == tf.estimator.ModeKeys.TRAIN
 
     filtered_features = features
     record_filename = os.path.join(self.model_dir, "features")
@@ -949,14 +971,13 @@ class Estimator(tf.estimator.Estimator):
                             current_iteration.estimator_spec.loss)
 
     iteraton_estimator_spec = current_iteration.estimator_spec
-    is_training = mode == tf.estimator.ModeKeys.TRAIN
     estimator_spec = tf.estimator.EstimatorSpec(
         mode=mode,
         predictions=iteraton_estimator_spec.predictions,
         loss=iteraton_estimator_spec.loss,
         train_op=iteraton_estimator_spec.train_op,
         eval_metric_ops=iteraton_estimator_spec.eval_metric_ops,
-        training_hooks=self._training_hooks(current_iteration, is_training),
+        training_hooks=self._training_hooks(current_iteration, training),
         evaluation_hooks=self._evaluation_hooks(current_iteration),
         scaffold=tf.train.Scaffold(summary_op=adanet_summary.merge_all()),
         export_outputs=iteraton_estimator_spec.export_outputs)
