@@ -20,8 +20,8 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.evaluator import Evaluator
-import adanet.testing_utils as tu
+from adanet.core.evaluator import Evaluator
+import adanet.core.testing_utils as tu
 import tensorflow as tf
 
 

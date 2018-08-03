@@ -19,8 +19,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.base_learner_report import MaterializedBaseLearnerReport
-from adanet.report_accessor import _ReportAccessor
+from adanet.core.base_learner_report import MaterializedBaseLearnerReport
+from adanet.core.report_accessor import _ReportAccessor
 import tensorflow as tf
 
 

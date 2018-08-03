@@ -20,9 +20,9 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.candidate import _Candidate
-from adanet.candidate import _CandidateBuilder
-import adanet.testing_utils as tu
+from adanet.core.candidate import _Candidate
+from adanet.core.candidate import _CandidateBuilder
+import adanet.core.testing_utils as tu
 import tensorflow as tf
 
 

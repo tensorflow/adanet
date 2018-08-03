@@ -20,11 +20,11 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.base_learner import BaseLearner
-from adanet.base_learner import BaseLearnerBuilder
-from adanet.ensemble import _EnsembleBuilder
-from adanet.ensemble import MixtureWeightType
-import adanet.testing_utils as tu
+from adanet.core.base_learner import BaseLearner
+from adanet.core.base_learner import BaseLearnerBuilder
+from adanet.core.ensemble import _EnsembleBuilder
+from adanet.core.ensemble import MixtureWeightType
+import adanet.core.testing_utils as tu
 import tensorflow as tf
 
 

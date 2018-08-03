@@ -21,8 +21,8 @@ from __future__ import print_function
 
 import os
 
-from adanet.base_learner_report import MaterializedBaseLearnerReport
-import adanet.report_pb2 as report_proto
+from adanet.core import report_pb2 as report_proto
+from adanet.core.base_learner_report import MaterializedBaseLearnerReport
 import six
 import tensorflow as tf
 

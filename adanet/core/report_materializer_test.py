@@ -20,10 +20,10 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.base_learner_report import BaseLearnerReport
-from adanet.base_learner_report import MaterializedBaseLearnerReport
-from adanet.report_materializer import ReportMaterializer
-import adanet.testing_utils as tu
+from adanet.core.base_learner_report import BaseLearnerReport
+from adanet.core.base_learner_report import MaterializedBaseLearnerReport
+from adanet.core.report_materializer import ReportMaterializer
+import adanet.core.testing_utils as tu
 import tensorflow as tf
 
 

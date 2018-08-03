@@ -20,7 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.input_utils import make_placeholder_input_fn
+from adanet.core.input_utils import make_placeholder_input_fn
 import tensorflow as tf
 
 

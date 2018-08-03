@@ -21,8 +21,8 @@ from __future__ import print_function
 
 import collections
 
-from adanet.base_learner_report import BaseLearnerReport
-from adanet.summary import _ScopedSummary
+from adanet.core.base_learner_report import BaseLearnerReport
+from adanet.core.summary import _ScopedSummary
 import tensorflow as tf
 
 

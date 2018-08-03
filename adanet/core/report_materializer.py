@@ -21,7 +21,7 @@ from __future__ import print_function
 
 import math
 
-from adanet.base_learner_report import MaterializedBaseLearnerReport
+from adanet.core.base_learner_report import MaterializedBaseLearnerReport
 import tensorflow as tf
 
 

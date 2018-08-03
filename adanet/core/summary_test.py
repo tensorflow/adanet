@@ -20,7 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.summary import _ScopedSummary
+from adanet.core.summary import _ScopedSummary
 import tensorflow as tf
 
 

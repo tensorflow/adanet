@@ -20,14 +20,14 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.base_learner import BaseLearner
-from adanet.base_learner import BaseLearnerBuilder
-from adanet.base_learner_report import BaseLearnerReport
-from adanet.candidate import _Candidate
-from adanet.ensemble import Ensemble
-from adanet.iteration import _Iteration
-from adanet.iteration import _IterationBuilder
-import adanet.testing_utils as tu
+from adanet.core.base_learner import BaseLearner
+from adanet.core.base_learner import BaseLearnerBuilder
+from adanet.core.base_learner_report import BaseLearnerReport
+from adanet.core.candidate import _Candidate
+from adanet.core.ensemble import Ensemble
+from adanet.core.iteration import _Iteration
+from adanet.core.iteration import _IterationBuilder
+import adanet.core.testing_utils as tu
 import tensorflow as tf
 
 

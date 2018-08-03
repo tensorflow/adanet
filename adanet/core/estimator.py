@@ -23,15 +23,15 @@ import errno
 import os
 import time
 
-from adanet.candidate import _CandidateBuilder
-from adanet.ensemble import _EnsembleBuilder
-from adanet.ensemble import MixtureWeightType
-from adanet.freezer import _EnsembleFreezer
-from adanet.input_utils import make_placeholder_input_fn
-from adanet.iteration import _IterationBuilder
-from adanet.report_accessor import _ReportAccessor
-from adanet.summary import _ScopedSummary
-from adanet.timer import _CountDownTimer
+from adanet.core.candidate import _CandidateBuilder
+from adanet.core.ensemble import _EnsembleBuilder
+from adanet.core.ensemble import MixtureWeightType
+from adanet.core.freezer import _EnsembleFreezer
+from adanet.core.input_utils import make_placeholder_input_fn
+from adanet.core.iteration import _IterationBuilder
+from adanet.core.report_accessor import _ReportAccessor
+from adanet.core.summary import _ScopedSummary
+from adanet.core.timer import _CountDownTimer
 import numpy as np
 import six
 import tensorflow as tf
