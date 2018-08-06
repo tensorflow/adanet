@@ -204,7 +204,7 @@ class Estimator(tf.estimator.Estimator):
                head,
                base_learner_builder_generator,
                max_iteration_steps,
-               mixture_weight_type=MixtureWeightType.MATRIX,
+               mixture_weight_type=MixtureWeightType.SCALAR,
                mixture_weight_initializer=None,
                warm_start_mixture_weights=False,
                adanet_lambda=0.,

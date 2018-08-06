@@ -591,6 +591,7 @@ class EstimatorTest(EstimatorTestCase):
             _SimpleBaseLearnerBuilder(
                 name="simple", feature_columns=[feature_column])
         ]),
+        mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=1,
@@ -655,6 +656,7 @@ class EstimatorTest(EstimatorTestCase):
       estimator = Estimator(
           head=_head(),
           base_learner_builder_generator=base_learner_builder_generator,
+          mixture_weight_type=MixtureWeightType.MATRIX,
           mixture_weight_initializer=tf.zeros_initializer(),
           warm_start_mixture_weights=True,
           max_iteration_steps=max_iteration_steps,
@@ -724,6 +726,7 @@ class EstimatorCheckpointTest(EstimatorTestCase):
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=max_iteration_steps,
@@ -812,6 +815,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=10,
@@ -939,6 +943,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
     estimator = Estimator(
         head=head,
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=6,
@@ -1003,6 +1008,7 @@ class EstimatorMembersOverrideTest(EstimatorTestCase):
     adanet = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=10,
@@ -1076,6 +1082,7 @@ class EstimatorDifferentFeaturesPerModeTest(EstimatorTestCase):
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=1,
@@ -1124,6 +1131,7 @@ class EstimatorExportSavedModelForPredictTest(EstimatorTestCase):
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=1,
@@ -1166,6 +1174,7 @@ class EstimatorExportSavedModelForEvalTest(EstimatorTestCase):
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=1,
@@ -1496,6 +1505,7 @@ class EstimatorReportGenerationTest(EstimatorTestCase):
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=max_iteration_steps,
