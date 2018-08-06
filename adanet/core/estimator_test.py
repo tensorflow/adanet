@@ -595,6 +595,7 @@ class EstimatorTest(EstimatorTestCase):
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=1,
+        use_bias=True,
         model_dir=self.test_subdirectory)
 
     def train_input_fn():
@@ -660,6 +661,7 @@ class EstimatorTest(EstimatorTestCase):
           mixture_weight_initializer=tf.zeros_initializer(),
           warm_start_mixture_weights=True,
           max_iteration_steps=max_iteration_steps,
+          use_bias=True,
           model_dir=self.test_subdirectory)
       train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
       estimator.train(input_fn=train_input_fn, steps=steps, max_steps=max_steps)
@@ -675,6 +677,7 @@ class EstimatorCallingModelFnDirectlyTest(EstimatorTestCase):
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
         max_iteration_steps=3,
+        use_bias=True,
         model_dir=self.test_subdirectory)
     model_fn = estimator.model_fn
     train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
@@ -730,6 +733,7 @@ class EstimatorCheckpointTest(EstimatorTestCase):
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=max_iteration_steps,
+        use_bias=True,
         config=config,
         model_dir=self.test_subdirectory)
     train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
@@ -819,6 +823,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=10,
+        use_bias=True,
         config=run_config,
         model_dir=self.test_subdirectory)
     train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
@@ -947,6 +952,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=6,
+        use_bias=True,
         config=run_config,
         model_dir=self.test_subdirectory)
     train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
@@ -1012,6 +1018,7 @@ class EstimatorMembersOverrideTest(EstimatorTestCase):
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=10,
+        use_bias=True,
         config=config)
     self.assertIsNotNone(adanet)
     linear = tf.contrib.estimator.LinearEstimator(
@@ -1086,6 +1093,7 @@ class EstimatorDifferentFeaturesPerModeTest(EstimatorTestCase):
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=1,
+        use_bias=True,
         model_dir=self.test_subdirectory,
         config=run_config)
 
@@ -1135,6 +1143,7 @@ class EstimatorExportSavedModelForPredictTest(EstimatorTestCase):
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=1,
+        use_bias=True,
         model_dir=self.test_subdirectory,
         config=run_config)
 
@@ -1178,6 +1187,7 @@ class EstimatorExportSavedModelForEvalTest(EstimatorTestCase):
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=1,
+        use_bias=True,
         model_dir=self.test_subdirectory,
         config=run_config)
 
@@ -1509,6 +1519,7 @@ class EstimatorReportGenerationTest(EstimatorTestCase):
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         max_iteration_steps=max_iteration_steps,
+        use_bias=True,
         report_materializer=ReportMaterializer(
             input_fn=train_input_fn, steps=1),
         model_dir=self.test_subdirectory)

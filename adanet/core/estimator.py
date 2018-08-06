@@ -211,7 +211,7 @@ class Estimator(tf.estimator.Estimator):
                adanet_beta=0.,
                evaluator=None,
                report_materializer=None,
-               use_bias=True,
+               use_bias=False,
                replicate_ensemble_in_training=False,
                adanet_loss_decay=.9,
                worker_wait_timeout_secs=7200,

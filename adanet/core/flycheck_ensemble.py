@@ -339,10 +339,11 @@ class _EnsembleBuilder(object):
     total_weight_l1_norms = 0
     weights = []
     for weighted_base_learner in weighted_base_learners:
+      adanet_gamma = self._adanet_lambda * tf.to_float(
+          weighted_base_learner.base_learner.complexity) + self._adanet_beta
       weight_l1_norm = tf.norm(weighted_base_learner.weight, ord=1)
       total_weight_l1_norms += weight_l1_norm
-      ensemble_complexity_regularization += self._complexity_regularization(
-          weight_l1_norm, weighted_base_learner.base_learner.complexity)
+      ensemble_complexity_regularization += adanet_gamma * weight_l1_norm
       base_learner_logits.append(weighted_base_learner.logits)
       weights.append(weight_l1_norm)
 
@@ -458,21 +459,6 @@ class _EnsembleBuilder(object):
         complexity_regularization=ensemble_complexity_regularization,
         eval_metric_ops=eval_metric_ops,
         export_outputs=adanet_weighted_ensemble_spec.export_outputs)
-
-  def _complexity_regularization(self, weight_l1_norm, complexity):
-    """For a base learner, computes: (lambda * r(h) + beta) * |w|."""
-
-    if self._adanet_lambda == 0. and self._adanet_beta == 0.:
-      return tf.constant(0., name="zero")
-    return tf.scalar_mul(self._adanet_gamma(complexity), weight_l1_norm)
-
-  def _adanet_gamma(self, complexity):
-    """For a base learner, computes: lambda * r(h) + beta."""
-
-    if self._adanet_lambda == 0.:
-      return self._adanet_beta
-    return tf.scalar_mul(self._adanet_lambda,
-                         tf.to_float(complexity)) + self._adanet_beta
 
   def _select_mixture_weight_initializer(self, num_base_learners):
     if self._mixture_weight_initializer:
