@@ -257,7 +257,7 @@ class Estimator(tf.estimator.Estimator):
           in the ensemble giving a uniform average.
         * `VECTOR`: Initializes each entry to 1/N where N is the number of base
           learners in the ensemble giving a uniform average.
-        * `MATRIX`: Uses `tf.glorot_uniform_initializer`.
+        * `MATRIX`: Uses `tf.zeros_initializer`.
       warm_start_mixture_weights: Whether, at the beginning of an iteration, to
         initialize the mixture weights of the base learners from the previous
         ensemble to their learned value at the previous iteration, as opposed to

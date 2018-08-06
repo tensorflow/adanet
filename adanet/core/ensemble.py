@@ -190,7 +190,7 @@ class _EnsembleBuilder(object):
           in the ensemble giving a uniform average.
         * `VECTOR`: Initializes each entry to 1/N where N is the number of base
           learners in the ensemble giving a uniform average.
-        * `MATRIX`: Uses `tf.glorot_uniform_initializer`.
+        * `MATRIX`: Uses `tf.zeros_initializer`.
       warm_start_mixture_weights: Whether, at the beginning of an iteration, to
         initialize the mixture weights of the base learners from the previous
         ensemble to their learned value at the previous iteration, as opposed to
@@ -480,8 +480,7 @@ class _EnsembleBuilder(object):
     if (self._mixture_weight_type == MixtureWeightType.SCALAR or
         self._mixture_weight_type == MixtureWeightType.VECTOR):
       return tf.constant_initializer(1. / num_base_learners)
-    # TODO: Changes matrix default to zeros_initializer.
-    return tf.glorot_uniform_initializer()
+    return tf.zeros_initializer()
 
   def _build_weighted_base_learner(self,
                                    base_learner,
