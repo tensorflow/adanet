@@ -678,6 +678,12 @@ class Estimator(tf.estimator.Estimator):
       Index of the best ensemble in the iteration's list of `_Candidates`.
     """
 
+    if len(current_iteration.candidates) == 1:
+      tf.logging.info(
+          "As the only candidate, '%s' is moving onto the next iteration.",
+          current_iteration.candidates[0].ensemble.name)
+      return 0
+
     latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
     tf.logging.info("Starting ensemble evaluation for iteration %s",
                     current_iteration.number)
@@ -697,7 +703,7 @@ class Estimator(tf.estimator.Estimator):
     best_candidate = current_iteration.candidates[index]
     tf.logging.info("Finished ensemble evaluation for iteration %s",
                     current_iteration.number)
-    tf.logging.info("The best ensemble is '%s' at index %s",
+    tf.logging.info("'%s' at index %s is moving onto the next iteration",
                     best_candidate.ensemble.name, index)
     return index
 

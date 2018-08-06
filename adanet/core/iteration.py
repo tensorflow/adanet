@@ -224,29 +224,28 @@ class _IterationBuilder(object):
               ensemble.adanet_loss)
           base_learner_reports.append(base_learner_report)
 
-      # The iteration is over once all candidates are done training.
-      with tf.variable_scope("is_over"):
-        is_over = True
-        for candidate in candidates:
-          is_over = tf.logical_and(is_over,
-                                   tf.logical_not(candidate.is_training))
-
-      best_candidate_index = self._best_candidate_index(candidates)
-      best_predictions = self._best_predictions(candidates,
-                                                best_candidate_index)
-      best_loss = self._best_loss(candidates, best_candidate_index, mode)
-      best_eval_metric_ops = self._best_eval_metric_ops(candidates,
-                                                        best_candidate_index)
-      export_outputs = self._best_export_outputs(
-          candidates, best_candidate_index, mode, best_predictions)
-
+      best_candidate_index = 0
+      best_predictions = candidates[0].ensemble.predictions
+      best_loss = candidates[0].ensemble.loss
+      best_eval_metric_ops = candidates[0].ensemble.eval_metric_ops
+      best_export_outputs = candidates[0].ensemble.export_outputs
+      if len(candidates) >= 1:
+        # Dynamically select the outputs of best candidate.
+        best_candidate_index = self._best_candidate_index(candidates)
+        best_predictions = self._best_predictions(candidates,
+                                                  best_candidate_index)
+        best_loss = self._best_loss(candidates, best_candidate_index, mode)
+        best_eval_metric_ops = self._best_eval_metric_ops(
+            candidates, best_candidate_index)
+        best_export_outputs = self._best_export_outputs(
+            candidates, best_candidate_index, mode, best_predictions)
       estimator_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           predictions=best_predictions,
           loss=best_loss,
           train_op=self._create_train_op(candidates, mode, iteration_step),
           eval_metric_ops=best_eval_metric_ops,
-          export_outputs=export_outputs)
+          export_outputs=best_export_outputs)
 
       return _Iteration(
           number=iteration_number,
@@ -254,9 +253,20 @@ class _IterationBuilder(object):
           estimator_spec=estimator_spec,
           best_candidate_index=best_candidate_index,
           summaries=summaries,
-          is_over=is_over,
+          is_over=self._is_over(candidates),
           base_learner_reports=base_learner_reports,
           step=iteration_step.read_value())
+
+  def _is_over(self, candidates):
+    """The iteration is over once all candidates are done training."""
+
+    with tf.variable_scope("is_over"):
+      if len(candidates) == 1:
+        return tf.logical_not(candidates[0].is_training)
+      is_over = True
+      for candidate in candidates:
+        is_over = tf.logical_and(is_over, tf.logical_not(candidate.is_training))
+      return is_over
 
   def _create_train_op(self, candidates, mode, step):
     """Returns the train op for this set of candidates.
@@ -357,6 +367,7 @@ class _IterationBuilder(object):
       An integer `Tensor` representing the index of the best candidate.
     """
 
+    assert len(candidates) >= 1
     with tf.variable_scope("best_candidate_index"):
       adanet_losses = [candidate.adanet_loss for candidate in candidates]
       return tf.argmin(adanet_losses, axis=0)
@@ -373,6 +384,7 @@ class _IterationBuilder(object):
       predictions (depending on what the base learners return).
     """
 
+    assert len(candidates) >= 1
     with tf.variable_scope("best_predictions"):
       predictions = None
       for candidate in candidates:
@@ -411,6 +423,7 @@ class _IterationBuilder(object):
       Float `Tensor` of the best candidate's loss.
     """
 
+    assert len(candidates) >= 1
     if mode == tf.estimator.ModeKeys.PREDICT:
       return None
     with tf.variable_scope("best_loss"):
@@ -441,6 +454,7 @@ class _IterationBuilder(object):
       TypeError: If the `ExportOutput` type is not supported.
     """
 
+    assert len(candidates) >= 1
     if mode != tf.estimator.ModeKeys.PREDICT:
       return None
     with tf.variable_scope("best_export_outputs"):
