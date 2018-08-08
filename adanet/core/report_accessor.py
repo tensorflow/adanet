@@ -75,6 +75,8 @@ def _iteration_report_pb_to_base_learner_reports(iteration_report_pb):
 
   return [
       MaterializedBaseLearnerReport(
+          iteration_number=iteration_report_pb.iteration_number,
+          name=base_learner_report_pb.name,
           hparams=_proto_map_to_dict(
               proto=base_learner_report_pb, field_name="hparams"),
           attributes=_proto_map_to_dict(
@@ -119,6 +121,7 @@ def _create_base_learner_report_proto(materialized_base_learner_report):
                              field_name, key, type(value)))
 
   base_learner_report_pb = report_proto.BaseLearnerReport()
+  base_learner_report_pb.name = materialized_base_learner_report.name
   _update_proto_map_from_dict(
       proto=base_learner_report_pb,
       field_name="hparams",
@@ -168,6 +171,12 @@ class _ReportAccessor(object):
   def write_iteration_report(self, iteration_number,
                              materialized_base_learner_reports):
     """Writes the `MaterializedBaseLearnerReports` at an iteration to Report.
+
+    TODO: Remove iteration_number from the argument of this method.
+
+    Note that even materialized_base_learner_reports also contain iteration
+    number, those are ignored -- only the iteration_number that is passed into
+    this method would be written to the proto.
 
     Args:
       iteration_number: int for the iteration number.

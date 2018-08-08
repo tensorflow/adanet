@@ -113,12 +113,15 @@ class BaseLearnerReport(
 
 
 class MaterializedBaseLearnerReport(
-    collections.namedtuple(
-        "MaterializedBaseLearnerReport",
-        ["hparams", "attributes", "metrics", "included_in_final_ensemble"])):
+    collections.namedtuple("MaterializedBaseLearnerReport", [
+        "iteration_number", "name", "hparams", "attributes", "metrics",
+        "included_in_final_ensemble"
+    ])):
   """A container for data collected about a `BaseLearner`."""
 
   def __new__(cls,
+              iteration_number,
+              name,
               hparams,
               attributes,
               metrics,
@@ -126,6 +129,11 @@ class MaterializedBaseLearnerReport(
     """Creates a validated `MaterializedBaseLearnerReport` instance.
 
     Args:
+      iteration_number: A python integer for the AdaNet iteration number,
+        starting from 0.
+      name: A string, which is either the name of the corresponding
+        BaseLearnerBuilder, or "previous_ensemble" if it refers to the
+        previous_ensemble.
       hparams: A dict mapping strings to python strings, ints, or floats.
         These are constants passed from the author of the `BaseLearnerBuilder`
         that was used to construct this `BaseLearner`. It is meant to contain
@@ -156,6 +164,8 @@ class MaterializedBaseLearnerReport(
 
     return super(MaterializedBaseLearnerReport, cls).__new__(
         cls,
+        iteration_number=iteration_number,
+        name=name,
         hparams=hparams,
         attributes=attributes,
         metrics=metrics,

@@ -101,12 +101,12 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
           0,
       "is_over":
           True,
-      "base_learner_reports_fn": lambda: [
-          BaseLearnerReport(
+      "base_learner_reports_fn": lambda: {
+          "foo": BaseLearnerReport(
               hparams={"dropout": 1.0},
-              attributes={"name": tf.constant("foo")},
+              attributes={"aoo": tf.constant("aoo")},
               metrics={"moo": (tf.constant("moo1"), tf.constant("moo2"))})
-      ],
+      },
   })
   def test_new(self,
                number,
@@ -117,7 +117,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
                base_learner_reports_fn=None,
                step=0):
     if base_learner_reports_fn is None:
-      base_learner_reports = []
+      base_learner_reports = {}
     else:
       base_learner_reports = base_learner_reports_fn()
     with self.test_session():

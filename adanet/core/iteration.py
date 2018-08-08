@@ -56,7 +56,8 @@ class _Iteration(
       best_candidate_index: Int `Tensor` indicating the best candidate's index.
       summaries: List of `_ScopedSummary` instances for each candidate.
       is_over: Boolean `Tensor` indicating if iteration is over.
-      base_learner_reports: List of `BaseLearnerReport`s, one per candidate.
+      base_learner_reports: Dict mapping string names to `BaseLearnerReport`s,
+        one per candidate.
       step: Integer `Tensor` indicating the current step of the iteration.
 
     Raises:
@@ -71,8 +72,8 @@ class _Iteration(
       raise ValueError("estimator_spec is required")
     if best_candidate_index is None:
       raise ValueError("best_candidate_index is required")
-    if not isinstance(base_learner_reports, list):
-      raise ValueError("base_learner_reports must be a list")
+    if not isinstance(base_learner_reports, dict):
+      raise ValueError("base_learner_reports must be a dict")
     if step is None:
       raise ValueError("step is required")
     return super(_Iteration, cls).__new__(
@@ -150,7 +151,7 @@ class _IterationBuilder(object):
       seen_builder_names = {}
       candidates = []
       summaries = []
-      base_learner_reports = []
+      base_learner_reports = {}
 
       # TODO: Consolidate building base learner into
       # candidate_builder.
@@ -174,11 +175,9 @@ class _IterationBuilder(object):
               metrics=(previous_ensemble.eval_metric_ops.copy() if
                        previous_ensemble.eval_metric_ops is not None else {}),
           )
-          base_learner_report.attributes["name"] = tf.constant(
-              "previous_ensemble")
           base_learner_report.metrics["adanet_loss"] = tf.metrics.mean(
               previous_ensemble.adanet_loss)
-          base_learner_reports.append(base_learner_report)
+          base_learner_reports["previous_ensemble"] = base_learner_report
 
       # Iteration step to use instead of global step.
       iteration_step = tf.get_variable(
@@ -218,11 +217,9 @@ class _IterationBuilder(object):
           if ensemble.eval_metric_ops is not None:
             for metric_name, metric in ensemble.eval_metric_ops.items():
               base_learner_report.metrics[metric_name] = metric
-          base_learner_report.attributes["name"] = tf.constant(
-              base_learner_builder.name)
           base_learner_report.metrics["adanet_loss"] = tf.metrics.mean(
               ensemble.adanet_loss)
-          base_learner_reports.append(base_learner_report)
+          base_learner_reports[base_learner_builder.name] = base_learner_report
 
       best_candidate_index = 0
       best_predictions = candidates[0].ensemble.predictions

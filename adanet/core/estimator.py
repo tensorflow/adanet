@@ -722,7 +722,10 @@ class Estimator(tf.estimator.Estimator):
     tf.logging.info("Starting metric logging for iteration %s",
                     current_iteration.number)
 
-    included_base_learner_indices = [self._best_ensemble_index]
+    included_base_learner_names = [
+        # best ensemble name
+        current_iteration.candidates[self._best_ensemble_index].ensemble.name
+    ]
     with tf.Session() as sess:
       init = tf.group(tf.global_variables_initializer(),
                       tf.local_variables_initializer(), tf.tables_initializer())
@@ -733,8 +736,9 @@ class Estimator(tf.estimator.Estimator):
       tf.train.start_queue_runners(sess=sess, coord=coord)
       materialized_base_learner_reports = (
           self._report_materializer.materialize_base_learner_reports(
-              sess, current_iteration.base_learner_reports,
-              included_base_learner_indices))
+              sess, current_iteration.number,
+              current_iteration.base_learner_reports,
+              included_base_learner_names))
       self._report_accessor.write_iteration_report(
           current_iteration.number, materialized_base_learner_reports)
 
@@ -978,17 +982,17 @@ class Estimator(tf.estimator.Estimator):
       adanet_summary.scalar("loss/adanet/adanet_weighted_ensemble",
                             current_iteration.estimator_spec.loss)
 
-    iteraton_estimator_spec = current_iteration.estimator_spec
+    iteration_estimator_spec = current_iteration.estimator_spec
     estimator_spec = tf.estimator.EstimatorSpec(
         mode=mode,
-        predictions=iteraton_estimator_spec.predictions,
-        loss=iteraton_estimator_spec.loss,
-        train_op=iteraton_estimator_spec.train_op,
-        eval_metric_ops=iteraton_estimator_spec.eval_metric_ops,
+        predictions=iteration_estimator_spec.predictions,
+        loss=iteration_estimator_spec.loss,
+        train_op=iteration_estimator_spec.train_op,
+        eval_metric_ops=iteration_estimator_spec.eval_metric_ops,
         training_hooks=self._training_hooks(current_iteration, training),
         evaluation_hooks=self._evaluation_hooks(current_iteration),
         scaffold=tf.train.Scaffold(summary_op=adanet_summary.merge_all()),
-        export_outputs=iteraton_estimator_spec.export_outputs)
+        export_outputs=iteration_estimator_spec.export_outputs)
 
     if self._Keys.EVALUATE_ENSEMBLES in params:
       self._best_ensemble_index = self._get_best_ensemble_index(

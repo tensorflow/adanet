@@ -33,13 +33,14 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
   @parameterized.named_parameters({
       "testcase_name": "one_empty_base_learner",
       "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
-      "steps": 3,
-      "base_learner_reports_fn": lambda features, labels: [
-          BaseLearnerReport(hparams={}, attributes={}, metrics={}),
-      ],
-      "included_base_learner_indices": [0],
+      "base_learner_reports_fn": lambda features, labels: {
+          "foo": BaseLearnerReport(hparams={}, attributes={}, metrics={}),
+      },
+      "included_base_learner_names": ["foo"],
       "want_base_learner_reports_materialized": [
           MaterializedBaseLearnerReport(
+              iteration_number=0,
+              name="foo",
               hparams={},
               attributes={},
               metrics={},
@@ -49,9 +50,8 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name": "one_base_learner",
       "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
-      "steps": 3,
-      "base_learner_reports_fn": lambda features, labels: [
-          BaseLearnerReport(
+      "base_learner_reports_fn": lambda features, labels: {
+          "foo": BaseLearnerReport(
               hparams={
                   "learning_rate": 1.e-5,
                   "optimizer": "sgd",
@@ -66,10 +66,54 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
               },
               metrics={},
           ),
-      ],
-      "included_base_learner_indices": [0],
+      },
+      "included_base_learner_names": ["foo"],
       "want_base_learner_reports_materialized": [
           MaterializedBaseLearnerReport(
+              iteration_number=0,
+              name="foo",
+              hparams={
+                  "learning_rate": 1.e-5,
+                  "optimizer": "sgd",
+                  "num_layers": 0,
+                  "use_side_inputs": True,
+              },
+              attributes={
+                  "weight_norms": 3.14,
+                  "foo": "bar",
+                  "parameters": 7777,
+                  "boo": True,
+              },
+              metrics={},
+              included_in_final_ensemble=True,
+          ),
+      ],
+  }, {
+      "testcase_name": "one_base_learner_iteration_2",
+      "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
+      "base_learner_reports_fn": lambda features, labels: {
+          "foo": BaseLearnerReport(
+              hparams={
+                  "learning_rate": 1.e-5,
+                  "optimizer": "sgd",
+                  "num_layers": 0,
+                  "use_side_inputs": True,
+              },
+              attributes={
+                  "weight_norms": tf.constant(3.14),
+                  "foo": tf.constant("bar"),
+                  "parameters": tf.constant(7777),
+                  "boo": tf.constant(True),
+              },
+              metrics={},
+          ),
+      },
+      "iteration_number": 2,
+      "included_base_learner_names": ["foo"],
+      "want_base_learner_reports_materialized": [
+          MaterializedBaseLearnerReport(
+              iteration_number=2,
+              name="foo",
               hparams={
                   "learning_rate": 1.e-5,
                   "optimizer": "sgd",
@@ -89,9 +133,8 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name": "two_base_learners",
       "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
-      "steps": 3,
-      "base_learner_reports_fn": lambda features, labels: [
-          BaseLearnerReport(
+      "base_learner_reports_fn": lambda features, labels: {
+          "foo1": BaseLearnerReport(
               hparams={
                   "learning_rate": 1.e-5,
                   "optimizer": "sgd",
@@ -106,7 +149,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
               },
               metrics={},
           ),
-          BaseLearnerReport(
+          "foo2": BaseLearnerReport(
               hparams={
                   "learning_rate": 1.e-6,
                   "optimizer": "sgd",
@@ -121,10 +164,12 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
               },
               metrics={},
           ),
-      ],
-      "included_base_learner_indices": [1],
+      },
+      "included_base_learner_names": ["foo2"],
       "want_base_learner_reports_materialized": [
           MaterializedBaseLearnerReport(
+              iteration_number=0,
+              name="foo1",
               hparams={
                   "learning_rate": 1.e-5,
                   "optimizer": "sgd",
@@ -141,6 +186,8 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
               included_in_final_ensemble=False,
           ),
           MaterializedBaseLearnerReport(
+              iteration_number=0,
+              name="foo2",
               hparams={
                   "learning_rate": 1.e-6,
                   "optimizer": "sgd",
@@ -160,28 +207,31 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name": "two_base_learners_zero_included",
       "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
-      "steps": 3,
-      "base_learner_reports_fn": lambda features, labels: [
-          BaseLearnerReport(
+      "base_learner_reports_fn": lambda features, labels: {
+          "foo1": BaseLearnerReport(
               hparams={},
               attributes={},
               metrics={},
           ),
-          BaseLearnerReport(
+          "foo2": BaseLearnerReport(
               hparams={},
               attributes={},
               metrics={},
           ),
-      ],
-      "included_base_learner_indices": [],
+      },
+      "included_base_learner_names": [],
       "want_base_learner_reports_materialized": [
           MaterializedBaseLearnerReport(
+              iteration_number=0,
+              name="foo1",
               hparams={},
               attributes={},
               metrics={},
               included_in_final_ensemble=False,
           ),
           MaterializedBaseLearnerReport(
+              iteration_number=0,
+              name="foo2",
               hparams={},
               attributes={},
               metrics={},
@@ -191,28 +241,31 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name": "two_base_learners_both_included",
       "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
-      "steps": 3,
-      "base_learner_reports_fn": lambda features, labels: [
-          BaseLearnerReport(
+      "base_learner_reports_fn": lambda features, labels: {
+          "foo1": BaseLearnerReport(
               hparams={},
               attributes={},
               metrics={},
           ),
-          BaseLearnerReport(
+          "foo2": BaseLearnerReport(
               hparams={},
               attributes={},
               metrics={},
           ),
-      ],
-      "included_base_learner_indices": [0, 1],
+      },
+      "included_base_learner_names": ["foo1", "foo2"],
       "want_base_learner_reports_materialized": [
           MaterializedBaseLearnerReport(
+              iteration_number=0,
+              name="foo1",
               hparams={},
               attributes={},
               metrics={},
               included_in_final_ensemble=True,
           ),
           MaterializedBaseLearnerReport(
+              iteration_number=0,
+              name="foo2",
               hparams={},
               attributes={},
               metrics={},
@@ -223,17 +276,18 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       "testcase_name": "materialize_metrics",
       "input_fn": tu.dummy_input_fn([[1., 1.], [1., 1.], [1., 1.]],
                                     [[1.], [2.], [3.]]),
-      "steps": 3,
-      "base_learner_reports_fn": lambda features, labels: [
-          BaseLearnerReport(
+      "base_learner_reports_fn": lambda features, labels: {
+          "foo": BaseLearnerReport(
               hparams={},
               attributes={},
               metrics={"moo": tf.metrics.mean(labels)},
           ),
-      ],
-      "included_base_learner_indices": [0],
+      },
+      "included_base_learner_names": ["foo"],
       "want_base_learner_reports_materialized": [
           MaterializedBaseLearnerReport(
+              iteration_number=0,
+              name="foo",
               hparams={},
               attributes={},
               metrics={"moo": 2.},
@@ -242,24 +296,36 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       ],
   })
   def test_materialize_base_learner_reports(
-      self, input_fn, steps, base_learner_reports_fn,
-      included_base_learner_indices, want_base_learner_reports_materialized):
+      self,
+      input_fn,
+      base_learner_reports_fn,
+      iteration_number=0,
+      included_base_learner_names=None,
+      want_base_learner_reports_materialized=None):
     tf.constant(0.)  # dummy op so that the session graph is never empty.
     features, labels = input_fn()
     base_learner_reports = base_learner_reports_fn(features, labels)
     with self.test_session() as sess:
       sess.run(tf.initializers.local_variables())
-      report_materializer = ReportMaterializer(input_fn=input_fn, steps=steps)
+      report_materializer = ReportMaterializer(input_fn=input_fn, steps=3)
       base_learner_reports_materialized = (
           report_materializer.materialize_base_learner_reports(
-              sess, base_learner_reports, included_base_learner_indices))
+              sess, iteration_number, base_learner_reports,
+              included_base_learner_names))
       self.assertEqual(
           len(want_base_learner_reports_materialized),
           len(base_learner_reports_materialized))
-      for (want_base_learner_report_materialized,
-           base_learner_report_materialized) in zip(
-               want_base_learner_reports_materialized,
-               base_learner_reports_materialized):
+      base_learner_reports_materialized_dict = {
+          blrm.name: blrm for blrm in base_learner_reports_materialized
+      }
+      for want_base_learner_report_materialized in (
+          want_base_learner_reports_materialized):
+        base_learner_report_materialized = (
+            base_learner_reports_materialized_dict[
+                want_base_learner_report_materialized.name])
+        self.assertEqual(
+            iteration_number,
+            base_learner_report_materialized.iteration_number)
         self.assertEqual(
             set(want_base_learner_report_materialized.hparams.keys()),
             set(base_learner_report_materialized.hparams.keys()))

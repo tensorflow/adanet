@@ -23,7 +23,7 @@ message BaseLearnerReport {
   // training for analysis. This differs from hparams in that the values of
   // attribute may change over the course of training, while hparams are
   // fixed once the BaseLearnerBuilder is constructed.
-  // e.g., name="linear", trainable_weights=5003, weight_norms=23.4
+  // e.g., trainable_weights=5003, weight_norms=23.4
   map<string, Value> attributes = 2;
 
   // Metrics for the BaseLearner, which are measurements on a model that are
@@ -35,6 +35,9 @@ message BaseLearnerReport {
 
   // Whether the base learner was chosen by Adanet.
   bool included_in_final_ensemble = 4;
+
+  // Name of the base learner.
+  string name = 5;
 }
 
 message IterationReport {

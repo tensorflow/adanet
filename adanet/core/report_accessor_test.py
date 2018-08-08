@@ -34,6 +34,8 @@ class ReportAccessorTest(tf.test.TestCase):
     report_accessor = _ReportAccessor(self.get_temp_dir())
     materialized_base_learner_reports = [
         MaterializedBaseLearnerReport(
+            iteration_number=0,
+            name="foo",
             hparams={
                 "p1": 1,
                 "p2": "hoo",
@@ -67,6 +69,8 @@ class ReportAccessorTest(tf.test.TestCase):
     materialized_base_learner_reports = [
         [
             MaterializedBaseLearnerReport(
+                iteration_number=0,
+                name="foo1",
                 hparams={
                     "p1": 11,
                     "p2": "hoo",
@@ -85,6 +89,8 @@ class ReportAccessorTest(tf.test.TestCase):
                 included_in_final_ensemble=False,
             ),
             MaterializedBaseLearnerReport(
+                iteration_number=0,
+                name="foo2",
                 hparams={
                     "p1": 12,
                     "p2": "hoo",
@@ -105,6 +111,8 @@ class ReportAccessorTest(tf.test.TestCase):
         ],
         [
             MaterializedBaseLearnerReport(
+                iteration_number=1,
+                name="foo1",
                 hparams={
                     "p1": 21,
                     "p2": "hoo",
@@ -123,6 +131,8 @@ class ReportAccessorTest(tf.test.TestCase):
                 included_in_final_ensemble=True,
             ),
             MaterializedBaseLearnerReport(
+                iteration_number=1,
+                name="foo2",
                 hparams={
                     "p1": 22,
                     "p2": "hoo",
@@ -143,6 +153,8 @@ class ReportAccessorTest(tf.test.TestCase):
         ],
         [
             MaterializedBaseLearnerReport(
+                iteration_number=2,
+                name="foo1",
                 hparams={
                     "p1": 31,
                     "p2": "hoo",
@@ -161,6 +173,8 @@ class ReportAccessorTest(tf.test.TestCase):
                 included_in_final_ensemble=False,
             ),
             MaterializedBaseLearnerReport(
+                iteration_number=2,
+                name="foo2",
                 hparams={
                     "p1": 32,
                     "p2": "hoo",

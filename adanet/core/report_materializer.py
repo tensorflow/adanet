@@ -65,8 +65,9 @@ class ReportMaterializer(object):
     """Return the number of steps."""
     return self._steps
 
-  def materialize_base_learner_reports(self, sess, base_learner_reports,
-                                       included_base_learner_indices):
+  def materialize_base_learner_reports(self, sess, iteration_number,
+                                       base_learner_reports,
+                                       included_base_learner_names):
     """Materializes the Tensor objects in base_learner_reports using sess.
 
     This converts the Tensors in base_learner_reports to ndarrays, logs the
@@ -75,17 +76,19 @@ class ReportMaterializer(object):
 
     Args:
       sess: `Session` instance with most recent variable values loaded.
-      base_learner_reports: List of `BaseLearnerReport` objects to materialize.
-      included_base_learner_indices: List of indices of the `BaseLearnerReport`
-        that are included in the final ensemble.
+      iteration_number: Integer iteration number.
+      base_learner_reports: Dict mapping string names to `BaseLearnerReport`
+        objects to be materialized.
+      included_base_learner_names: List of string names of the
+        `BaseLearnerReport`s that are included in the final ensemble.
 
     Returns:
       List of `MaterializedBaseLearnerReport` objects.
     """
 
     # Extract the Tensors to be materialized.
-    tensors_to_materialize = [
-        {
+    tensors_to_materialize = {
+        name: {
             "attributes": base_learner_report.attributes,
             "metrics": {
                 # A metric is really a tuple where the first element is a Tensor
@@ -95,20 +98,20 @@ class ReportMaterializer(object):
                 # and allows us to avoid reading and updating the metric Tensor
                 # in a non-deterministic order.
                 metric_key: metric_tuple[1]
-                for (metric_key, metric_tuple)
+                for metric_key, metric_tuple
                 in base_learner_report.metrics.items()
             },
         }
-        for base_learner_report in base_learner_reports
-    ]
+        for name, base_learner_report in base_learner_reports.items()
+    }
 
     steps_completed = 0
-    materialized_tensors_list = []
+    materialized_tensors_dict = {}
     while True:
       if self.steps is not None and steps_completed == self.steps:
         break
       try:
-        materialized_tensors_list = sess.run(tensors_to_materialize)
+        materialized_tensors_dict = sess.run(tensors_to_materialize)
 
         steps_completed += 1
         log_frequency = (1 if (self.steps is None or self.steps < 10) else
@@ -130,7 +133,9 @@ class ReportMaterializer(object):
     # MaterializedBaseLearnerReports.
     return [
         MaterializedBaseLearnerReport(
-            hparams=base_learner_reports[i].hparams,
+            iteration_number=iteration_number,
+            name=name,
+            hparams=base_learner_reports[name].hparams,
             attributes={
                 key: value.item() if hasattr(value, "item") else value
                 for key, value in materialized_tensors["attributes"].items()
@@ -139,7 +144,7 @@ class ReportMaterializer(object):
                 key: value.item() if hasattr(value, "item") else value
                 for key, value in materialized_tensors["metrics"].items()
             },
-            included_in_final_ensemble=(i in included_base_learner_indices),
+            included_in_final_ensemble=(name in included_base_learner_names),
         )
-        for i, materialized_tensors in enumerate(materialized_tensors_list)
+        for name, materialized_tensors in materialized_tensors_dict.items()
     ]
