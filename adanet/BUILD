@@ -1,6 +1,6 @@
 # Description:
-# AdaNet is a TensorFlow framework for adaptively learn neural networks as a
-# dynamic ensemble of subnetworks.
+# Package `adanet` is a TensorFlow framework for designing, training, and
+# serving adaptive neural network using the AdaNet algorithm.
 # This is a reference implementation of AdaNet as a TensorFlow library.
 
 package(default_visibility = [
@@ -15,6 +15,7 @@ py_library(
     name = "adanet",
     srcs = ["__init__.py"],
     visibility = [
+        "//visibility:public",
     ],
     deps = [
         "//adanet/core",
