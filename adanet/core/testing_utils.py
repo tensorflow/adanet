@@ -53,7 +53,8 @@ def dummy_ensemble(name,
                    complexity_regularized_loss=None,
                    eval_metric_ops=None,
                    dict_predictions=False,
-                   export_output_key=None):
+                   export_output_key=None,
+                   train_op=None):
   """Creates a dummy `Ensemble` instance.
 
   Args:
@@ -71,6 +72,7 @@ def dummy_ensemble(name,
     dict_predictions: Boolean whether to return predictions as a dictionary of
       `Tensor` or just a single float `Tensor`.
     export_output_key: An `ExportOutputKeys` for faking export outputs.
+    train_op: A train op.
 
   Returns:
     A dummy `Ensemble` instance.
@@ -83,8 +85,8 @@ def dummy_ensemble(name,
 
   if adanet_loss is None:
     adanet_loss = dummy_tensor([], random_seed * 2)
-  elif not isinstance(adanet_loss, tf.Tensor):
-    adanet_loss = tf.constant(adanet_loss)
+  else:
+    adanet_loss = tf.convert_to_tensor(adanet_loss)
 
   if complexity_regularized_loss is None:
     complexity_regularized_loss = dummy_tensor([], random_seed * 2)
@@ -123,7 +125,7 @@ def dummy_ensemble(name,
       complexity_regularized_loss=complexity_regularized_loss,
       complexity_regularization=1,
       eval_metric_ops=eval_metric_ops,
-      train_op=None,
+      train_op=train_op,
       export_outputs=export_outputs)
 
 

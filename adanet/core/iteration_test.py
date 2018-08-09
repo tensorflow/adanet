@@ -31,18 +31,6 @@ import adanet.core.testing_utils as tu
 import tensorflow as tf
 
 
-class _FakeSummary(object):
-  """A fake `Summary`."""
-
-  def scalar(self, name, tensor):
-    del name  # Unused
-    del tensor  # Unused
-
-  def histogram(self, name, tensor):
-    del name  # Unused
-    del tensor  # Unused
-
-
 class IterationTest(parameterized.TestCase, tf.test.TestCase):
 
   # pylint: disable=g-long-lambda
@@ -329,11 +317,11 @@ class _FakeCandidateBuilder(object):
 
   def build_candidate(self,
                       ensemble,
-                      mode,
+                      training,
                       summary,
                       previous_ensemble=None,
                       is_previous_best=False):
-    del mode  # Unused
+    del training  # Unused
     del summary  # Unused
     del previous_ensemble  # Unused
     return _Candidate(

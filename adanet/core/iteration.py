@@ -146,6 +146,7 @@ class _IterationBuilder(object):
       raise ValueError(
           "Each iteration must have at least one BaseLearnerBuilder.")
 
+    training = mode == tf.estimator.ModeKeys.TRAIN
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
     with tf.variable_scope("iteration_{}".format(iteration_number)):
       seen_builder_names = {}
@@ -161,7 +162,7 @@ class _IterationBuilder(object):
         seen_builder_names = {previous_ensemble.name: True}
         previous_best_candidate = self._candidate_builder.build_candidate(
             ensemble=previous_ensemble,
-            mode=mode,
+            training=training,
             summary=previous_ensemble_summary,
             is_previous_best=True)
         candidates.append(previous_best_candidate)
@@ -205,7 +206,7 @@ class _IterationBuilder(object):
             labels=labels,
         )
         candidate = self._candidate_builder.build_candidate(
-            ensemble=ensemble, mode=mode, summary=summary)
+            ensemble=ensemble, training=training, summary=summary)
         candidates.append(candidate)
 
         # Generate base learner reports.

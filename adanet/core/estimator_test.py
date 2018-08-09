@@ -415,7 +415,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00780,
+          .00807,
   }, {
       "testcase_name":
           "two_builders_different_layer_sizes",
@@ -843,9 +843,9 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
     self.assertAlmostEqual(
         3., _check_eventfile_for_keyword("scalar", candidate_subdir), places=3)
     self.assertAlmostEqual(
-        .567,
+        ensemble_loss,
         _check_eventfile_for_keyword(
-            "adanet_loss_ema/adanet/adanet_weighted_ensemble",
+            "adanet_loss/adanet/adanet_weighted_ensemble",
             candidate_subdir),
         places=3)
     self.assertAlmostEqual(

@@ -26,14 +26,6 @@ import adanet.core.testing_utils as tu
 import tensorflow as tf
 
 
-class _FakeSummary(object):
-  """A fake `Summary`."""
-
-  def scalar(self, name, tensor):
-    del name  # Unused
-    del tensor  # Unused
-
-
 class CandidateTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.named_parameters({
@@ -73,32 +65,97 @@ class CandidateTest(parameterized.TestCase, tf.test.TestCase):
 
 class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
-  @parameterized.named_parameters({
-      "testcase_name": "max_steps_eval",
-      "ensemble": lambda: tu.dummy_ensemble("new"),
-      "mode": tf.estimator.ModeKeys.EVAL,
-      "max_steps": 2,
-      "want_adanet_losses": [0., 0., 0.],
-      "want_is_training": True,
-  }, {
-      "testcase_name": "max_steps_train",
-      "ensemble": lambda: tu.dummy_ensemble("new"),
-      "mode": tf.estimator.ModeKeys.TRAIN,
-      "max_steps": 2,
-      "want_adanet_losses": [-.188, -.219, -.226],
-      "want_is_training": False,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "evaluate",
+          "training": False,
+          "max_steps": 3,
+          "want_adanet_losses": [0., 0., 0.],
+          "want_is_training": True,
+      },
+      {
+          "testcase_name": "train_exactly_max_steps",
+          "training": True,
+          "max_steps": 3,
+          "want_adanet_losses": [1., .750, .583],
+          "want_is_training": False,
+      },
+      {
+          "testcase_name": "train_extra_steps",
+          "training": True,
+          "max_steps": 2,
+          "want_adanet_losses": [1., .750, .583],
+          "want_is_training": False,
+      },
+      {
+          "testcase_name": "train_one_step_max_one_step",
+          "training": True,
+          "max_steps": 1,
+          "want_adanet_losses": [1.],
+          "want_is_training": False,
+      },
+      {
+          "testcase_name": "train_one_step_max_two_steps",
+          "training": True,
+          "max_steps": 2,
+          "want_adanet_losses": [1.],
+          "want_is_training": False,  # TODO. Should be `True`.
+      },
+      {
+          "testcase_name": "train_two_steps_max_two_steps",
+          "training": True,
+          "max_steps": 2,
+          "want_adanet_losses": [1., .750],
+          "want_is_training": False,
+      },
+      {
+          "testcase_name": "train_three_steps_max_four_steps",
+          "training": True,
+          "max_steps": 4,
+          "want_adanet_losses": [1., .750, .583],
+          "want_is_training": False,  # TODO. Should be `True`.
+      },
+      {
+          "testcase_name": "train_three_steps_max_five_steps",
+          "training": True,
+          "max_steps": 5,
+          "want_adanet_losses": [1., .750, .583],
+          "want_is_training": True,
+      },
+      {
+          "testcase_name": "eval_one_step",
+          "training": False,
+          "max_steps": 1,
+          "want_adanet_losses": [0.],
+          "want_is_training": False,  # TODO. Should be `True`.
+      },
+      {
+          "testcase_name": "previous_best_training",
+          "training": True,
+          "is_previous_best": True,
+          "max_steps": 4,
+          "want_adanet_losses": [1., .750, .583],
+          "want_is_training": False,
+      })
   def test_build_candidate(self,
-                           ensemble,
-                           mode,
+                           training,
+                           max_steps,
                            want_adanet_losses,
                            want_is_training,
-                           max_steps=None):
+                           is_previous_best=False):
+    # A fake adanet_loss that halves at each train step: 1.0, 0.5, 0.25, ...
+    fake_adanet_loss = tf.Variable(1.)
+    fake_train_op = tf.assign(fake_adanet_loss, fake_adanet_loss / 2)
+    fake_ensemble = tu.dummy_ensemble(
+        "new", adanet_loss=fake_adanet_loss, train_op=fake_train_op)
+
+    builder = _CandidateBuilder(max_steps=max_steps)
+    candidate = builder.build_candidate(
+        ensemble=fake_ensemble,
+        training=training,
+        summary=tf.summary,
+        is_previous_best=is_previous_best)
     with self.test_session() as sess:
-      builder = _CandidateBuilder(max_steps=max_steps)
-      summary = _FakeSummary()
-      candidate = builder.build_candidate(
-          ensemble=ensemble(), mode=mode, summary=summary)
       sess.run(tf.global_variables_initializer())
       adanet_losses = []
       is_training = True
@@ -106,8 +163,11 @@ class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
         is_training, adanet_loss, _ = sess.run(
             (candidate.is_training, candidate.adanet_loss, candidate.update_op))
         adanet_losses.append(adanet_loss)
-      self.assertAllClose(want_adanet_losses, adanet_losses, atol=1e-3)
-      self.assertEqual(want_is_training, is_training)
+        sess.run(fake_train_op)
+
+    # Verify that adanet_loss moving average works.
+    self.assertAllClose(want_adanet_losses, adanet_losses, atol=1e-3)
+    self.assertEqual(want_is_training, is_training)
 
   @parameterized.named_parameters({
       "testcase_name": "negative_max_steps",

@@ -23,6 +23,8 @@ import collections
 
 import tensorflow as tf
 
+from tensorflow.python.training import moving_averages
+
 
 class _Candidate(
     collections.namedtuple("_Candidate", [
@@ -101,7 +103,8 @@ class _CandidateBuilder(object):
     self._adanet_loss_decay = adanet_loss_decay
     super(_CandidateBuilder, self).__init__()
 
-  def build_candidate(self, ensemble, mode, summary, is_previous_best=False):
+  def build_candidate(self, ensemble, training, summary,
+                      is_previous_best=False):
     """Builds and returns an AdaNet candidate.
 
     When creating a candidate from a ensemble, it creates a train loss
@@ -111,8 +114,8 @@ class _CandidateBuilder(object):
 
     Args:
       ensemble: `Ensemble` instance to track.
-      mode: Defines whether this is training, evaluation or prediction.
-        See `ModeKeys`.
+      training: A python boolean indicating whether the graph is in training
+        mode or prediction mode.
       summary: A `Summary` for recording summaries for TensorBoard.
       is_previous_best: Bool identifying whether this ensemble came from a
         previous iteration. If `True`, `is_training` will be `False` since its
@@ -132,22 +135,8 @@ class _CandidateBuilder(object):
       step_counter = tf.get_variable(
           "step_counter", initializer=1, trainable=False)
 
-      update_op = None
-
       # Update train loss during training so that it's available in other modes.
-      if mode == tf.estimator.ModeKeys.TRAIN:
-        # Calling var.read_value() guarantees reading the freshest value.
-        assign_op = tf.assign(adanet_loss, ensemble.adanet_loss)
-        with tf.control_dependencies([assign_op]):
-          update_adanet_loss_op = tf.identity(adanet_loss.read_value())
-
-        assign_op = tf.assign_add(step_counter, 1)
-        with tf.control_dependencies([assign_op]):
-          increment_step_counter_op = step_counter.read_value()
-
-        update_op = tf.group(update_adanet_loss_op, increment_step_counter_op)
-      else:
-        update_op = tf.no_op()
+      update_op = tf.assign_add(step_counter, 1) if training else tf.no_op()
 
       if is_previous_best:
         # This candidate is frozen, so it is already done training.
@@ -158,44 +147,22 @@ class _CandidateBuilder(object):
           is_training = tf.less(
               step_counter.read_value(), self._max_steps, name="is_training")
 
-      average_adanet_loss = self._apply_moving_average(adanet_loss, update_op)
+      if training:
+        with tf.control_dependencies([ensemble.adanet_loss]):
+          update_adanet_loss_op = moving_averages.assign_moving_average(
+              adanet_loss, ensemble.adanet_loss, decay=self._adanet_loss_decay)
+        with tf.control_dependencies([update_adanet_loss_op]):
+          adanet_loss = adanet_loss.read_value()
 
       with tf.name_scope(""):
         summary.scalar(
             "complexity_regularization/adanet/adanet_weighted_ensemble",
             ensemble.complexity_regularization)
-        summary.scalar("adanet_loss_ema/adanet/adanet_weighted_ensemble",
-                       average_adanet_loss)
+        summary.scalar("adanet_loss/adanet/adanet_weighted_ensemble",
+                       adanet_loss)
       return _Candidate(
           ensemble=ensemble,
-          adanet_loss=average_adanet_loss,
+          adanet_loss=adanet_loss,
           is_training=is_training,
           update_op=update_op,
           is_previous_best=is_previous_best)
-
-  def _apply_moving_average(self, var, var_update_op):
-    """Tracks the given variable as a moving average.
-
-    Args:
-      var: The `Variable` to track in the moving average.
-      var_update_op: Op for updating var.
-
-    Returns:
-      The scalar moving average `Tensor`.
-    """
-
-    with tf.variable_scope("moving_average"):
-      # Count train steps and apply to moving average the decay rate is lower at
-      # the start of training. This makes the moving average move faster.
-      train_step_counter = tf.get_variable(
-          "train_step_counter", initializer=0., trainable=False)
-      increment_op = tf.assign_add(train_step_counter, 1)
-      with tf.control_dependencies([increment_op]):
-        ema = tf.train.ExponentialMovingAverage(
-            decay=self._adanet_loss_decay,
-            num_updates=train_step_counter.read_value())
-      with tf.control_dependencies([var_update_op]):
-        update_op = ema.apply([var])
-      with tf.control_dependencies([update_op]):
-        average = ema.average(var).read_value()
-    return average
