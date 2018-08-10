@@ -862,6 +862,72 @@ class Estimator(tf.estimator.Estimator):
     filtered_feature_names = recorded_feature_names & set(features.keys())
     return {key: features[key] for key in filtered_feature_names}
 
+  def _collate_base_learner_reports(self, iteration_number):
+    """Prepares BaseLearnerReports to be passed to BaseLearnerBuilderGenerator.
+
+    If `ReportMaterializer` is not provided to AdaNet Estimator's constructor,
+    returns (None, None).
+    Otherwise, reads MaterializedBaseLearnerReports from past iterations,
+    collates those that were included in previous_ensemble into
+    previous_ensemble_reports as a List of MaterializedBaseLearnerReports,
+    and collates all reports from previous iterations into all_reports as
+    another List of MaterializedBaseLearnerReports.
+
+    Args:
+      iteration_number: Python integer AdaNet iteration number, starting from 0.
+
+    Returns:
+      (previous_ensemble_reports: List<MaterializedBaseLearnerReport>,
+       materialized_base_learner_reports: List<MaterializedBaseLearnerReport>)
+    """
+
+    previous_ensemble_reports = None
+    all_reports = None
+
+    # TODO: Require report_materializer for all AdaNet Estimators.
+    if self._report_materializer:
+      materialized_base_learner_reports_all = (
+          self._report_accessor.read_iteration_reports())
+      previous_ensemble_reports = []
+      all_reports = []
+
+      # Since the number of iteration reports changes after the
+      # MATERIALIZE_REPORT phase, we need to make sure that we always pass the
+      # same reports to the BaseLearnerBuilderGenerator in the same iteration,
+      # otherwise the graph that is built in the FREEZE_ENSEMBLE phase would be
+      # different from the graph built in the training phase.
+
+      # Iteration 0 should have 0 iteration reports passed to the
+      #   BaseLearnerBuilderGenerator, since there are no previous iterations.
+      # Iteration 1 should have 1 list of reports for BaseLearnerBuilders
+      #   generated in iteration 0.
+      # Iteration 2 should have 2 lists of reports -- one for iteration 0,
+      #   one for iteration 1. Note that the list of reports for iteration >= 1
+      #   should contain "previous_ensemble", in addition to the
+      #   BaseLearnerBuilders at the start of that iteration.
+      # Iteration t should have t lists of reports.
+
+      for i, iteration_reports in enumerate(
+          materialized_base_learner_reports_all):
+
+        # This ensures that the FREEZE_ENSEMBLE phase does not pass the reports
+        # generated in the previous phase of the same iteration to the
+        # BaseLearnerBuilderGenerator when building the graph.
+        if i >= iteration_number:
+          break
+
+        # Assumes that only one base learner is added to the ensemble in
+        # each iteration.
+        chosen_blb_in_this_iteration = [
+            base_learner_report for base_learner_report in iteration_reports
+            if base_learner_report.included_in_final_ensemble
+        ][0]
+        previous_ensemble_reports.append(chosen_blb_in_this_iteration)
+
+        all_reports.extend(iteration_reports)
+
+    return previous_ensemble_reports, all_reports
+
   def _model_fn(self, features, labels, mode, params):
     """AdaNet model_fn.
 
@@ -940,6 +1006,9 @@ class Estimator(tf.estimator.Estimator):
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
     previous_ensemble_summary = _ScopedSummary(self._Keys.FROZEN_ENSEMBLE_NAME,
                                                skip_summaries)
+    previous_ensemble_reports, all_reports = self._collate_base_learner_reports(
+        iteration_number)
+
     with tf.variable_scope("adanet"):
       previous_weighted_base_learners, bias = ensemble
       previous_ensemble = None
@@ -954,7 +1023,10 @@ class Estimator(tf.estimator.Estimator):
               mode=mode,
               labels=labels)
       base_learner_builders = builder_generator.generate_candidates(
-          previous_ensemble=previous_ensemble)
+          previous_ensemble=previous_ensemble,
+          iteration_number=iteration_number,
+          previous_ensemble_reports=previous_ensemble_reports,
+          all_reports=all_reports)
       current_iteration = self._iteration_builder.build_iteration(
           iteration_number=iteration_number,
           base_learner_builders=base_learner_builders,

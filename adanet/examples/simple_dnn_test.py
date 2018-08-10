@@ -100,7 +100,13 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
       base_learner_losses = []
       mixture_weight_losses = []
       complexities = []
-      for builder in generator.generate_candidates(previous_ensemble):
+      for builder in generator.generate_candidates(
+          previous_ensemble,
+          # The following arguments are not used by
+          # simple_dnn.BaseLearnerBuilderGenerator's generate_candidates.
+          iteration_number=0,
+          previous_ensemble_reports=[],
+          all_reports=[]):
         names.append(builder.name)
 
         # 1. Build base learner graph.

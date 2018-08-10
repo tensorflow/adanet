@@ -199,7 +199,8 @@ class Generator(adanet.BaseLearnerBuilderGenerator):
         dropout=dropout,
         seed=seed)
 
-  def generate_candidates(self, previous_ensemble):
+  def generate_candidates(self, previous_ensemble, iteration_number,
+                          previous_ensemble_reports, all_reports):
     """See `adanet.BaseLearnerBuilderGenerator`."""
 
     num_layers = self._initial_num_layers

@@ -228,11 +228,33 @@ class BaseLearnerBuilderGenerator(object):
   __metaclass__ = abc.ABCMeta
 
   @abc.abstractmethod
-  def generate_candidates(self, previous_ensemble):
+  def generate_candidates(self, previous_ensemble, iteration_number,
+                          previous_ensemble_reports, all_reports):
     """Generates `adanet.BaseLearnerBuilders` to train at iteration t.
 
     Args:
       previous_ensemble: The best `adanet.Ensemble` from iteration t-1.
+        DEPRECATED. We are transitioning away from the use of previous_ensemble
+        in generate_candidates. New BaseLearnerBuilderGenerators
+        should *not* use previous_ensemble in their implementation of
+        generate_candidates -- please only use iteration_number,
+        previous_ensemble_reports and all_reports.
+      iteration_number: Python integer AdaNet iteration, starting from 0.
+      previous_ensemble_reports: List of `MaterializedBaseLearnerReport`s
+        corresponding to the BaseLearnerBuilders composing `adanet.Ensemble`
+        from iteration_number - 1. The first element in the list corresponds to
+        the BaseLearnerBuilder added in the first iteration.
+        If `ReportMaterializer` is not supplied to the estimator,
+        previous_ensemble_report is `None`.
+      all_reports: List of `MaterializedBaseLearnerReport`s.
+        If `ReportMaterializer` is not supplied to the estimator, all_reports is
+        `None`.
+        If `ReportMaterializer` is supplied to the estimator:
+        - If iteration_number = 0, all_reports is an empty List.
+        - Otherwise, all_reports is a sequence of Lists. Each element of the
+          sequence is a List containing all the `MaterializedBaseLearnerReport`s
+          in an AdaNet iteration, starting from Iteration 0, and ending at
+          iteration_number - 1.
 
     Returns:
       A list of `adanet.BaseLearnerBuilders`.
@@ -255,7 +277,8 @@ class SimpleBaseLearnerBuilderGenerator(BaseLearnerBuilderGenerator):
 
     self._base_learner_builders = base_learner_builders
 
-  def generate_candidates(self, previous_ensemble):
+  def generate_candidates(self, previous_ensemble, iteration_number,
+                          previous_ensemble_reports, all_reports):
     """Returns the predefined set of `adanet.BaseLearnerBuilders`."""
 
     return self._base_learner_builders
