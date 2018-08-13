@@ -58,7 +58,8 @@ class _Iteration(
       is_over: Boolean `Tensor` indicating if iteration is over.
       base_learner_reports: Dict mapping string names to `BaseLearnerReport`s,
         one per candidate.
-      step: Integer `Tensor` indicating the current step of the iteration.
+      step: Integer `Tensor` representing the step since the beginning of the
+        current iteration, as opposed to the global step.
 
     Raises:
       ValueError: If validation fails.
@@ -149,6 +150,17 @@ class _IterationBuilder(object):
     training = mode == tf.estimator.ModeKeys.TRAIN
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
     with tf.variable_scope("iteration_{}".format(iteration_number)):
+      # Iteration step to use instead of global step.
+      iteration_step = tf.get_variable(
+          "step",
+          shape=[],
+          initializer=tf.zeros_initializer(),
+          trainable=False,
+          dtype=tf.int64)
+
+      # Convert to tensor so that users cannot mutate it.
+      iteration_step_tensor = tf.convert_to_tensor(iteration_step)
+
       seen_builder_names = {}
       candidates = []
       summaries = []
@@ -163,6 +175,7 @@ class _IterationBuilder(object):
         previous_best_candidate = self._candidate_builder.build_candidate(
             ensemble=previous_ensemble,
             training=training,
+            iteration_step=iteration_step_tensor,
             summary=previous_ensemble_summary,
             is_previous_best=True)
         candidates.append(previous_best_candidate)
@@ -180,14 +193,6 @@ class _IterationBuilder(object):
               previous_ensemble.adanet_loss)
           base_learner_reports["previous_ensemble"] = base_learner_report
 
-      # Iteration step to use instead of global step.
-      iteration_step = tf.get_variable(
-          "step",
-          shape=[],
-          initializer=tf.zeros_initializer(),
-          trainable=False,
-          dtype=tf.int64)
-
       for base_learner_builder in base_learner_builders:
         if base_learner_builder.name in seen_builder_names:
           raise ValueError("Two ensembles have the same name '{}'".format(
@@ -202,11 +207,14 @@ class _IterationBuilder(object):
             summary=summary,
             features=features,
             mode=mode,
-            iteration_step=iteration_step,
+            iteration_step=iteration_step_tensor,
             labels=labels,
         )
         candidate = self._candidate_builder.build_candidate(
-            ensemble=ensemble, training=training, summary=summary)
+            ensemble=ensemble,
+            training=training,
+            iteration_step=iteration_step_tensor,
+            summary=summary)
         candidates.append(candidate)
 
         # Generate base learner reports.
@@ -253,7 +261,7 @@ class _IterationBuilder(object):
           summaries=summaries,
           is_over=self._is_over(candidates),
           base_learner_reports=base_learner_reports,
-          step=iteration_step.read_value())
+          step=iteration_step_tensor)
 
   def _is_over(self, candidates):
     """The iteration is over once all candidates are done training."""
@@ -289,19 +297,18 @@ class _IterationBuilder(object):
       return None
     with tf.variable_scope("train_op"):
       train_ops = []
-      step_ops = []
-      if mode == tf.estimator.ModeKeys.TRAIN:
-        # AdaNet is responsible for incrementing the global step, not the
-        # candidates it trains.
-        step_ops.append(tf.assign_add(tf.train.get_global_step(), 1))
-        step_ops.append(tf.assign_add(step, 1))
       for candidate in candidates:
-        train_ops.append(candidate.update_op)
         if candidate.ensemble.train_op is not None:
           # The train op of a previous ensemble is None even during `TRAIN`.
           train_ops.append(candidate.ensemble.train_op)
       with tf.control_dependencies(train_ops):
-        return tf.group(*step_ops)
+        # AdaNet is responsible for incrementing the global step, not the
+        # candidates it trains. Incrementing the global step and iteration step
+        # is the final action performed in the train op.
+        return tf.group(
+            tf.assign_add(tf.train.get_global_step(), 1),
+            tf.assign_add(step, 1),
+        )
 
   def _best_eval_metric_ops(self, candidates, best_candidate_index):
     """Returns the eval metric ops of the best candidate.

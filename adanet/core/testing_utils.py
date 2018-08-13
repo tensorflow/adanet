@@ -20,7 +20,6 @@ from __future__ import division
 from __future__ import print_function
 
 from adanet.core.base_learner import BaseLearner
-from adanet.core.candidate import _Candidate
 from adanet.core.ensemble import Ensemble
 from adanet.core.ensemble import WeightedBaseLearner
 import tensorflow as tf
@@ -192,16 +191,6 @@ def dummy_estimator_spec(loss=None,
       loss=loss,
       train_op=tf.no_op(),
       eval_metric_ops=eval_metric_ops)
-
-
-def dummy_candidate():
-  """Returns a dummy `_Candidate` instance."""
-
-  return _Candidate(
-      ensemble=dummy_ensemble("foo"),
-      adanet_loss=1.,
-      is_training=True,
-      update_op=None)
 
 
 def dummy_input_fn(features, labels):

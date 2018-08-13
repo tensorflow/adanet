@@ -65,78 +65,68 @@ class CandidateTest(parameterized.TestCase, tf.test.TestCase):
 
 class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
-  @parameterized.named_parameters(
-      {
-          "testcase_name": "evaluate",
-          "training": False,
-          "max_steps": 3,
-          "want_adanet_losses": [0., 0., 0.],
-          "want_is_training": True,
-      },
-      {
-          "testcase_name": "train_exactly_max_steps",
-          "training": True,
-          "max_steps": 3,
-          "want_adanet_losses": [1., .750, .583],
-          "want_is_training": False,
-      },
-      {
-          "testcase_name": "train_extra_steps",
-          "training": True,
-          "max_steps": 2,
-          "want_adanet_losses": [1., .750, .583],
-          "want_is_training": False,
-      },
-      {
-          "testcase_name": "train_one_step_max_one_step",
-          "training": True,
-          "max_steps": 1,
-          "want_adanet_losses": [1.],
-          "want_is_training": False,
-      },
-      {
-          "testcase_name": "train_one_step_max_two_steps",
-          "training": True,
-          "max_steps": 2,
-          "want_adanet_losses": [1.],
-          "want_is_training": False,  # TODO. Should be `True`.
-      },
-      {
-          "testcase_name": "train_two_steps_max_two_steps",
-          "training": True,
-          "max_steps": 2,
-          "want_adanet_losses": [1., .750],
-          "want_is_training": False,
-      },
-      {
-          "testcase_name": "train_three_steps_max_four_steps",
-          "training": True,
-          "max_steps": 4,
-          "want_adanet_losses": [1., .750, .583],
-          "want_is_training": False,  # TODO. Should be `True`.
-      },
-      {
-          "testcase_name": "train_three_steps_max_five_steps",
-          "training": True,
-          "max_steps": 5,
-          "want_adanet_losses": [1., .750, .583],
-          "want_is_training": True,
-      },
-      {
-          "testcase_name": "eval_one_step",
-          "training": False,
-          "max_steps": 1,
-          "want_adanet_losses": [0.],
-          "want_is_training": False,  # TODO. Should be `True`.
-      },
-      {
-          "testcase_name": "previous_best_training",
-          "training": True,
-          "is_previous_best": True,
-          "max_steps": 4,
-          "want_adanet_losses": [1., .750, .583],
-          "want_is_training": False,
-      })
+  @parameterized.named_parameters({
+      "testcase_name": "evaluate",
+      "training": False,
+      "max_steps": 3,
+      "want_adanet_losses": [0., 0., 0.],
+      "want_is_training": True,
+  }, {
+      "testcase_name": "train_exactly_max_steps",
+      "training": True,
+      "max_steps": 3,
+      "want_adanet_losses": [1., .750, .583],
+      "want_is_training": False,
+  }, {
+      "testcase_name": "train_extra_steps",
+      "training": True,
+      "max_steps": 2,
+      "want_adanet_losses": [1., .750, .583],
+      "want_is_training": False,
+  }, {
+      "testcase_name": "train_one_step_max_one_step",
+      "training": True,
+      "max_steps": 1,
+      "want_adanet_losses": [1.],
+      "want_is_training": False,
+  }, {
+      "testcase_name": "train_one_step_max_two_steps",
+      "training": True,
+      "max_steps": 2,
+      "want_adanet_losses": [1.],
+      "want_is_training": True,
+  }, {
+      "testcase_name": "train_two_steps_max_two_steps",
+      "training": True,
+      "max_steps": 2,
+      "want_adanet_losses": [1., .750],
+      "want_is_training": False,
+  }, {
+      "testcase_name": "train_three_steps_max_four_steps",
+      "training": True,
+      "max_steps": 4,
+      "want_adanet_losses": [1., .750, .583],
+      "want_is_training": True,
+  }, {
+      "testcase_name": "train_three_steps_max_five_steps",
+      "training": True,
+      "max_steps": 5,
+      "want_adanet_losses": [1., .750, .583],
+      "want_is_training": True,
+  }, {
+      "testcase_name": "eval_one_step",
+      "training": False,
+      "max_steps": 1,
+      "want_adanet_losses": [0.],
+      "want_is_training": True,
+  }, {
+      "testcase_name": "previous_best_training",
+      "training": True,
+      "is_previous_best": True,
+      "max_steps": 4,
+      "want_adanet_losses": [1., .750, .583],
+      "want_is_training": False,
+  })
   def test_build_candidate(self,
                            training,
                            max_steps,
@@ -149,10 +139,12 @@ class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
     fake_ensemble = tu.dummy_ensemble(
         "new", adanet_loss=fake_adanet_loss, train_op=fake_train_op)
 
+    iteration_step = tf.Variable(0)
     builder = _CandidateBuilder(max_steps=max_steps)
     candidate = builder.build_candidate(
         ensemble=fake_ensemble,
         training=training,
+        iteration_step=iteration_step,
         summary=tf.summary,
         is_previous_best=is_previous_best)
     with self.test_session() as sess:
@@ -160,10 +152,10 @@ class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
       adanet_losses = []
       is_training = True
       for _ in range(len(want_adanet_losses)):
-        is_training, adanet_loss, _ = sess.run(
-            (candidate.is_training, candidate.adanet_loss, candidate.update_op))
+        is_training, adanet_loss = sess.run(
+            (candidate.is_training, candidate.adanet_loss))
         adanet_losses.append(adanet_loss)
-        sess.run(fake_train_op)
+        sess.run((fake_train_op, tf.assign_add(iteration_step, 1)))
 
     # Verify that adanet_loss moving average works.
     self.assertAllClose(want_adanet_losses, adanet_losses, atol=1e-3)

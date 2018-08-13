@@ -337,7 +337,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00780,
+          .00834,
   }, {
       "testcase_name":
           "single_builder_steps",
@@ -352,7 +352,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00780,
+          .00834,
   }, {
       "testcase_name":
           "single_builder_no_bias",
@@ -363,9 +363,9 @@ class EstimatorTest(EstimatorTestCase):
       "use_bias":
           False,
       "want_accuracy":
-          1.,
+          .75,
       "want_loss":
-          .34461,
+          .36746,
   }, {
       "testcase_name":
           "single_builder_scalar_mixture_weight",
@@ -408,7 +408,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .11910,
+          .14729,
   }, {
       "testcase_name":
           "single_builder_with_hook",
@@ -420,7 +420,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00780,
+          .00834,
   }, {
       "testcase_name":
           "high_max_iteration_steps",
@@ -445,7 +445,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00807,
+          .00834,
   }, {
       "testcase_name":
           "two_builders_different_layer_sizes",
@@ -491,7 +491,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00780,
+          .00834,
   }, {
       "testcase_name":
           "report_materializer",
@@ -1790,7 +1790,7 @@ class EstimatorReportTest(EstimatorTestCase):
         spy_fn=_spy_fn, base_learner_builders=base_learner_builders)
 
     max_iteration_steps = 5
-    max_steps = max_iteration_steps * num_iterations
+    max_steps = max_iteration_steps * num_iterations + 1
 
     train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
     estimator = Estimator(

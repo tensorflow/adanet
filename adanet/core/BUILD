@@ -103,6 +103,7 @@ py_test(
     srcs = ["iteration_test.py"],
     deps = [
         ":base_learner",
+        ":base_learner_report",
         ":candidate",
         ":ensemble",
         ":iteration",
@@ -218,7 +219,6 @@ py_library(
     srcs = ["testing_utils.py"],
     deps = [
         ":base_learner",
-        ":candidate",
         ":ensemble",
     ],
 )

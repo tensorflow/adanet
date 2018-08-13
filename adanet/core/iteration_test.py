@@ -31,49 +31,56 @@ import adanet.core.testing_utils as tu
 import tensorflow as tf
 
 
+def _dummy_candidate():
+  """Returns a dummy `_Candidate` instance."""
+
+  return _Candidate(
+      ensemble=tu.dummy_ensemble("foo"), adanet_loss=1., is_training=True)
+
+
 class IterationTest(parameterized.TestCase, tf.test.TestCase):
 
   # pylint: disable=g-long-lambda
   @parameterized.named_parameters({
       "testcase_name": "single_candidate",
       "number": 0,
-      "candidates": [tu.dummy_candidate()],
+      "candidates": [_dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
       "is_over": True,
   }, {
       "testcase_name": "two_candidates",
       "number": 0,
-      "candidates": [tu.dummy_candidate(),
-                     tu.dummy_candidate()],
+      "candidates": [_dummy_candidate(),
+                     _dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
       "is_over": True,
   }, {
       "testcase_name": "positive_number",
       "number": 1,
-      "candidates": [tu.dummy_candidate()],
+      "candidates": [_dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
       "is_over": True,
   }, {
       "testcase_name": "false_is_over",
       "number": 1,
-      "candidates": [tu.dummy_candidate()],
+      "candidates": [_dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
       "is_over": False,
   }, {
       "testcase_name": "zero_best_predictions",
       "number": 1,
-      "candidates": [tu.dummy_candidate()],
+      "candidates": [_dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
       "is_over": True,
   }, {
       "testcase_name": "zero_best_loss",
       "number": 1,
-      "candidates": [tu.dummy_candidate()],
+      "candidates": [_dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
       "is_over": True,
@@ -82,7 +89,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
           "pass_base_learner_report",
       "number":
           1,
-      "candidates": [tu.dummy_candidate()],
+      "candidates": [_dummy_candidate()],
       "estimator_spec":
           tu.dummy_estimator_spec(),
       "best_candidate_index":
@@ -143,7 +150,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
       "candidates": lambda: None,
   }, {
       "testcase_name": "non_list_candidates",
-      "candidates": lambda: {"foo": tu.dummy_candidate()},
+      "candidates": lambda: {"foo": _dummy_candidate()},
   }, {
       "testcase_name": "none_estimator_spec",
       "estimator_spec": None,
@@ -159,7 +166,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
   })
   def test_new_errors(self,
                       number=0,
-                      candidates=lambda: [tu.dummy_candidate()],
+                      candidates=lambda: [_dummy_candidate()],
                       estimator_spec=tu.dummy_estimator_spec(),
                       best_candidate_index=0,
                       is_over=True,
@@ -318,18 +325,19 @@ class _FakeCandidateBuilder(object):
   def build_candidate(self,
                       ensemble,
                       training,
+                      iteration_step,
                       summary,
                       previous_ensemble=None,
                       is_previous_best=False):
     del training  # Unused
+    del iteration_step  # Unused
     del summary  # Unused
     del previous_ensemble  # Unused
     return _Candidate(
         ensemble=ensemble,
         adanet_loss=ensemble.adanet_loss,
         is_training="training" in ensemble.name,
-        is_previous_best=is_previous_best,
-        update_op=ensemble.train_op)
+        is_previous_best=is_previous_best)
 
 
 def _metric_ops_a():
