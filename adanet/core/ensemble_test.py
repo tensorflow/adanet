@@ -51,10 +51,14 @@ class _BaseLearnerBuilder(BaseLearnerBuilder):
                          iteration_step,
                          summary,
                          previous_ensemble=None):
+    assert features is not None
+    assert training is not None
+    assert iteration_step is not None
+    assert summary is not None
     last_layer = tu.dummy_tensor(shape=(2, 3))
     logits = tf.layers.dense(
         last_layer,
-        units=1,
+        units=logits_dimension,
         kernel_initializer=tf.glorot_uniform_initializer(seed=self._seed))
     return BaseLearner(
         last_layer=logits if self._use_logits_last_layer else last_layer,
@@ -64,23 +68,15 @@ class _BaseLearnerBuilder(BaseLearnerBuilder):
 
   def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
                                   summary):
+    assert iteration_step is not None
+    assert summary is not None
     return self._base_learner_train_op_fn(loss, var_list)
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
                                      iteration_step, summary):
+    assert iteration_step is not None
+    assert summary is not None
     return self._mixture_weights_train_op_fn(loss, var_list)
-
-
-class _FakeSummary(object):
-  """A fake `Summary`."""
-
-  def scalar(self, name, tensor):
-    del name  # Unused
-    del tensor  # Unused
-
-  def histogram(self, name, tensor):
-    del name  # Unused
-    del tensor  # Unused
 
 
 class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
@@ -247,7 +243,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
         base_learner_builder=_BaseLearnerBuilder(_base_learner_train_op_fn,
                                                  _mixture_weights_train_op_fn,
                                                  use_logits_last_layer, seed),
-        summary=_FakeSummary(),
+        summary=tf.summary,
         features=features,
         iteration_step=tf.train.get_or_create_global_step(),
         labels=labels,

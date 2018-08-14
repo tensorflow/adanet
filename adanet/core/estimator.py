@@ -1020,6 +1020,7 @@ class Estimator(tf.estimator.Estimator):
               summary=previous_ensemble_summary,
               bias=bias,
               features=features,
+              iteration_step=None,
               mode=mode,
               labels=labels)
       base_learner_builders = builder_generator.generate_candidates(

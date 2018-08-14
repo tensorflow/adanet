@@ -296,6 +296,7 @@ class _EnsembleBuilder(object):
           bias=bias,
           features=features,
           mode=mode,
+          iteration_step=iteration_step,
           labels=labels,
           base_learner_builder=base_learner_builder,
           var_list=var_list)
@@ -307,7 +308,7 @@ class _EnsembleBuilder(object):
                      bias,
                      features,
                      mode,
-                     iteration_step=None,
+                     iteration_step,
                      labels=None,
                      base_learner_builder=None,
                      var_list=None):
