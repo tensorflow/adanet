@@ -7,12 +7,14 @@ licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
 
+whitelist = [
+    "//adanet:__subpackages__",
+]
+
 py_library(
     name = "core",
     srcs = ["__init__.py"],
-    visibility = [
-        "//adanet:__subpackages__",
-    ],
+    visibility = whitelist,
     deps = [
         ":base_learner",
         ":base_learner_report",
@@ -243,8 +245,7 @@ py_test(
 proto_library(
     name = "report_proto",
     srcs = ["report.proto"],
-    visibility = [
-    ],
+    visibility = whitelist,
 )
 
 
@@ -255,8 +256,7 @@ py_proto_library(
     srcs = ["report.proto"],
     default_runtime = "@com_google_protobuf//:protobuf_python",
     protoc = "@com_google_protobuf//:protoc",
-    visibility = [
-    ],
+    visibility = whitelist,
 )
 
 py_library(
