@@ -42,6 +42,17 @@ class BaseLearnerReportTest(parameterized.TestCase, tf.test.TestCase):
       "metrics": {
           "moo": (tf.constant(1), tf.constant(1))
       },
+  }, {
+      "testcase_name": "non_tensor_update_op",
+      "hparams": {
+          "hoo": 1
+      },
+      "attributes": {
+          "aoo": tf.constant(1)
+      },
+      "metrics": {
+          "moo": (tf.constant(1), tf.no_op())
+      },
   })
   def test_new(self, hparams, attributes, metrics):
     with self.test_session():

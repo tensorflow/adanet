@@ -294,6 +294,27 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
               included_in_final_ensemble=True,
           ),
       ],
+  }, {
+      "testcase_name": "materialize_metrics_non_tensor_op",
+      "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
+      "base_learner_reports_fn": lambda features, labels: {
+          "foo": BaseLearnerReport(
+              hparams={},
+              attributes={},
+              metrics={"moo": (tf.constant(42), tf.no_op())},
+          ),
+      },
+      "included_base_learner_names": ["foo"],
+      "want_base_learner_reports_materialized": [
+          MaterializedBaseLearnerReport(
+              iteration_number=0,
+              name="foo",
+              hparams={},
+              attributes={},
+              metrics={"moo": 42},
+              included_in_final_ensemble=True,
+          ),
+      ],
   })
   def test_materialize_base_learner_reports(
       self,

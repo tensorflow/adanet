@@ -340,17 +340,6 @@ class _FakeCandidateBuilder(object):
         is_previous_best=is_previous_best)
 
 
-def _metric_ops_a():
-  return {"a": (tf.constant(1), tf.constant(2))}
-
-
-def _metric_ops_b():
-  return {
-      "a": (tf.constant(3), tf.constant(4)),
-      "b": (tf.constant(5), tf.constant(6))
-  }
-
-
 def _export_output_tensors(export_outputs):
   """Returns a dict of `Tensor`, tuple of `Tensor`, or dict of `Tensor`."""
 
@@ -372,6 +361,7 @@ def _export_output_tensors(export_outputs):
 
 class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
+  # pylint: disable=g-long-lambda
   @parameterized.named_parameters(
       {
           "testcase_name": "single_base_learner_fn",
@@ -386,7 +376,30 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           "testcase_name":
               "single_base_learner_with_eval_metrics",
           "ensemble_builder":
-              _FakeEnsembleBuilder(eval_metric_ops_fn=_metric_ops_a),
+              _FakeEnsembleBuilder(eval_metric_ops_fn=lambda: {
+                  "a": (tf.constant(1), tf.constant(2))
+              }),
+          "base_learner_builders": [_FakeBaseLearnerBuilder("training",),],
+          "features":
+              lambda: [[1., -1., 0.]],
+          "labels":
+              lambda: [1],
+          "want_loss":
+              1.403943,
+          "want_predictions":
+              2.129,
+          "want_eval_metric_ops": ["a"],
+          "want_best_candidate_index":
+              0,
+      }, {
+          "testcase_name":
+              "single_base_learner_with_non_tensor_eval_metric_op",
+          "ensemble_builder":
+              _FakeEnsembleBuilder(
+                  eval_metric_ops_fn=lambda: {
+                      "a": (tf.constant(1), tf.no_op())
+                  }
+              ),
           "base_learner_builders": [_FakeBaseLearnerBuilder("training",),],
           "features":
               lambda: [[1., -1., 0.]],
@@ -453,14 +466,18 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           "testcase_name":
               "previous_ensemble_and_eval_metrics",
           "ensemble_builder":
-              _FakeEnsembleBuilder(eval_metric_ops_fn=_metric_ops_a),
+              _FakeEnsembleBuilder(eval_metric_ops_fn=lambda: {
+                  "a": (tf.constant(1), tf.constant(2))
+              }),
           "base_learner_builders": [_FakeBaseLearnerBuilder("training")],
           "features":
               lambda: [[1., -1., 0.]],
           "labels":
               lambda: [1],
           "previous_ensemble":
-              lambda: tu.dummy_ensemble("old", eval_metric_ops=_metric_ops_a()),
+              lambda: tu.dummy_ensemble("old", eval_metric_ops={
+                  "a": (tf.constant(1), tf.constant(2))
+              }),
           "want_loss":
               1.403943,
           "want_predictions":

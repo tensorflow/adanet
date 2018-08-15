@@ -343,7 +343,7 @@ class _IterationBuilder(object):
           continue
         values, ops = zip(*metric_ops)
         best_value = tf.stack(values)[best_candidate_index]
-        best_op = tf.stack(ops)[best_candidate_index]
+        best_op = tf.group(ops)
         best_candidate_metric = (best_value, best_op)
         eval_metric_ops[metric_name] = best_candidate_metric
 

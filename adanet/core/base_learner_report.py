@@ -98,15 +98,21 @@ class BaseLearnerReport(
         raise ValueError(
             "metric tuple '{}' has fewer than 2 elements".format(key))
 
-      if not isinstance(value[1], tf.Tensor):
+      if not isinstance(value[0], tf.Tensor):
         raise ValueError(
-            "second element of metric tuple '{}' has value {} and type {}. "
-            "Must be a Tensor.".format(key, value, type(value[1])))
+            "First element of metric tuple '{}' has value {} and type {}. "
+            "Must be a Tensor.".format(key, value, type(value[0])))
 
-      if not _is_valid_tensor(value[1]):
+      if not _is_valid_tensor(value[0]):
         raise ValueError(
-            "second element of metric '{}' refers to invalid tensor {}".format(
-                key, value[1]))
+            "First element of metric '{}' refers to invalid Tensor {}.".
+            format(key, value[0]))
+
+      if not (isinstance(value[1], tf.Tensor) or
+              isinstance(value[1], tf.Operation)):
+        raise ValueError(
+            "Second element of metric tuple '{}' has value {} and type {}. "
+            "Must be a Tensor or Operation.".format(key, value, type(value[1])))
 
     return super(BaseLearnerReport, cls).__new__(
         cls, hparams=hparams, attributes=attributes, metrics=metrics)
