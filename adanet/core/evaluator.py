@@ -27,7 +27,7 @@ import tensorflow as tf
 class Evaluator(object):
   """An Evaluator selects best trained ensembles."""
 
-  def __init__(self, input_fn, steps):
+  def __init__(self, input_fn, steps=None):
     """Initializes an `Evaluator` instance.
 
     Args:
