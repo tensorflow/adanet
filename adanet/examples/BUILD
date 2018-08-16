@@ -6,6 +6,7 @@ py_library(
     name = "simple_dnn",
     srcs = ["simple_dnn.py"],
     visibility = [
+        "//adanet:__subpackages__",
     ],
     deps = [
         "//adanet",
