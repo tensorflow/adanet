@@ -26,11 +26,26 @@ import tensorflow as tf
 
 class InputUtilsTest(parameterized.TestCase, tf.test.TestCase):
 
-  def test_make_placeholder_input_fn(self):
+  @parameterized.named_parameters({
+      "testcase_name": "single_label",
+      "labels_fn": lambda: tf.constant([4.], name="label"),
+      "label": [4.],
+  }, {
+      "testcase_name": "multi_label",
+      # pylint: disable=g-long-lambda
+      "labels_fn": lambda: {
+          "label_1": tf.constant([4.], name="label_1"),
+          "label_2": tf.constant([2.], name="label_2"),
+      },
+      "label": {
+          "label_1": [4.],
+          "label_2": [2.],
+      },
+  })
+  def test_make_placeholder_input_fn(self, labels_fn, label):
     dense = [1., 2.]
     sparse = tf.SparseTensorValue(
         indices=[[0, 0], [0, 1]], values=[-1., 1.], dense_shape=[1, 2])
-    label = [4.]
 
     def input_fn():
       features = {
@@ -44,7 +59,7 @@ class InputUtilsTest(parameterized.TestCase, tf.test.TestCase):
                   dense_shape=tf.constant(
                       sparse.dense_shape, name="dense_shape", dtype=tf.int64))
       }
-      labels = tf.constant(label, name="label")
+      labels = labels_fn()
       return features, labels
 
     placeholder_input_fn = make_placeholder_input_fn(input_fn)
@@ -60,8 +75,19 @@ class InputUtilsTest(parameterized.TestCase, tf.test.TestCase):
                   got_features["dense"]: dense,
                   got_features["sparse"]: sparse
               }))
-      self.assertAllClose(
-          sess.run(labels), sess.run(got_labels, feed_dict={got_labels: label}))
+      if isinstance(got_labels, tf.Tensor):
+        self.assertAllClose(
+            sess.run(labels),
+            sess.run(got_labels, feed_dict={got_labels: label}))
+      else:
+        self.assertAllClose(
+            sess.run(labels),
+            sess.run(
+                got_labels,
+                feed_dict={
+                    got_labels["label_1"]: label["label_1"],
+                    got_labels["label_2"]: label["label_2"],
+                }))
 
 
 if __name__ == "__main__":

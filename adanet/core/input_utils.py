@@ -45,7 +45,8 @@ def make_placeholder_input_fn(input_fn):
   Args:
     input_fn: Input function returning a tuple of:
         features - Dictionary of string feature name to `Tensor`.
-        labels - `Tensor` with labels.
+        labels - `Tensor` of labels, or Dictionary of string label name to
+          `Tensor` (for multi-task learning problems).
 
   Returns:
     An input_fn that mimics `input_fn` with placeholder features and labels.
@@ -58,17 +59,32 @@ def make_placeholder_input_fn(input_fn):
     for name, feature in features.items():
       feature_info[name] = (feature.op.name, feature.get_shape().as_list(),
                             feature.dtype, isinstance(feature, tf.SparseTensor))
-    label_info = (labels.op.name, labels.get_shape().as_list(), labels.dtype)
+    if isinstance(labels, dict):
+      label_info = {
+          name: (tensor.op.name, tensor.get_shape().as_list(), tensor.dtype)
+          for name, tensor in labels.items()
+      }
+    else:
+      label_info = (labels.op.name, labels.get_shape().as_list(), labels.dtype)
 
   def _placeholder_input_fn():
+    """Returns (features, labels) without fixed batch_size dimensions."""
+
     features = {}
     for name, info in feature_info.items():
       feature_op_name, feature_shape, feature_dtype, is_sparse = info
       features[name] = _make_any_batch_size_placeholder(
           feature_op_name, feature_shape, feature_dtype, is_sparse)
-    label_op_name, label_shape, label_dtype = label_info
-    labels = _make_any_batch_size_placeholder(
-        label_op_name, label_shape, label_dtype, is_sparse=False)
+    if isinstance(label_info, dict):
+      labels = {}
+      for name, single_label_info in label_info.items():
+        label_op_name, label_shape, label_dtype = single_label_info
+        labels[name] = _make_any_batch_size_placeholder(
+            label_op_name, label_shape, label_dtype, is_sparse=False)
+    else:
+      label_op_name, label_shape, label_dtype = label_info
+      labels = _make_any_batch_size_placeholder(
+          label_op_name, label_shape, label_dtype, is_sparse=False)
     return features, labels
 
   return _placeholder_input_fn
