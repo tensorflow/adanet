@@ -299,7 +299,8 @@ class _EnsembleBuilder(object):
           iteration_step=iteration_step,
           labels=labels,
           base_learner_builder=base_learner_builder,
-          var_list=var_list)
+          var_list=var_list,
+          previous_ensemble=ensemble)
 
   def build_ensemble(self,
                      name,
@@ -311,7 +312,8 @@ class _EnsembleBuilder(object):
                      iteration_step,
                      labels=None,
                      base_learner_builder=None,
-                     var_list=None):
+                     var_list=None,
+                     previous_ensemble=None):
     """Builds an `Ensemble` with the given `WeightedBaseLearner`s.
 
     Args:
@@ -330,6 +332,8 @@ class _EnsembleBuilder(object):
         how to train the base learner and ensemble mixture weights.
       var_list: Optional list or tuple of `Variable` objects to update to
         minimize `loss`.
+      previous_ensemble: Link the rest of the `Ensemble` from iteration t-1.
+        Used for creating the base learner train_op.
 
     Returns:
       An `Ensemble` instance.
@@ -432,7 +436,8 @@ class _EnsembleBuilder(object):
                 var_list=var_list,
                 labels=labels,
                 iteration_step=iteration_step,
-                summary=summary))
+                summary=summary,
+                previous_ensemble=previous_ensemble))
       ensemble_var_list = [w.weight for w in weighted_base_learners]
       if self._use_bias:
         ensemble_var_list.insert(0, bias)

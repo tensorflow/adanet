@@ -113,7 +113,7 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
         persisted_tensors=persisted_tensors)
 
   def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
-                                  summary):
+                                  summary, previous_ensemble):
     optimizer = tf.train.GradientDescentOptimizer(
         learning_rate=self._learning_rate)
     return optimizer.minimize(loss, var_list=var_list)
@@ -177,7 +177,7 @@ class _SimpleBaseLearnerBuilder(BaseLearnerBuilder):
     )
 
   def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
-                                  summary):
+                                  summary, previous_ensemble):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=3.)
     return optimizer.minimize(loss, var_list=var_list)
 
@@ -220,7 +220,7 @@ class _LinearBaseLearnerBuilder(BaseLearnerBuilder):
     )
 
   def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
-                                  summary):
+                                  summary, previous_ensemble):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
     return optimizer.minimize(loss, var_list=var_list)
 

@@ -127,7 +127,8 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
             var_list=None,
             labels=labels,
             iteration_step=iteration_step,
-            summary=tf.summary)
+            summary=tf.summary,
+            previous_ensemble=None)
 
         # 3. Build mixture weight train ops.
 

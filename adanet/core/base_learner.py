@@ -154,7 +154,7 @@ class BaseLearnerBuilder(object):
 
   @abc.abstractmethod
   def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
-                                  summary):
+                                  summary, previous_ensemble):
     """Returns an op for training a new base learner.
 
     This method will be called once after `build_base_learner`.
@@ -170,6 +170,9 @@ class BaseLearnerBuilder(object):
         beginning of the current iteration, as opposed to the global step.
       summary: An `adanet.Summary` for scoping summaries to individual base
         learners in Tensorboard.
+      previous_ensemble: The best `Ensemble` from iteration t-1. The created
+        base learner will extend the previous ensemble to form the `Ensemble`
+        at iteration t. Is None for iteration 0.
 
     Returns:
       A train op.

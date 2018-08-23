@@ -103,7 +103,7 @@ class _SimpleDNNBuilder(adanet.BaseLearnerBuilder):
         persisted_tensors=persisted_tensors)
 
   def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
-                                  summary):
+                                  summary, previous_ensemble):
     """See `adanet.BaseLearnerBuilder`."""
 
     # NOTE: The `adanet.Estimator` increments the global step.

@@ -214,7 +214,7 @@ class _FakeBaseLearnerBuilder(BaseLearnerBuilder):
     return base_learner
 
   def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
-                                  summary):
+                                  summary, previous_ensemble):
     return None
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
