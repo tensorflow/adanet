@@ -153,8 +153,14 @@ class BaseLearnerBuilder(object):
     """
 
   @abc.abstractmethod
-  def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
-                                  summary, previous_ensemble):
+  def build_base_learner_train_op(self,
+                                  base_learner,
+                                  loss,
+                                  var_list,
+                                  labels,
+                                  iteration_step,
+                                  summary,
+                                  previous_ensemble):
     """Returns an op for training a new base learner.
 
     This method will be called once after `build_base_learner`.
@@ -162,6 +168,8 @@ class BaseLearnerBuilder(object):
     NOTE: This method should _not_ increment the global step tensor.
 
     Args:
+      base_learner: Newest base learner, that is not part of the
+        `previous_ensemble`.
       loss: A `Tensor` containing the base learner's loss to minimize.
       var_list: List of base learner `tf.Variable` parameters to update as
         part of the training operation.

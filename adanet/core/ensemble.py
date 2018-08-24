@@ -389,10 +389,11 @@ class _EnsembleBuilder(object):
         train_op_fn=lambda _: tf.no_op())
 
     # The base learner.
+    new_base_learner = weighted_base_learners[-1].base_learner
     base_learner_spec = self._head.create_estimator_spec(
         features=features,
         mode=mode,
-        logits=weighted_base_learners[-1].base_learner.logits,
+        logits=new_base_learner.logits,
         labels=labels,
         train_op_fn=lambda _: tf.no_op())
 
@@ -432,6 +433,7 @@ class _EnsembleBuilder(object):
       with tf.variable_scope("train_base_learner"):
         base_learner_train_op = (
             base_learner_builder.build_base_learner_train_op(
+                base_learner=new_base_learner,
                 loss=base_learner_spec.loss,
                 var_list=var_list,
                 labels=labels,

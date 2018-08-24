@@ -213,8 +213,14 @@ class _FakeBaseLearnerBuilder(BaseLearnerBuilder):
         persisted_tensors={"random_seed": self._random_seed})
     return base_learner
 
-  def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
-                                  summary, previous_ensemble):
+  def build_base_learner_train_op(self,
+                                  base_learner,
+                                  loss,
+                                  var_list,
+                                  labels,
+                                  iteration_step,
+                                  summary,
+                                  previous_ensemble):
     return None
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,

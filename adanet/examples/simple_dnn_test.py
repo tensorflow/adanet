@@ -123,6 +123,7 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
             tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=base_learner.logits, labels=labels))
         base_learner_train_op = builder.build_base_learner_train_op(
+            base_learner,
             base_learner_loss,
             var_list=None,
             labels=labels,

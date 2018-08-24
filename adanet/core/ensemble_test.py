@@ -66,8 +66,14 @@ class _BaseLearnerBuilder(BaseLearnerBuilder):
         complexity=2,
         persisted_tensors={})
 
-  def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
-                                  summary, previous_ensemble):
+  def build_base_learner_train_op(self,
+                                  base_learner,
+                                  loss,
+                                  var_list,
+                                  labels,
+                                  iteration_step,
+                                  summary,
+                                  previous_ensemble):
     assert iteration_step is not None
     assert summary is not None
     return self._base_learner_train_op_fn(loss, var_list)

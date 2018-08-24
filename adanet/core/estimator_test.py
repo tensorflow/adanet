@@ -112,8 +112,14 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
         complexity=3,
         persisted_tensors=persisted_tensors)
 
-  def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
-                                  summary, previous_ensemble):
+  def build_base_learner_train_op(self,
+                                  base_learner,
+                                  loss,
+                                  var_list,
+                                  labels,
+                                  iteration_step,
+                                  summary,
+                                  previous_ensemble):
     optimizer = tf.train.GradientDescentOptimizer(
         learning_rate=self._learning_rate)
     return optimizer.minimize(loss, var_list=var_list)
@@ -176,8 +182,14 @@ class _SimpleBaseLearnerBuilder(BaseLearnerBuilder):
         persisted_tensors={},
     )
 
-  def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
-                                  summary, previous_ensemble):
+  def build_base_learner_train_op(self,
+                                  base_learner,
+                                  loss,
+                                  var_list,
+                                  labels,
+                                  iteration_step,
+                                  summary,
+                                  previous_ensemble):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=3.)
     return optimizer.minimize(loss, var_list=var_list)
 
@@ -219,8 +231,14 @@ class _LinearBaseLearnerBuilder(BaseLearnerBuilder):
         persisted_tensors={},
     )
 
-  def build_base_learner_train_op(self, loss, var_list, labels, iteration_step,
-                                  summary, previous_ensemble):
+  def build_base_learner_train_op(self,
+                                  base_learner,
+                                  loss,
+                                  var_list,
+                                  labels,
+                                  iteration_step,
+                                  summary,
+                                  previous_ensemble):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
     return optimizer.minimize(loss, var_list=var_list)
 
