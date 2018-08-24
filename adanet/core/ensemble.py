@@ -517,7 +517,11 @@ class _EnsembleBuilder(object):
     last_layer = tf.stop_gradient(base_learner.last_layer)
 
     weight_shape = None
-    last_layer_size = last_layer.get_shape().as_list()[-1]
+    static_shape = last_layer.get_shape().as_list()
+    last_layer_size = static_shape[-1]
+    ndims = len(static_shape)
+    batch_size = tf.shape(last_layer)[0]
+
     if weight_initializer is None:
       weight_initializer = self._select_mixture_weight_initializer(
           num_base_learners)
@@ -534,7 +538,24 @@ class _EnsembleBuilder(object):
           shape=weight_shape,
           initializer=weight_initializer)
       if self._mixture_weight_type == MixtureWeightType.MATRIX:
+        # TODO: Add Unit tests for the ndims == 3 path.
+        if ndims > 3:
+          raise NotImplementedError(
+              "Last Layer with more than 3 dimensions are not supported with "
+              "matrix mixture weights.")
+        # This is reshaping [batch_size, timesteps, emb_dim ] to
+        # [batch_size x timesteps, emb_dim] for matrix multiplication
+        # and reshaping back.
+        if ndims == 3:
+          tf.logging.info("Rank 3 tensors like [batch_size, timesteps, d]  are "
+                          "reshaped to rank 2 [ batch_size x timesteps, d] for "
+                          "the weight matrix multiplication, and are reshaped "
+                          "to their original shape afterwards.")
+          last_layer = tf.reshape(last_layer, [-1, last_layer_size])
         logits = tf.matmul(last_layer, weight)
+        if ndims == 3:
+          logits = tf.reshape(logits,
+                              [batch_size, -1, logits_dimension])
       else:
         logits = tf.multiply(base_learner.logits, weight)
 
