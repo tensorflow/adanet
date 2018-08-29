@@ -282,8 +282,8 @@ class _EnsembleFreezer(object):
       collection_set: Set of string names of collections to keep.
       destination_nodes: Set of string names of ops to keep.
       collection_key: String key of the collection to add tensor.
-      tensor: `Tensor` to keep. Its name is added to the destination_nodes
-        list and it is added to the collection identitified by collection_key.
+      tensor: `Tensor` to keep. Its name is added to the destination_nodes list
+        and it is added to the collection identitified by collection_key.
     """
 
     tensor = tf.convert_to_tensor(tensor)
@@ -523,8 +523,8 @@ class _EnsembleFreezer(object):
     """Returns a weighted base learner's field name from the given arguments.
 
     Args:
-      collection_key: String name of the collection where the field `Tensor`
-        is stored during freezing.
+      collection_key: String name of the collection where the field `Tensor` is
+        stored during freezing.
       index: Integer index of the weighted base learner in a list.
 
     Returns:
@@ -553,8 +553,8 @@ class _EnsembleFreezer(object):
     """Returns a base learner's field name from the given arguments.
 
     Args:
-      collection_key: String name of the collection where the field `Tensor`
-        is stored during freezing.
+      collection_key: String name of the collection where the field `Tensor` is
+        stored during freezing.
       index: Integer index of the base learner in a list of base learners.
 
     Returns:

@@ -46,8 +46,8 @@ class _SimpleDNNBuilder(adanet.BaseLearnerBuilder):
         best mixture weights, or use their default value according to the
         mixture weight type. When `False`, the base learners will return a no_op
         for the mixture weight train op.
-      dropout: The dropout rate, between 0 and 1. E.g. "rate=0.1" would drop
-        out 10% of input units.
+      dropout: The dropout rate, between 0 and 1. E.g. "rate=0.1" would drop out
+        10% of input units.
       seed: A random seed.
 
     Returns:
@@ -102,14 +102,8 @@ class _SimpleDNNBuilder(adanet.BaseLearnerBuilder):
         complexity=complexity,
         persisted_tensors=persisted_tensors)
 
-  def build_base_learner_train_op(self,
-                                  base_learner,
-                                  loss,
-                                  var_list,
-                                  labels,
-                                  iteration_step,
-                                  summary,
-                                  previous_ensemble):
+  def build_base_learner_train_op(self, base_learner, loss, var_list, labels,
+                                  iteration_step, summary, previous_ensemble):
     """See `adanet.BaseLearnerBuilder`."""
 
     # NOTE: The `adanet.Estimator` increments the global step.
@@ -158,23 +152,23 @@ class Generator(adanet.BaseLearnerBuilderGenerator):
     """Initializes a DNN `Generator`.
 
     Args:
-      feature_columns: An iterable containing all the feature columns used
-        by DNN models. All items in the set should be instances of classes
-        derived from `FeatureColumn`.
+      feature_columns: An iterable containing all the feature columns used by
+        DNN models. All items in the set should be instances of classes derived
+        from `FeatureColumn`.
       optimizer: An `Optimizer` instance for training both the base learner and
         the mixture weights.
       layer_size: Number of nodes in each hidden layer of the base learner
-        candidates. Note that this parameter is ignored in a DNN with no
-        hidden layers.
-      initial_num_layers: Minimum number of layers for each DNN base learner.
-        At iteration 0, the base learners will be `initial_num_layers` deep.
-        base learners at subsequent iterations will be at least as deep.
+        candidates. Note that this parameter is ignored in a DNN with no hidden
+        layers.
+      initial_num_layers: Minimum number of layers for each DNN base learner. At
+        iteration 0, the base learners will be `initial_num_layers` deep. base
+        learners at subsequent iterations will be at least as deep.
       learn_mixture_weights: Whether to solve a learning problem to find the
         best mixture weights, or use their default value according to the
         mixture weight type. When `False`, the base learners will return a no_op
         for the mixture weight train op.
-      dropout: The dropout rate, between 0 and 1. E.g. "rate=0.1" would drop
-        out 10% of input units.
+      dropout: The dropout rate, between 0 and 1. E.g. "rate=0.1" would drop out
+        10% of input units.
       seed: A random seed.
 
     Returns:

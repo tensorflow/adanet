@@ -36,6 +36,12 @@ def _make_any_batch_size_placeholder(name, shape, dtype, is_sparse):
 def make_placeholder_input_fn(input_fn):
   """Makes a placeholder input_fn which mimics the given input_fn.
 
+  Requires an input function `input_fn` that returns a tuple of:
+
+  * features: Dictionary of string feature name to `Tensor`.
+  * labels: `Tensor` of labels or Dictionary of string label name to `Tensor`
+  (for multi-task learning problems).
+
   The returned input_fn, when called, returns feature and label `Tensor`
   placeholders which have the same shape, name, and type as those returned
   by `input_fn`, but which can accept any batch size. This prevents an
@@ -43,10 +49,7 @@ def make_placeholder_input_fn(input_fn):
   can be used once imported.
 
   Args:
-    input_fn: Input function returning a tuple of:
-        features - Dictionary of string feature name to `Tensor`.
-        labels - `Tensor` of labels, or Dictionary of string label name to
-          `Tensor` (for multi-task learning problems).
+    input_fn: The input function.
 
   Returns:
     An input_fn that mimics `input_fn` with placeholder features and labels.

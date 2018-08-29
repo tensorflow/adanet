@@ -31,12 +31,11 @@ class Evaluator(object):
     """Initializes an `Evaluator` instance.
 
     Args:
-      input_fn: Input function returning a tuple of:
-        features - Dictionary of string feature name to `Tensor`.
-        labels - `Tensor` of labels.
+      input_fn: Input function returning a tuple of: features - Dictionary of
+        string feature name to `Tensor`. labels - `Tensor` of labels.
       steps: Number of steps for which to evaluate the ensembles. If an
-        `OutOfRangeError` occurs, evaluation stops. If set to None, will
-        iterate the dataset until all inputs are exhausted.
+        `OutOfRangeError` occurs, evaluation stops. If set to None, will iterate
+        the dataset until all inputs are exhausted.
 
     Returns:
       An `Evaluator` instance.

@@ -220,6 +220,28 @@ class Estimator(tf.estimator.Estimator):
                config=None):
     """Initializes an `Estimator`.
 
+    Regarding the options for `mixture_weight_type`:
+
+    A `SCALAR` mixture weight is a rank 0 tensor. It performs an element-
+    wise multiplication with its base learner's logits. This mixture weight
+    is the simplest to learn, the quickest to train, and most likely to
+    generalize well.
+
+    A `VECTOR` mixture weight is a tensor of shape [k] where k is the
+    ensemble's logits dimension as defined by `head`. It is similar to
+    `SCALAR` in that it performs an element-wise multiplication with its
+    base learner's logits, but is more flexible in learning a base
+    learner's preferences per class.
+
+    A `MATRIX` mixture weight is a tensor of shape [a, b] where a is the
+    number of outputs from the base learner's `last_layer` and b is the
+    number of outputs from the ensemble's `logits`. This weight
+    matrix-multiplies the base learner's `last_layer`. This mixture weight
+    offers the most flexibility and expressivity, allowing base learners to
+    have outputs of different dimensionalities. However, it also has the
+    most trainable parameters (a*b), and is therefore the most sensitive to
+    learning rates and regularization.
+
     Args:
       head: A `tf.contrib.estimator.Head` instance for computing loss and
         evaluation metrics for every candidate.
@@ -231,33 +253,12 @@ class Estimator(tf.estimator.Estimator):
         training stops before `max_iteration_steps` steps.
       mixture_weight_type: The `adanet.MixtureWeightType` defining which mixture
         weight type to learn in the linear combination of base learner outputs.
-
-        A `SCALAR` mixture weight is a rank 0 tensor. It performs an element-
-        wise multiplication with its base learner's logits. This mixture weight
-        is the simplest to learn, the quickest to train, and most likely to
-        generalize well.
-
-        A `VECTOR` mixture weight is a tensor of shape [k] where k is the
-        ensemble's logits dimension as defined by `head`. It is similar to
-        `SCALAR` in that it performs an element-wise multiplication with its
-        base learner's logits, but is more flexible in learning a base
-        learner's preferences per class.
-
-        A `MATRIX` mixture weight is a tensor of shape [a, b] where a is the
-        number of outputs from the base learner's `last_layer` and b is the
-        number of outputs from the ensemble's `logits`. This weight
-        matrix-multiplies the base learner's `last_layer`. This mixture weight
-        offers the most flexibility and expressivity, allowing base learners to
-        have outputs of different dimensionalities. However, it also has the
-        most trainable parameters (a*b), and is therefore the most sensitive to
-        learning rates and regularization.
       mixture_weight_initializer: The initializer for mixture_weights. When
-        `None`, the default is different according to `mixture_weight_type`:
-        * `SCALAR`: Initializes to 1/N where N is the number of base learners
-          in the ensemble giving a uniform average.
-        * `VECTOR`: Initializes each entry to 1/N where N is the number of base
-          learners in the ensemble giving a uniform average.
-        * `MATRIX`: Uses `tf.zeros_initializer`.
+        `None`, the default is different according to `mixture_weight_type`.
+        `SCALAR` initializes to 1/N where N is the number of base learners in
+        the ensemble giving a uniform average. `VECTOR` initializes each entry
+        to 1/N where N is the number of base learners in the ensemble giving a
+        uniform average. `MATRIX` uses `tf.zeros_initializer`.
       warm_start_mixture_weights: Whether, at the beginning of an iteration, to
         initialize the mixture weights of the base learners from the previous
         ensemble to their learned value at the previous iteration, as opposed to
@@ -309,9 +310,9 @@ class Estimator(tf.estimator.Estimator):
         also be used to load checkpoints from the directory into a estimator to
         continue training a previously saved model.
       report_dir: Directory where the `MaterializedBaseLearnerReport`s
-        materialized by `report_materializer` would be saved.
-        If `report_materializer` is None, this will not save
-        anything. If `None` or empty string, defaults to "<model_dir>/report".
+        materialized by `report_materializer` would be saved. If
+        `report_materializer` is None, this will not save anything. If `None` or
+        empty string, defaults to "<model_dir>/report".
       config: `RunConfig` object to configure the runtime settings.
 
     Returns:
@@ -939,18 +940,19 @@ class Estimator(tf.estimator.Estimator):
     latest checkpoint with its graph and variables, so that first call of the
     next iteration has the right ops in the checkpoint.
 
+    The following parameters in `params` are expected:
+
+    * freeze_ensemble: Whether to freeze the latest checkpoint's best ensemble
+    to a separate checkpoint for the following iteration to use.
+    * increment_iteration: Whether to overwrite the current checkpoint with the
+    next iteration's graph and initialized weights.
+
     Args:
       features: Dictionary of `Tensor` objects keyed by feature name.
       labels: `Tensor` of labels.
-      mode: Defines whether this is training, evaluation or prediction.
-        See `ModeKeys`.
+      mode: Defines whether this is training, evaluation or prediction. See
+        `ModeKeys`.
       params: A dict of parameters.
-        The following hyperparameters are expected:
-        * freeze_ensemble: Whether to freeze the latest checkpoint's
-            best ensemble to a separate checkpoint for the following
-            iteration to use.
-        * increment_iteration: Whether to overwrite the current checkpoint with
-            the next iteration's graph and initialized weights.
 
     Returns:
       A `EstimatorSpec` instance.

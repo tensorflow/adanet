@@ -46,7 +46,7 @@ def _iteration_report_pb_to_base_learner_reports(iteration_report_pb):
       field_name: name of the map field in the proto.
 
     Returns:
-      dict with the keys and values in proto.field_name.
+      Dict with the keys and values in proto.field_name.
 
     Raises:
       ValueError: if proto.field_name has a value that's not an int_value,
@@ -179,8 +179,9 @@ class _ReportAccessor(object):
     this method would be written to the proto.
 
     Args:
-      iteration_number: int for the iteration number.
-      materialized_base_learner_reports: `MaterializedBaseLearnerReport` list.
+      iteration_number: Int for the iteration number.
+      materialized_base_learner_reports: A list of
+        `MaterializedBaseLearnerReport` objects.
     """
 
     iteration_report_pb = _create_iteration_report_pb(
@@ -215,7 +216,8 @@ class _ReportAccessor(object):
     Each `MaterializedBaseLearnerReport` list is one AdaNet iteration. The first
     list in the sequence is iteration 0, followed by iteration 1, and so on.
 
-    Returns: Iterable of lists of `MaterializedBaseLearnerReport`s.
+    Returns:
+      Iterable of lists of `MaterializedBaseLearnerReport`s.
     """
 
     iteration_pb_seq = self._read_iteration_report_pb_list()

@@ -31,10 +31,13 @@ class ReportMaterializer(object):
   def __init__(self, input_fn, steps):
     """Initializes an `ReportMaterializer` instance.
 
+    Requires an input function `input_fn` that returns a tuple of:
+
+    * features: Dictionary of string feature name to `Tensor`.
+    * labels: `Tensor` of labels.
+
     Args:
-      input_fn: Input function returning a tuple of:
-        features - Dictionary of string feature name to `Tensor`.
-        labels - `Tensor` of labels.
+      input_fn: The input function.
       steps: Number of steps for which to materialize the ensembles. If an
         `OutOfRangeError` occurs, materialization stops. If set to None, will
         iterate the dataset until all inputs are exhausted.
@@ -148,7 +151,5 @@ class ReportMaterializer(object):
               hparams=base_learner_reports[name].hparams,
               attributes=attributes,
               metrics=metrics,
-              included_in_final_ensemble=(name in included_base_learner_names),
-          )
-      )
+              included_in_final_ensemble=(name in included_base_learner_names)))
     return materialized_reports

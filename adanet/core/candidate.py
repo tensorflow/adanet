@@ -41,8 +41,8 @@ class _Candidate(
 
     Args:
       ensemble: The `Ensemble` instance to track.
-      adanet_loss: float `Tensor` representing the ensemble's AdaNet loss
-        on the training set as defined in Equation (4) of the paper.
+      adanet_loss: float `Tensor` representing the ensemble's AdaNet loss on the
+        training set as defined in Equation (4) of the paper.
       is_training: bool `Tensor` indicating if training is ongoing.
       is_previous_best: bool identifying whether this ensemble came from the
         previous iteration.
@@ -105,8 +105,8 @@ class _CandidateBuilder(object):
       ensemble: `Ensemble` instance to track.
       training: A python boolean indicating whether the graph is in training
         mode or prediction mode.
-      iteration_step: Integer `Tensor` representing the step since the
-        beginning of the current iteration, as opposed to the global step.
+      iteration_step: Integer `Tensor` representing the step since the beginning
+        of the current iteration, as opposed to the global step.
       summary: A `Summary` for recording summaries for TensorBoard.
       is_previous_best: Bool identifying whether this ensemble came from a
         previous iteration. If `True`, `is_training` will be `False` since its

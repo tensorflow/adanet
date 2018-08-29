@@ -52,19 +52,18 @@ class BaseLearner(
       last_layer: A `Tensor` output of the last layer of the base learner, i.e
         the layer before the logits layer. When the mixture weight type is
         `MATRIX`, the AdaNet algorithm takes care of computing ensemble mixture
-        weights matrices (one per base learner) that multiply the various
-        last layers of the ensemble's base learners, and regularize them using
-        their base learner's complexity. This field is represented by 'h' in the
+        weights matrices (one per base learner) that multiply the various last
+        layers of the ensemble's base learners, and regularize them using their
+        base learner's complexity. This field is represented by 'h' in the
         AdaNet paper.
-      logits: logits `Tensor` for training the base learner. NOTE:
-        These logits are not used in the ensemble's outputs if the mixture
-        weight type is `MATRIX`, instead AdaNet learns its own logits
-        (mixture weights) from the base learner's `last_layers` with complexity
-        regularization. The logits are used in the ensemble only when the
-        mixture weights type is `SCALAR` or `VECTOR`.
-        Even though the logits are not used in the ensemble in some cases, they
-        should always be supplied as adanet uses the logits to train the base
-        learners.
+      logits: logits `Tensor` for training the base learner. NOTE: These logits
+        are not used in the ensemble's outputs if the mixture weight type is
+        `MATRIX`, instead AdaNet learns its own logits (mixture weights) from
+        the base learner's `last_layers` with complexity regularization. The
+        logits are used in the ensemble only when the mixture weights type is
+        `SCALAR` or `VECTOR`. Even though the logits are not used in the
+        ensemble in some cases, they should always be supplied as adanet uses
+        the logits to train the base learners.
       complexity: A scalar representing the complexity of the base learner's
         architecture. It is used for choosing the best base learner at each
         iteration, and for regularizing the weighted outputs of more complex
@@ -140,27 +139,21 @@ class BaseLearnerBuilder(object):
         Typically, logits have for shape `[batch_size, logits_dimension]`.
       training: A python boolean indicating whether the graph is in training
         mode or prediction mode.
-      iteration_step: Integer `Tensor` representing the step since the
-        beginning of the current iteration, as opposed to the global step.
+      iteration_step: Integer `Tensor` representing the step since the beginning
+        of the current iteration, as opposed to the global step.
       summary: An `adanet.Summary` for scoping summaries to individual base
         learners in Tensorboard.
       previous_ensemble: The best `Ensemble` from iteration t-1. The created
-        base learner will extend the previous ensemble to form the `Ensemble`
-        at iteration t.
+        base learner will extend the previous ensemble to form the `Ensemble` at
+        iteration t.
 
     Returns:
       A `BaseLearner` instance.
     """
 
   @abc.abstractmethod
-  def build_base_learner_train_op(self,
-                                  base_learner,
-                                  loss,
-                                  var_list,
-                                  labels,
-                                  iteration_step,
-                                  summary,
-                                  previous_ensemble):
+  def build_base_learner_train_op(self, base_learner, loss, var_list, labels,
+                                  iteration_step, summary, previous_ensemble):
     """Returns an op for training a new base learner.
 
     This method will be called once after `build_base_learner`.
@@ -171,16 +164,16 @@ class BaseLearnerBuilder(object):
       base_learner: Newest base learner, that is not part of the
         `previous_ensemble`.
       loss: A `Tensor` containing the base learner's loss to minimize.
-      var_list: List of base learner `tf.Variable` parameters to update as
-        part of the training operation.
+      var_list: List of base learner `tf.Variable` parameters to update as part
+        of the training operation.
       labels: Labels `Tensor`.
-      iteration_step: Integer `Tensor` representing the step since the
-        beginning of the current iteration, as opposed to the global step.
+      iteration_step: Integer `Tensor` representing the step since the beginning
+        of the current iteration, as opposed to the global step.
       summary: An `adanet.Summary` for scoping summaries to individual base
         learners in Tensorboard.
       previous_ensemble: The best `Ensemble` from iteration t-1. The created
-        base learner will extend the previous ensemble to form the `Ensemble`
-        at iteration t. Is None for iteration 0.
+        base learner will extend the previous ensemble to form the `Ensemble` at
+        iteration t. Is None for iteration 0.
 
     Returns:
       A train op.
@@ -205,8 +198,8 @@ class BaseLearnerBuilder(object):
       logits: The ensemble's logits `Tensor` from applying the mixture weights
         and bias to the ensemble's base learners.
       labels: Labels `Tensor`.
-      iteration_step: Integer `Tensor` representing the step since the
-        beginning of the current iteration, as opposed to the global step.
+      iteration_step: Integer `Tensor` representing the step since the beginning
+        of the current iteration, as opposed to the global step.
       summary: An `adanet.Summary` for scoping summaries to individual base
         learners in Tensorboard.
 
@@ -246,26 +239,23 @@ class BaseLearnerBuilderGenerator(object):
     Args:
       previous_ensemble: The best `adanet.Ensemble` from iteration t-1.
         DEPRECATED. We are transitioning away from the use of previous_ensemble
-        in generate_candidates. New BaseLearnerBuilderGenerators
-        should *not* use previous_ensemble in their implementation of
-        generate_candidates -- please only use iteration_number,
-        previous_ensemble_reports and all_reports.
-      iteration_number: Python integer AdaNet iteration, starting from 0.
+        in generate_candidates. New BaseLearnerBuilderGenerators should *not*
+        use previous_ensemble in their implementation of generate_candidates --
+        please only use iteration_number, previous_ensemble_reports and
+        all_reports.
+      iteration_number: Python integer AdaNet iteration t, starting from 0.
       previous_ensemble_reports: List of `MaterializedBaseLearnerReport`s
         corresponding to the BaseLearnerBuilders composing `adanet.Ensemble`
-        from iteration_number - 1. The first element in the list corresponds to
-        the BaseLearnerBuilder added in the first iteration.
-        If `ReportMaterializer` is not supplied to the estimator,
-        previous_ensemble_report is `None`.
-      all_reports: List of `MaterializedBaseLearnerReport`s.
-        If `ReportMaterializer` is not supplied to the estimator, all_reports is
-        `None`.
-        If `ReportMaterializer` is supplied to the estimator:
-        - If iteration_number = 0, all_reports is an empty List.
-        - Otherwise, all_reports is a sequence of Lists. Each element of the
-          sequence is a List containing all the `MaterializedBaseLearnerReport`s
-          in an AdaNet iteration, starting from Iteration 0, and ending at
-          iteration_number - 1.
+        from iteration t-1. The first element in the list corresponds to the
+        BaseLearnerBuilder added in the first iteration. If `ReportMaterializer`
+        is not supplied to the estimator, previous_ensemble_report is `None`.
+      all_reports: List of `MaterializedBaseLearnerReport`s. If
+        `ReportMaterializer` is not supplied to the estimator, all_reports is
+        `None`. If `ReportMaterializer` is supplied to the estimator and t=0,
+        all_reports is an empty List. Otherwise, all_reports is a sequence of
+        Lists. Each element of the sequence is a List containing all the
+        `MaterializedBaseLearnerReport`s in an AdaNet iteration, starting from
+        iteration 0, and ending at iteration t-1.
 
     Returns:
       A list of `adanet.BaseLearnerBuilders`.

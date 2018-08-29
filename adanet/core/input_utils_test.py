@@ -77,8 +77,8 @@ class InputUtilsTest(parameterized.TestCase, tf.test.TestCase):
               }))
       if isinstance(got_labels, tf.Tensor):
         self.assertAllClose(
-            sess.run(labels),
-            sess.run(got_labels, feed_dict={got_labels: label}))
+            sess.run(labels), sess.run(
+                got_labels, feed_dict={got_labels: label}))
       else:
         self.assertAllClose(
             sess.run(labels),

@@ -129,8 +129,8 @@ class _IterationBuilder(object):
         BaseLearners` to the graph. Each base learner is then wrapped in a
         `_Candidate` to train.
       features: Dictionary of `Tensor` objects keyed by feature name.
-      mode: Defines whether this is training, evaluation or prediction.
-        See `ModeKeys`.
+      mode: Defines whether this is training, evaluation or prediction. See
+        `ModeKeys`.
       labels: `Tensor` of labels. Can be `None`.
       previous_ensemble_summary: The `_ScopedSummary` for the previous ensemble.
       previous_ensemble: Optional `Ensemble` for iteration t-1.
@@ -284,8 +284,8 @@ class _IterationBuilder(object):
 
     Args:
       candidates: List of `_Candidate` instances to train.
-      mode: Defines whether this is training, evaluation or inference.
-        The train op is only non-None during `TRAIN`. See `ModeKeys`.
+      mode: Defines whether this is training, evaluation or inference. The train
+        op is only non-None during `TRAIN`. See `ModeKeys`.
       step: Integer `Variable` for the current step of the iteration, as opposed
         to the global step.
 
@@ -421,8 +421,8 @@ class _IterationBuilder(object):
     Args:
       candidates: List of `_Candidate` instances to compare.
       best_candidate_index: `Tensor` index of the best candidate in the list.
-      mode: Defines whether this is training, evaluation or inference.
-        Loss is always None during inference. See `ModeKeys`.
+      mode: Defines whether this is training, evaluation or inference. Loss is
+        always None during inference. See `ModeKeys`.
 
     Returns:
       Float `Tensor` of the best candidate's loss.
@@ -445,9 +445,8 @@ class _IterationBuilder(object):
     Args:
       candidates: List of `_Candidate` instances to compare.
       best_candidate_index: `Tensor` index of the best candidate in the list.
-      mode: Defines whether this is training, evaluation or inference.
-        Export outputs are always None during training and evaluation. See
-        `ModeKeys`.
+      mode: Defines whether this is training, evaluation or inference. Export
+        outputs are always None during training and evaluation. See `ModeKeys`.
       best_predictions: A `Tensor` or dictionary of `Tensor`s representing the
         best candidate's predictions (depending on what the base learners
         return).

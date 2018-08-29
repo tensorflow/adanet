@@ -120,15 +120,7 @@ class Ensemble(
         variables.). For example, it should not trigger the `update_op` or
         require any input fetching.
       export_outputs: Describes the output signatures to be exported to
-        `SavedModel` and used during serving.
-        A dict `{name: output}` where:
-        * name: An arbitrary name for this output.
-        * output: an `ExportOutput` object such as `ClassificationOutput`,
-            `RegressionOutput`, or `PredictOutput`.
-        Single-headed models only need to specify one entry in this dictionary.
-        Multi-headed models should specify one entry for each head, one of
-        which must be named using
-        signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY.
+        `SavedModel` and used during serving. See `tf.estimator.EstimatorSpec`.
 
     Returns:
       An `Ensemble` object.
@@ -185,12 +177,11 @@ class _EnsembleBuilder(object):
       mixture_weight_type: The `adanet.MixtureWeightType` defining which mixture
         weight type to learn.
       mixture_weight_initializer: The initializer for mixture_weights. When
-        `None`, the default is different according to `mixture_weight_type`:
-        * `SCALAR`: Initializes to 1/N where N is the number of base learners
-          in the ensemble giving a uniform average.
-        * `VECTOR`: Initializes each entry to 1/N where N is the number of base
-          learners in the ensemble giving a uniform average.
-        * `MATRIX`: Uses `tf.zeros_initializer`.
+        `None`, the default is different according to `mixture_weight_type`.
+        `SCALAR` initializes to 1/N where N is the number of base learners in
+        the ensemble giving a uniform average. `VECTOR` initializes each entry
+        to 1/N where N is the number of base learners in the ensemble giving a
+        uniform average. `MATRIX` uses `tf.zeros_initializer`.
       warm_start_mixture_weights: Whether, at the beginning of an iteration, to
         initialize the mixture weights of the base learners from the previous
         ensemble to their learned value at the previous iteration, as opposed to
@@ -238,8 +229,8 @@ class _EnsembleBuilder(object):
       ensemble: The recipient `Ensemble` for the `BaseLearner`.
       base_learner_builder: A `adanet.BaseLearnerBuilder` instance which defines
         how to train the base learner and ensemble mixture weights.
-      iteration_step: Integer `Tensor` representing the step since the
-        beginning of the current iteration, as opposed to the global step.
+      iteration_step: Integer `Tensor` representing the step since the beginning
+        of the current iteration, as opposed to the global step.
       summary: A `_ScopedSummary` instance for recording ensemble summaries.
       features: Input `dict` of `Tensor` objects.
       mode: Estimator's `ModeKeys`.
@@ -325,8 +316,8 @@ class _EnsembleBuilder(object):
       bias: `Tensor` bias vector for the ensemble logits.
       features: Input `dict` of `Tensor` objects.
       mode: Estimator `ModeKeys` indicating training, evaluation, or inference.
-      iteration_step: Integer `Tensor` representing the step since the
-        beginning of the current iteration, as opposed to the global step.
+      iteration_step: Integer `Tensor` representing the step since the beginning
+        of the current iteration, as opposed to the global step.
       labels: Labels `Tensor`, or `dict` of same. Can be None during inference.
       base_learner_builder: A `adanet.BaseLearnerBuilder` instance which defines
         how to train the base learner and ensemble mixture weights.
@@ -554,8 +545,7 @@ class _EnsembleBuilder(object):
           last_layer = tf.reshape(last_layer, [-1, last_layer_size])
         logits = tf.matmul(last_layer, weight)
         if ndims == 3:
-          logits = tf.reshape(logits,
-                              [batch_size, -1, logits_dimension])
+          logits = tf.reshape(logits, [batch_size, -1, logits_dimension])
       else:
         logits = tf.multiply(base_learner.logits, weight)
 

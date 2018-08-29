@@ -344,9 +344,8 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
         base_learner_report_materialized = (
             base_learner_reports_materialized_dict[
                 want_base_learner_report_materialized.name])
-        self.assertEqual(
-            iteration_number,
-            base_learner_report_materialized.iteration_number)
+        self.assertEqual(iteration_number,
+                         base_learner_report_materialized.iteration_number)
         self.assertEqual(
             set(want_base_learner_report_materialized.hparams.keys()),
             set(base_learner_report_materialized.hparams.keys()))

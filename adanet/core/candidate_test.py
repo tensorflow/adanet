@@ -152,8 +152,8 @@ class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
       adanet_losses = []
       is_training = True
       for _ in range(len(want_adanet_losses)):
-        is_training, adanet_loss = sess.run(
-            (candidate.is_training, candidate.adanet_loss))
+        is_training, adanet_loss = sess.run((candidate.is_training,
+                                             candidate.adanet_loss))
         adanet_losses.append(adanet_loss)
         sess.run((fake_train_op, tf.assign_add(iteration_step, 1)))
 
