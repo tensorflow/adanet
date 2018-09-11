@@ -23,6 +23,9 @@ import collections
 
 from adanet.core.base_learner_report import BaseLearnerReport
 from adanet.core.summary import _ScopedSummary
+
+import numpy as np
+
 import tensorflow as tf
 
 
@@ -65,8 +68,10 @@ class _Iteration(
       ValueError: If validation fails.
     """
 
-    if not isinstance(number, int) or number < 0:
-      raise ValueError("number must be an integer greater than 0")
+    if not isinstance(number, int) and not isinstance(number, np.integer):
+      raise ValueError("number must be an integer")
+    if number < 0:
+      raise ValueError("number must be greater than 0 got %d" % (number))
     if not isinstance(candidates, list) or not candidates:
       raise ValueError("candidates must be a non-empty list")
     if estimator_spec is None:
