@@ -74,8 +74,13 @@ class Evaluator(object):
     """
 
     evals_completed = 0
-    logging_frequency = (1 if (self.steps is None or self.steps < 10) else
-                         math.floor(self.steps / 10.))
+    if self.steps is None:
+      logging_frequency = 1000
+    elif self.steps < 10:
+      logging_frequency = 1
+    else:
+      logging_frequency = math.floor(self.steps / 10.)
+
     adanet_losses = [
         tf.metrics.mean(ensemble.adanet_loss) for ensemble in ensembles
     ]
@@ -85,12 +90,10 @@ class Evaluator(object):
         break
       try:
         evals_completed += 1
-        if self.steps is None:
-          tf.logging.info("Ensemble evaluation [%d]", evals_completed)
-        elif (evals_completed % logging_frequency == 0 or
-              self.steps == evals_completed):
-          tf.logging.info("Ensemble evaluation [%d/%d]", evals_completed,
-                          self.steps)
+        if (evals_completed % logging_frequency == 0 or
+            self.steps == evals_completed):
+          tf.logging.info("Ensemble evaluation [%d/%s]", evals_completed,
+                          self.steps or "??")
         sess.run(adanet_losses)
       except tf.errors.OutOfRangeError:
         tf.logging.info("Encountered end of input after %d evaluations",

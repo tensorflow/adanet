@@ -28,7 +28,7 @@ import tensorflow as tf
 class ReportMaterializer(object):
   """Materializes BaseLearnerReport."""
 
-  def __init__(self, input_fn, steps):
+  def __init__(self, input_fn, steps=None):
     """Initializes an `ReportMaterializer` instance.
 
     Requires an input function `input_fn` that returns a tuple of:
@@ -108,22 +108,25 @@ class ReportMaterializer(object):
           "metrics": metrics
       }
 
+    if self.steps is None:
+      logging_frequency = 1000
+    elif self.steps < 10:
+      logging_frequency = 1
+    else:
+      logging_frequency = math.floor(self.steps / 10.)
+
     steps_completed = 0
     while True:
       if self.steps is not None and steps_completed == self.steps:
         break
       try:
-        sess.run(metric_update_ops)
-
         steps_completed += 1
-        log_frequency = (1 if (self.steps is None or self.steps < 10) else
-                         math.floor(self.steps / 10.))
-        if self.steps is None:
-          tf.logging.info("Report materialization [%d]", steps_completed)
-        elif (steps_completed % log_frequency == 0 or
-              self.steps == steps_completed):
-          tf.logging.info("Report materialization [%d/%d]", steps_completed,
-                          self.steps)
+        if (steps_completed % logging_frequency == 0 or
+            self.steps == steps_completed):
+          tf.logging.info("Report materialization [%d/%s]", steps_completed,
+                          self.steps or "??")
+
+        sess.run(metric_update_ops)
       except tf.errors.OutOfRangeError:
         tf.logging.info(
             "Encountered end of input during report materialization")

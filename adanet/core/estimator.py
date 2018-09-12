@@ -204,13 +204,13 @@ class Estimator(tf.estimator.Estimator):
                head,
                base_learner_builder_generator,
                max_iteration_steps,
+               report_materializer,
                mixture_weight_type=MixtureWeightType.SCALAR,
                mixture_weight_initializer=None,
                warm_start_mixture_weights=False,
                adanet_lambda=0.,
                adanet_beta=0.,
                evaluator=None,
-               report_materializer=None,
                use_bias=False,
                replicate_ensemble_in_training=False,
                adanet_loss_decay=.9,
@@ -251,6 +251,11 @@ class Estimator(tf.estimator.Estimator):
       max_iteration_steps: Total number of steps for which to train candidates
         per iteration. If `OutOfRange` or `StopIteration` occurs in the middle,
         training stops before `max_iteration_steps` steps.
+      report_materializer: A `ReportMaterializer` for materializing a
+        `BaseLearnerBuilder`'s `BaseLearnerReports` into
+        `MaterializedBaseLearnerReport`s. These reports are made available to
+        the BaseLearnerBuilderGenerator at the next iteration, so that it can
+        adapt its search space.
       mixture_weight_type: The `adanet.MixtureWeightType` defining which mixture
         weight type to learn in the linear combination of base learner outputs.
       mixture_weight_initializer: The initializer for mixture_weights. When
@@ -274,10 +279,6 @@ class Estimator(tf.estimator.Estimator):
         mode using the training set, or a holdout set. When `None`, they are
         compared using a moving average of their `Ensemble`'s AdaNet loss during
         training.
-      report_materializer: A `ReportMaterializer` for materializing the
-        `BaseLearnerReport`s obtained from the `BaseLearnerBuilder`s' in each
-        AdaNet iteration in to `MaterializedBaseLearnerReport`s. When `None`,
-        does not materialize any `BaseLearnerReport`s.
       use_bias: Whether to add a bias term to the ensemble's logits. Adding a
         bias allows the ensemble to learn a shift in the data, often leading to
         more stable training and better predictions.
@@ -561,13 +562,11 @@ class Estimator(tf.estimator.Estimator):
       input_fn = self._placeholder_input_fn
     self._call_adanet_model_fn(input_fn, tf.estimator.ModeKeys.EVAL, params)
 
-    # Then, if report_materializer exists, materialize and store the base
-    # learner reports.
-    if self._report_materializer:
-      params = self.params.copy()
-      params[self._Keys.MATERIALIZE_REPORT] = True
-      self._call_adanet_model_fn(self._report_materializer.input_fn,
-                                 tf.estimator.ModeKeys.EVAL, params)
+    # Then materialize and store the base learner reports.
+    params = self.params.copy()
+    params[self._Keys.MATERIALIZE_REPORT] = True
+    self._call_adanet_model_fn(self._report_materializer.input_fn,
+                               tf.estimator.ModeKeys.EVAL, params)
 
     # Then freeze the best ensemble's graph in predict mode.
     params = self.params.copy()
@@ -866,9 +865,7 @@ class Estimator(tf.estimator.Estimator):
   def _collate_base_learner_reports(self, iteration_number):
     """Prepares BaseLearnerReports to be passed to BaseLearnerBuilderGenerator.
 
-    If `ReportMaterializer` is not provided to AdaNet Estimator's constructor,
-    returns (None, None).
-    Otherwise, reads MaterializedBaseLearnerReports from past iterations,
+    Reads MaterializedBaseLearnerReports from past iterations,
     collates those that were included in previous_ensemble into
     previous_ensemble_reports as a List of MaterializedBaseLearnerReports,
     and collates all reports from previous iterations into all_reports as
@@ -882,50 +879,45 @@ class Estimator(tf.estimator.Estimator):
        materialized_base_learner_reports: List<MaterializedBaseLearnerReport>)
     """
 
-    previous_ensemble_reports = None
-    all_reports = None
+    materialized_base_learner_reports_all = (
+        self._report_accessor.read_iteration_reports())
+    previous_ensemble_reports = []
+    all_reports = []
 
-    # TODO: Require report_materializer for all AdaNet Estimators.
-    if self._report_materializer:
-      materialized_base_learner_reports_all = (
-          self._report_accessor.read_iteration_reports())
-      previous_ensemble_reports = []
-      all_reports = []
+    # Since the number of iteration reports changes after the
+    # MATERIALIZE_REPORT phase, we need to make sure that we always pass the
+    # same reports to the BaseLearnerBuilderGenerator in the same iteration,
+    # otherwise the graph that is built in the FREEZE_ENSEMBLE phase would be
+    # different from the graph built in the training phase.
 
-      # Since the number of iteration reports changes after the
-      # MATERIALIZE_REPORT phase, we need to make sure that we always pass the
-      # same reports to the BaseLearnerBuilderGenerator in the same iteration,
-      # otherwise the graph that is built in the FREEZE_ENSEMBLE phase would be
-      # different from the graph built in the training phase.
+    # Iteration 0 should have 0 iteration reports passed to the
+    #   BaseLearnerBuilderGenerator, since there are no previous iterations.
+    # Iteration 1 should have 1 list of reports for BaseLearnerBuilders
+    #   generated in iteration 0.
+    # Iteration 2 should have 2 lists of reports -- one for iteration 0,
+    #   one for iteration 1. Note that the list of reports for iteration >= 1
+    #   should contain "previous_ensemble", in addition to the
+    #   BaseLearnerBuilders at the start of that iteration.
+    # Iteration t should have t lists of reports.
 
-      # Iteration 0 should have 0 iteration reports passed to the
-      #   BaseLearnerBuilderGenerator, since there are no previous iterations.
-      # Iteration 1 should have 1 list of reports for BaseLearnerBuilders
-      #   generated in iteration 0.
-      # Iteration 2 should have 2 lists of reports -- one for iteration 0,
-      #   one for iteration 1. Note that the list of reports for iteration >= 1
-      #   should contain "previous_ensemble", in addition to the
-      #   BaseLearnerBuilders at the start of that iteration.
-      # Iteration t should have t lists of reports.
+    for i, iteration_reports in enumerate(
+        materialized_base_learner_reports_all):
 
-      for i, iteration_reports in enumerate(
-          materialized_base_learner_reports_all):
+      # This ensures that the FREEZE_ENSEMBLE phase does not pass the reports
+      # generated in the previous phase of the same iteration to the
+      # BaseLearnerBuilderGenerator when building the graph.
+      if i >= iteration_number:
+        break
 
-        # This ensures that the FREEZE_ENSEMBLE phase does not pass the reports
-        # generated in the previous phase of the same iteration to the
-        # BaseLearnerBuilderGenerator when building the graph.
-        if i >= iteration_number:
-          break
+      # Assumes that only one base learner is added to the ensemble in
+      # each iteration.
+      chosen_blb_in_this_iteration = [
+          base_learner_report for base_learner_report in iteration_reports
+          if base_learner_report.included_in_final_ensemble
+      ][0]
+      previous_ensemble_reports.append(chosen_blb_in_this_iteration)
 
-        # Assumes that only one base learner is added to the ensemble in
-        # each iteration.
-        chosen_blb_in_this_iteration = [
-            base_learner_report for base_learner_report in iteration_reports
-            if base_learner_report.included_in_final_ensemble
-        ][0]
-        previous_ensemble_reports.append(chosen_blb_in_this_iteration)
-
-        all_reports.extend(iteration_reports)
+      all_reports.extend(iteration_reports)
 
     return previous_ensemble_reports, all_reports
 

@@ -492,25 +492,6 @@ class EstimatorTest(EstimatorTestCase):
           1.,
       "want_loss":
           .00834,
-  }, {
-      "testcase_name":
-          "report_materializer",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([
-              _DNNBaseLearnerBuilder("dnn"),
-              _DNNBaseLearnerBuilder("dnn2", layer_size=3)
-          ]),
-      "evaluator":
-          Evaluator(input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=3),
-      "report_materializer":
-          ReportMaterializer(
-              input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=3),
-      "max_iteration_steps":
-          200,
-      "want_accuracy":
-          1.,
-      "want_loss":
-          .00176,
   })
   def test_lifecycle(self,
                      base_learner_builder_generator,
@@ -519,7 +500,6 @@ class EstimatorTest(EstimatorTestCase):
                      max_iteration_steps,
                      mixture_weight_type=MixtureWeightType.MATRIX,
                      evaluator=None,
-                     report_materializer=None,
                      use_bias=True,
                      replicate_ensemble_in_training=False,
                      hooks=None,
@@ -528,6 +508,8 @@ class EstimatorTest(EstimatorTestCase):
     """Train entire estimator lifecycle using XOR dataset."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
+    report_materializer = ReportMaterializer(
+        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
@@ -615,18 +597,6 @@ class EstimatorTest(EstimatorTestCase):
               dimension=2)),
       })
   def test_categorical_columns(self, feature_column):
-    estimator = Estimator(
-        head=tf.contrib.estimator.binary_classification_head(),
-        base_learner_builder_generator=SimpleBaseLearnerBuilderGenerator([
-            _SimpleBaseLearnerBuilder(
-                name="simple", feature_columns=[feature_column])
-        ]),
-        mixture_weight_type=MixtureWeightType.MATRIX,
-        mixture_weight_initializer=tf.zeros_initializer(),
-        warm_start_mixture_weights=True,
-        max_iteration_steps=1,
-        use_bias=True,
-        model_dir=self.test_subdirectory)
 
     def train_input_fn():
       input_features = {
@@ -634,6 +604,21 @@ class EstimatorTest(EstimatorTestCase):
       }
       input_labels = tf.constant([[1.], [0.]], name="starts_with_a")
       return input_features, input_labels
+
+    report_materializer = ReportMaterializer(input_fn=train_input_fn, steps=1)
+    estimator = Estimator(
+        head=tf.contrib.estimator.binary_classification_head(),
+        base_learner_builder_generator=SimpleBaseLearnerBuilderGenerator([
+            _SimpleBaseLearnerBuilder(
+                name="simple", feature_columns=[feature_column])
+        ]),
+        report_materializer=report_materializer,
+        mixture_weight_type=MixtureWeightType.MATRIX,
+        mixture_weight_initializer=tf.zeros_initializer(),
+        warm_start_mixture_weights=True,
+        max_iteration_steps=1,
+        use_bias=True,
+        model_dir=self.test_subdirectory)
 
     estimator.train(input_fn=train_input_fn, max_steps=3)
 
@@ -683,10 +668,13 @@ class EstimatorTest(EstimatorTestCase):
                        max_iteration_steps,
                        steps=None,
                        max_steps=10):
+    report_materializer = ReportMaterializer(
+        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     with self.assertRaises(ValueError):
       estimator = Estimator(
           head=_head(),
           base_learner_builder_generator=base_learner_builder_generator,
+          report_materializer=report_materializer,
           mixture_weight_type=MixtureWeightType.MATRIX,
           mixture_weight_initializer=tf.zeros_initializer(),
           warm_start_mixture_weights=True,
@@ -703,9 +691,12 @@ class EstimatorCallingModelFnDirectlyTest(EstimatorTestCase):
   def test_calling_model_fn_directly(self):
     base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
         [_DNNBaseLearnerBuilder("dnn")])
+    report_materializer = ReportMaterializer(
+        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        report_materializer=report_materializer,
         max_iteration_steps=3,
         use_bias=True,
         model_dir=self.test_subdirectory)
@@ -756,9 +747,12 @@ class EstimatorCheckpointTest(EstimatorTestCase):
     )
     base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
         [_DNNBaseLearnerBuilder("dnn")])
+    report_materializer = ReportMaterializer(
+        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
@@ -846,9 +840,12 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
     base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
         [_DNNBaseLearnerBuilder("dnn", mixture_weight_learning_rate=.01)])
+    report_materializer = ReportMaterializer(
+        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
@@ -974,9 +971,12 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
         _LinearBaseLearnerBuilder(
             "linear", mixture_weight_learning_rate=.01, seed=seed)
     ])
+    report_materializer = ReportMaterializer(
+        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=head,
         base_learner_builder_generator=base_learner_builder_generator,
+        report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
@@ -1040,9 +1040,12 @@ class EstimatorMembersOverrideTest(EstimatorTestCase):
     config = tf.estimator.RunConfig()
     base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
         [_DNNBaseLearnerBuilder("dnn")])
+    report_materializer = ReportMaterializer(
+        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     adanet = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
@@ -1115,9 +1118,12 @@ class EstimatorDifferentFeaturesPerModeTest(EstimatorTestCase):
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
     base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
         [_DNNBaseLearnerBuilder("dnn")])
+    report_materializer = ReportMaterializer(
+        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
@@ -1165,9 +1171,12 @@ class EstimatorExportSavedModelForPredictTest(EstimatorTestCase):
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
     base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
         [_DNNBaseLearnerBuilder("dnn")])
+    report_materializer = ReportMaterializer(
+        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
@@ -1209,9 +1218,12 @@ class EstimatorExportSavedModelForEvalTest(EstimatorTestCase):
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
     base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
         [_DNNBaseLearnerBuilder("dnn")])
+    report_materializer = ReportMaterializer(
+        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
+        report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
