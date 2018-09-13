@@ -204,13 +204,13 @@ class Estimator(tf.estimator.Estimator):
                head,
                base_learner_builder_generator,
                max_iteration_steps,
-               report_materializer,
                mixture_weight_type=MixtureWeightType.SCALAR,
                mixture_weight_initializer=None,
                warm_start_mixture_weights=False,
                adanet_lambda=0.,
                adanet_beta=0.,
                evaluator=None,
+               report_materializer=None,
                use_bias=False,
                replicate_ensemble_in_training=False,
                adanet_loss_decay=.9,
@@ -251,11 +251,6 @@ class Estimator(tf.estimator.Estimator):
       max_iteration_steps: Total number of steps for which to train candidates
         per iteration. If `OutOfRange` or `StopIteration` occurs in the middle,
         training stops before `max_iteration_steps` steps.
-      report_materializer: A `ReportMaterializer` for materializing a
-        `BaseLearnerBuilder`'s `BaseLearnerReports` into
-        `MaterializedBaseLearnerReport`s. These reports are made available to
-        the BaseLearnerBuilderGenerator at the next iteration, so that it can
-        adapt its search space.
       mixture_weight_type: The `adanet.MixtureWeightType` defining which mixture
         weight type to learn in the linear combination of base learner outputs.
       mixture_weight_initializer: The initializer for mixture_weights. When
@@ -279,6 +274,13 @@ class Estimator(tf.estimator.Estimator):
         mode using the training set, or a holdout set. When `None`, they are
         compared using a moving average of their `Ensemble`'s AdaNet loss during
         training.
+      report_materializer: A `ReportMaterializer` for materializing a
+        `BaseLearnerBuilder`'s `BaseLearnerReports` into
+        `MaterializedBaseLearnerReport`s. These reports are made available to
+        the BaseLearnerBuilderGenerator at the next iteration, so that it can
+        adapt its search space. When `None`, the BaseLearnerBuilderGenerators'
+        `generate_candidates` method will receive empty Lists for their
+        `previous_ensemble_reports` and `all_reports` arguments.
       use_bias: Whether to add a bias term to the ensemble's logits. Adding a
         bias allows the ensemble to learn a shift in the data, often leading to
         more stable training and better predictions.
@@ -563,10 +565,11 @@ class Estimator(tf.estimator.Estimator):
     self._call_adanet_model_fn(input_fn, tf.estimator.ModeKeys.EVAL, params)
 
     # Then materialize and store the base learner reports.
-    params = self.params.copy()
-    params[self._Keys.MATERIALIZE_REPORT] = True
-    self._call_adanet_model_fn(self._report_materializer.input_fn,
-                               tf.estimator.ModeKeys.EVAL, params)
+    if self._report_materializer:
+      params = self.params.copy()
+      params[self._Keys.MATERIALIZE_REPORT] = True
+      self._call_adanet_model_fn(self._report_materializer.input_fn,
+                                 tf.estimator.ModeKeys.EVAL, params)
 
     # Then freeze the best ensemble's graph in predict mode.
     params = self.params.copy()
@@ -1000,8 +1003,11 @@ class Estimator(tf.estimator.Estimator):
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
     previous_ensemble_summary = _ScopedSummary(self._Keys.FROZEN_ENSEMBLE_NAME,
                                                skip_summaries)
-    previous_ensemble_reports, all_reports = self._collate_base_learner_reports(
-        iteration_number)
+
+    previous_ensemble_reports, all_reports = [], []
+    if self._report_materializer:
+      previous_ensemble_reports, all_reports = (
+          self._collate_base_learner_reports(iteration_number))
 
     with tf.variable_scope("adanet"):
       previous_weighted_base_learners, bias = ensemble

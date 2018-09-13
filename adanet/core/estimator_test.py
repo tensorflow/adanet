@@ -492,6 +492,23 @@ class EstimatorTest(EstimatorTestCase):
           1.,
       "want_loss":
           .00834,
+  }, {
+      "testcase_name":
+          "report_materializer",
+      "base_learner_builder_generator":
+          SimpleBaseLearnerBuilderGenerator([
+              _DNNBaseLearnerBuilder("dnn"),
+              _DNNBaseLearnerBuilder("dnn2", layer_size=3)
+          ]),
+      "report_materializer":
+          ReportMaterializer(
+              input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1),
+      "max_iteration_steps":
+          200,
+      "want_accuracy":
+          1.,
+      "want_loss":
+          .00176,
   })
   def test_lifecycle(self,
                      base_learner_builder_generator,
@@ -504,12 +521,11 @@ class EstimatorTest(EstimatorTestCase):
                      replicate_ensemble_in_training=False,
                      hooks=None,
                      max_steps=300,
-                     steps=None):
+                     steps=None,
+                     report_materializer=None):
     """Train entire estimator lifecycle using XOR dataset."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
-    report_materializer = ReportMaterializer(
-        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
         base_learner_builder_generator=base_learner_builder_generator,
@@ -559,43 +575,41 @@ class EstimatorTest(EstimatorTestCase):
         export_dir_base=self.test_subdirectory,
         serving_input_receiver_fn=serving_input_fn)
 
-  @parameterized.named_parameters(
-      {
-          "testcase_name":
-              "hash_bucket_with_one_hot",
-          "feature_column": (tf.feature_column.indicator_column(
-              categorical_column=(
-                  tf.feature_column.categorical_column_with_hash_bucket(
-                      key="human_names", hash_bucket_size=4, dtype=tf.string)))
-                            ),
-      }, {
-          "testcase_name":
-              "vocab_list_with_one_hot",
-          "feature_column": (tf.feature_column.indicator_column(
-              categorical_column=(
-                  tf.feature_column.categorical_column_with_vocabulary_list(
-                      key="human_names",
-                      vocabulary_list=["alice", "bob"],
-                      dtype=tf.string)))),
-      }, {
-          "testcase_name":
-              "hash_bucket_with_embedding",
-          "feature_column": (tf.feature_column.embedding_column(
-              categorical_column=(
-                  tf.feature_column.categorical_column_with_hash_bucket(
-                      key="human_names", hash_bucket_size=4, dtype=tf.string)),
-              dimension=2)),
-      }, {
-          "testcase_name":
-              "vocab_list_with_embedding",
-          "feature_column": (tf.feature_column.embedding_column(
-              categorical_column=(
-                  tf.feature_column.categorical_column_with_vocabulary_list(
-                      key="human_names",
-                      vocabulary_list=["alice", "bob"],
-                      dtype=tf.string)),
-              dimension=2)),
-      })
+  @parameterized.named_parameters({
+      "testcase_name":
+          "hash_bucket_with_one_hot",
+      "feature_column": (tf.feature_column.indicator_column(
+          categorical_column=(
+              tf.feature_column.categorical_column_with_hash_bucket(
+                  key="human_names", hash_bucket_size=4, dtype=tf.string)))),
+  }, {
+      "testcase_name":
+          "vocab_list_with_one_hot",
+      "feature_column": (tf.feature_column.indicator_column(
+          categorical_column=(
+              tf.feature_column.categorical_column_with_vocabulary_list(
+                  key="human_names",
+                  vocabulary_list=["alice", "bob"],
+                  dtype=tf.string)))),
+  }, {
+      "testcase_name":
+          "hash_bucket_with_embedding",
+      "feature_column": (tf.feature_column.embedding_column(
+          categorical_column=(
+              tf.feature_column.categorical_column_with_hash_bucket(
+                  key="human_names", hash_bucket_size=4, dtype=tf.string)),
+          dimension=2)),
+  }, {
+      "testcase_name":
+          "vocab_list_with_embedding",
+      "feature_column": (tf.feature_column.embedding_column(
+          categorical_column=(
+              tf.feature_column.categorical_column_with_vocabulary_list(
+                  key="human_names",
+                  vocabulary_list=["alice", "bob"],
+                  dtype=tf.string)),
+          dimension=2)),
+  })
   def test_categorical_columns(self, feature_column):
 
     def train_input_fn():
@@ -887,75 +901,72 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
             "adanet_weighted_ensemble/base_learner_0", candidate_subdir),
         places=3)
 
-  @parameterized.named_parameters(
-      {
-          "testcase_name": "none_metrics",
-          "head": _EvalMetricsHead(None),
-          "want_summaries": [],
-          "want_loss": .910,
-      }, {
-          "testcase_name": "empty_metrics",
-          "head": _EvalMetricsHead({}),
-          "want_summaries": [],
-          "want_loss": .910,
-      }, {
-          "testcase_name": "evaluation_name",
-          "head": _EvalMetricsHead({}),
-          "evaluation_name": "continuous",
-          "want_summaries": [],
-          "want_loss": .910,
-          "global_subdir": "eval_continuous",
-          "candidate_subdir": "candidate/linear/eval_continuous",
-      }, {
-          "testcase_name":
-              "regression_head",
-          "head":
-              tf.contrib.estimator.regression_head(
-                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
-          "want_summaries": [
-              "average_loss", "average_loss/adanet/adanet_weighted_ensemble"
-          ],
-          "want_loss":
-              .691,
-      }, {
-          "testcase_name":
-              "binary_classification_head",
-          "head":
-              tf.contrib.estimator.binary_classification_head(
-                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
-          "want_summaries": [
-              "average_loss", "average_loss/adanet/adanet_weighted_ensemble"
-          ],
-          "want_loss":
-              .671,
-      }, {
-          "testcase_name":
-              "all_metrics",
-          "head":
-              _EvalMetricsHead({
-                  "float32":
-                      _FakeMetric(1., tf.float32),
-                  "float64":
-                      _FakeMetric(1., tf.float64),
-                  "serialized_summary":
-                      _FakeMetric(
-                          tf.Summary(value=[
-                              tf.Summary.Value(
-                                  tag="summary_tag", simple_value=1.)
-                          ]).SerializeToString(),
-                          tf.string),
-              }),
-          "want_summaries": [
-              "float32",
-              "float64",
-              "serialized_summary/0",
-              "float32/adanet/adanet_weighted_ensemble",
-              "float64/adanet/adanet_weighted_ensemble",
-              "serialized_summary/adanet/adanet_weighted_ensemble/0",
-          ],
-          "want_loss":
-              .910,
-      })
+  @parameterized.named_parameters({
+      "testcase_name": "none_metrics",
+      "head": _EvalMetricsHead(None),
+      "want_summaries": [],
+      "want_loss": .910,
+  }, {
+      "testcase_name": "empty_metrics",
+      "head": _EvalMetricsHead({}),
+      "want_summaries": [],
+      "want_loss": .910,
+  }, {
+      "testcase_name": "evaluation_name",
+      "head": _EvalMetricsHead({}),
+      "evaluation_name": "continuous",
+      "want_summaries": [],
+      "want_loss": .910,
+      "global_subdir": "eval_continuous",
+      "candidate_subdir": "candidate/linear/eval_continuous",
+  }, {
+      "testcase_name":
+          "regression_head",
+      "head":
+          tf.contrib.estimator.regression_head(
+              loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+      "want_summaries": [
+          "average_loss", "average_loss/adanet/adanet_weighted_ensemble"
+      ],
+      "want_loss":
+          .691,
+  }, {
+      "testcase_name":
+          "binary_classification_head",
+      "head":
+          tf.contrib.estimator.binary_classification_head(
+              loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+      "want_summaries": [
+          "average_loss", "average_loss/adanet/adanet_weighted_ensemble"
+      ],
+      "want_loss":
+          .671,
+  }, {
+      "testcase_name":
+          "all_metrics",
+      "head":
+          _EvalMetricsHead({
+              "float32":
+                  _FakeMetric(1., tf.float32),
+              "float64":
+                  _FakeMetric(1., tf.float64),
+              "serialized_summary":
+                  _FakeMetric(
+                      tf.Summary(value=[
+                          tf.Summary.Value(tag="summary_tag", simple_value=1.)
+                      ]).SerializeToString(), tf.string),
+          }),
+      "want_summaries": [
+          "float32",
+          "float64",
+          "serialized_summary/0",
+          "float32/adanet/adanet_weighted_ensemble",
+          "float64/adanet/adanet_weighted_ensemble",
+          "serialized_summary/adanet/adanet_weighted_ensemble/0",
+      ],
+      "want_loss":
+          .910,
+  })
   def test_eval_metrics(self,
                         head,
                         want_loss,
