@@ -151,14 +151,10 @@ class _NASNet(adanet.BaseLearnerBuilder):
     loss += tf.losses.get_regularization_loss(scope=self._name_scope)
 
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
-      if self._clip_gradients == 0:
-        return optimizer.minimize(loss, var_list=var_list)
-      grads_and_vars = optimizer.compute_gradients(loss=loss, var_list=var_list)
-      gradients, variables = zip(*grads_and_vars)
-      clipped_gradients, _ = tf.clip_by_global_norm(gradients,
-                                                    self._clip_gradients)
-      grads_and_vars = list(zip(clipped_gradients, variables))
-      return optimizer.apply_gradients(grads_and_vars)
+      if self._clip_gradients > 0:
+        optimizer = tf.contrib.estimator.clip_gradients_by_norm(
+            optimizer, self._clip_gradients)
+      return optimizer.minimize(loss, var_list=var_list)
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
                                      iteration_step, summary):
