@@ -102,6 +102,7 @@ def dummy_ensemble(name,
     predictions = logits
   weighted_base_learners = [
       WeightedBaseLearner(
+          name=tf.constant(name),
           logits=dummy_tensor([2, 1], random_seed * 4),
           weight=dummy_tensor([2, 1], random_seed * 4),
           base_learner=BaseLearner(

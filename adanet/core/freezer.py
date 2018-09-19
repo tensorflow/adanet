@@ -36,6 +36,7 @@ class _EnsembleFreezer(object):
     * `COMPLEXITY`: base learner complexity `Tensor`.
     * `LAST_LAYER`: base learner's last layer `Tensor`.
     * `LOGITS`: base learner's mixture-weighted logits `Tensor`.
+    * `NAME`: base learner's name `Tensor`.
     * `PERSISTED_TENSORS`: base learner persisted `Tensors`.
     * `PERSISTED_TENSORS_SEPARATOR`: Separator symbol for persisted tensor keys.
     * `WEIGHT`: the mixture weight `Tensor` of each base learner.
@@ -45,6 +46,7 @@ class _EnsembleFreezer(object):
     COMPLEXITY = "complexity"
     LAST_LAYER = "last_layer"
     LOGITS = "logits"
+    NAME = "name"
     PERSISTED_TENSORS = "persisted_tensors"
     PERSISTED_TENSORS_SEPARATOR = "|"
     WEIGHT = "weight"
@@ -215,6 +217,7 @@ class _EnsembleFreezer(object):
     """
 
     tensors_to_persist = {
+        self.Keys.NAME: weighted_base_learner.name,
         self.Keys.WEIGHT: weighted_base_learner.weight,
         self.Keys.LOGITS: weighted_base_learner.logits,
     }
@@ -388,6 +391,7 @@ class _EnsembleFreezer(object):
         `WeightedBaseLearner` frozen at index.
     """
 
+    name = None
     weight = None
     logits = None
     for key in tf.get_default_graph().get_all_collection_keys():
@@ -404,6 +408,9 @@ class _EnsembleFreezer(object):
       field = self._weighted_base_learner_collection_key_field(key, index)
       if field is None:
         continue
+      if field == self.Keys.NAME:
+        name = frozen_tensor
+        continue
       if field == self.Keys.LOGITS:
         logits = frozen_tensor
         continue
@@ -412,12 +419,12 @@ class _EnsembleFreezer(object):
         continue
 
     # No weighted base learner found at given index.
-    if weight is None and logits is None:
+    if name is None and weight is None and logits is None:
       return None
 
     base_learner = self._reconstruct_base_learner(index)
     return WeightedBaseLearner(
-        logits=logits, weight=weight, base_learner=base_learner)
+        name=name, logits=logits, weight=weight, base_learner=base_learner)
 
   def _reconstruct_base_learner(self, index):
     """Reconstructs a `BaseLearner` from the graph's collections.

@@ -1019,6 +1019,11 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
     candidate_subdir = os.path.join(self.test_subdirectory, candidate_subdir)
     self.assertAlmostEqual(metrics["loss"],
                            _check_eventfile_for_keyword("loss", global_subdir))
+    self.assertIsNotNone(
+        _check_eventfile_for_keyword(
+            "architecture/adanet/ensembles/0",
+            global_subdir,
+        ))
     self.assertAlmostEqual(
         metrics["loss"],
         _check_eventfile_for_keyword(

@@ -109,8 +109,10 @@ def _create_base_learner_report_proto(materialized_base_learner_report):
       field = getattr(proto, field_name)
       if isinstance(value, bool):
         field[key].bool_value = value
-      elif isinstance(value, six.string_types):
-        field[key].string_value = value
+      elif isinstance(value, six.string_types) or isinstance(
+          value, six.binary_type):
+        # Proto requires unicode strings.
+        field[key].string_value = six.u(value)
       elif isinstance(value, int):
         field[key].int_value = value
       elif isinstance(value, float):

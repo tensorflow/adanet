@@ -66,13 +66,16 @@ def _simple_base_learner_fn(feature_columns,
             "some_persisted_tensor_constant": some_persisted_tensor_constant,
         }
       complexity = tf.constant(3, name="complexity")
-    base_learner = BaseLearner(
-        last_layer=predictions,
-        logits=predictions,
-        complexity=complexity,
-        persisted_tensors=persisted_tensors)
-    return WeightedBaseLearner(
-        logits=predictions, weight=w, base_learner=base_learner)
+      base_learner = BaseLearner(
+          last_layer=predictions,
+          logits=predictions,
+          complexity=complexity,
+          persisted_tensors=persisted_tensors)
+      return WeightedBaseLearner(
+          name=tf.constant("simple", name="name"),
+          logits=predictions,
+          weight=w,
+          base_learner=base_learner)
 
   return _simple
 
@@ -105,13 +108,16 @@ def _linear_base_learner_fn(keep_persisted_tensors=False, seed=42):
             }
         }
       complexity = tf.constant(3, name="complexity")
-    base_learner = BaseLearner(
-        last_layer=inputs,
-        logits=predictions,
-        complexity=complexity,
-        persisted_tensors=persisted_tensors)
-    return WeightedBaseLearner(
-        logits=predictions, weight=w, base_learner=base_learner)
+      base_learner = BaseLearner(
+          last_layer=inputs,
+          logits=predictions,
+          complexity=complexity,
+          persisted_tensors=persisted_tensors)
+      return WeightedBaseLearner(
+          name=tf.constant("linear", name="name"),
+          logits=predictions,
+          weight=w,
+          base_learner=base_learner)
 
   return _linear
 
@@ -142,13 +148,16 @@ def _dnn_base_learner_fn(keep_persisted_tensors=False, seed=42):
             "some_persisted_tensor_constant": some_persisted_tensor_constant,
         }
       complexity = tf.constant(6, name="complexity")
-    base_learner = BaseLearner(
-        last_layer=hidden_layer,
-        logits=predictions,
-        complexity=complexity,
-        persisted_tensors=persisted_tensors)
-    return WeightedBaseLearner(
-        logits=predictions, weight=w, base_learner=base_learner)
+      base_learner = BaseLearner(
+          last_layer=hidden_layer,
+          logits=predictions,
+          complexity=complexity,
+          persisted_tensors=persisted_tensors)
+      return WeightedBaseLearner(
+          name=tf.constant("dnn", name="name"),
+          logits=predictions,
+          weight=w,
+          base_learner=base_learner)
 
   return _dnn
 
@@ -211,342 +220,356 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
           sess.run(features, feed_dict={features["x"]: value}),
           sess.run(got, feed_dict={got["x"]: value}))
 
-  @parameterized.named_parameters(
-      {
-          "testcase_name":
-              "dnn_no_persisted_tensors",
-          "base_learner_fns": [_dnn_base_learner_fn()],
-          "features": {
-              "feature": [[4., 3.]]
-          },
-          "want_nodes": [
-              u"feature",
-              u"dnn/hidden_layer/weight",
-              u"dnn/hidden_layer/weight/read",
-              u"dnn/hidden_layer/bias",
-              u"dnn/hidden_layer/bias/read",
-              u"dnn/hidden_layer/MatMul",
-              u"dnn/hidden_layer/add",
-              u"dnn/logits/weight",
-              u"dnn/logits/weight/read",
-              u"dnn/logits/bias",
-              u"dnn/logits/bias/read",
-              u"dnn/logits/MatMul",
-              u"dnn/logits/add",
-              u"dnn/complexity",
-              u"bias",
-          ],
-          "want_consts": [
-              u"feature",
-              u"dnn/hidden_layer/weight",
-              u"dnn/hidden_layer/bias",
-              u"dnn/logits/weight",
-              u"dnn/logits/bias",
-              u"dnn/complexity",
-              u"bias",
-          ],
-      }, {
-          "testcase_name":
-              "dnn_unused_feature",
-          "base_learner_fns": [_dnn_base_learner_fn()],
-          "features": {
-              "feature": [[4., 3.]],
-              "unused": [[1., 2.]]
-          },
-          "want_nodes": [
-              u"feature",
-              u"unused",
-              u"dnn/hidden_layer/weight",
-              u"dnn/hidden_layer/weight/read",
-              u"dnn/hidden_layer/bias",
-              u"dnn/hidden_layer/bias/read",
-              u"dnn/hidden_layer/MatMul",
-              u"dnn/hidden_layer/add",
-              u"dnn/logits/weight",
-              u"dnn/logits/weight/read",
-              u"dnn/logits/bias",
-              u"dnn/logits/bias/read",
-              u"dnn/logits/MatMul",
-              u"dnn/logits/add",
-              u"dnn/complexity",
-              u"bias",
-          ],
-          "want_consts": [
-              u"feature",
-              u"unused",
-              u"dnn/hidden_layer/weight",
-              u"dnn/hidden_layer/bias",
-              u"dnn/logits/weight",
-              u"dnn/logits/bias",
-              u"dnn/complexity",
-              u"bias",
-          ],
-      }, {
-          "testcase_name":
-              "dnn_with_persisted_tensors",
-          "base_learner_fns": [
-              _dnn_base_learner_fn(keep_persisted_tensors=True)
-          ],
-          "features": {
-              "feature": [[4., 3.]]
-          },
-          "want_nodes": [
-              u"feature",
-              u"dnn/hidden_layer/weight",
-              u"dnn/hidden_layer/weight/read",
-              u"dnn/hidden_layer/bias",
-              u"dnn/hidden_layer/bias/read",
-              u"dnn/hidden_layer/MatMul",
-              u"dnn/hidden_layer/add",
-              u"dnn/logits/weight",
-              u"dnn/logits/weight/read",
-              u"dnn/logits/bias",
-              u"dnn/logits/bias/read",
-              u"dnn/logits/MatMul",
-              u"dnn/logits/add",
-              u"dnn/some_persisted_tensor_constant",
-              u"dnn/complexity",
-              u"bias",
-          ],
-          "want_consts": [
-              u"feature",
-              u"dnn/hidden_layer/weight",
-              u"dnn/hidden_layer/bias",
-              u"dnn/logits/weight",
-              u"dnn/logits/bias",
-              u"dnn/some_persisted_tensor_constant",
-              u"dnn/complexity",
-              u"bias",
-          ],
-      }, {
-          "testcase_name":
-              "linear_and_linear",
-          "base_learner_fns": [
-              _linear_base_learner_fn(),
-              _linear_base_learner_fn()
-          ],
-          "features": {
-              "feature": [[4., 3.]]
-          },
-          "want_nodes": [
-              u"feature",
-              u"linear/logits/weight",
-              u"linear/logits/weight/read",
-              u"linear/logits/bias",
-              u"linear/logits/bias/read",
-              u"linear/logits/MatMul",
-              u"linear/logits/add",
-              u"linear/complexity",
-              u"linear_1/logits/weight",
-              u"linear_1/logits/weight/read",
-              u"linear_1/logits/bias",
-              u"linear_1/logits/bias/read",
-              u"linear_1/logits/MatMul",
-              u"linear_1/logits/add",
-              u"linear_1/complexity",
-              u"bias",
-          ],
-          "want_consts": [
-              u"feature",
-              u"linear/logits/weight",
-              u"linear/logits/bias",
-              u"linear/complexity",
-              u"linear_1/logits/weight",
-              u"linear_1/logits/bias",
-              u"linear_1/complexity",
-              u"bias",
-          ],
-      }, {
-          "testcase_name":
-              "simple_with_feature_column",
-          "base_learner_fns": [
-              _simple_base_learner_fn(
-                  tf.feature_column.indicator_column(
-                      categorical_column=(
-                          tf.feature_column.
-                          categorical_column_with_vocabulary_list(
-                              key="human_names",
-                              vocabulary_list=["alice", "bob"]))))
-          ],
-          "features": {
-              "human_names": [["alice"], ["bob"]]
-          },
-          "want_nodes": [
-              u"human_names",
-              u"input_layer/human_names_indicator/to_sparse_input/ignore_value"
-              "/x",
-              u"input_layer/human_names_indicator/to_sparse_input/NotEqual",
-              u"input_layer/human_names_indicator/to_sparse_input/indices",
-              u"input_layer/human_names_indicator/to_sparse_input/values",
-              u"input_layer/human_names_indicator/to_sparse_input/dense_shape",
-              u"input_layer/human_names_indicator/human_names_lookup/Const",
-              u"input_layer/human_names_indicator/human_names_lookup/Size",
-              u"input_layer/human_names_indicator/human_names_lookup/range"
-              "/start",
-              u"input_layer/human_names_indicator/human_names_lookup/range"
-              "/delta",
-              u"input_layer/human_names_indicator/human_names_lookup/range",
-              u"input_layer/human_names_indicator/human_names_lookup/ToInt64",
-              u"input_layer/human_names_indicator/human_names_lookup"
-              "/hash_table",
-              u"input_layer/human_names_indicator/human_names_lookup"
-              "/hash_table/Const",
-              u"input_layer/human_names_indicator/human_names_lookup"
-              "/hash_table/table_init",
-              u"input_layer/human_names_indicator/hash_table_Lookup",
-              u"input_layer/human_names_indicator/SparseToDense/default_value",
-              u"input_layer/human_names_indicator/SparseToDense",
-              u"input_layer/human_names_indicator/one_hot/depth",
-              u"input_layer/human_names_indicator/one_hot/on_value",
-              u"input_layer/human_names_indicator/one_hot/off_value",
-              u"input_layer/human_names_indicator/one_hot",
-              u"input_layer/human_names_indicator/Sum/reduction_indices",
-              u"input_layer/human_names_indicator/Sum",
-              u"input_layer/human_names_indicator/Shape",
-              u"input_layer/human_names_indicator/strided_slice/stack",
-              u"input_layer/human_names_indicator/strided_slice/stack_1",
-              u"input_layer/human_names_indicator/strided_slice/stack_2",
-              u"input_layer/human_names_indicator/strided_slice",
-              u"input_layer/human_names_indicator/Reshape/shape/1",
-              u"input_layer/human_names_indicator/Reshape/shape",
-              u"input_layer/human_names_indicator/Reshape",
-              u"input_layer/concat",
-              u"simple/logits/weight",
-              u"simple/logits/weight/read",
-              u"simple/logits/bias",
-              u"simple/logits/bias/read",
-              u"simple/logits/MatMul",
-              u"simple/logits/add",
-              u"simple/complexity",
-              u"bias",
-          ],
-          "want_consts": [
-              u"human_names",
-              u"input_layer/human_names_indicator/to_sparse_input/ignore_value"
-              "/x",
-              u"input_layer/human_names_indicator/to_sparse_input/dense_shape",
-              u"input_layer/human_names_indicator/human_names_lookup/Const",
-              u"input_layer/human_names_indicator/human_names_lookup/Size",
-              u"input_layer/human_names_indicator/human_names_lookup/range"
-              "/start",
-              u"input_layer/human_names_indicator/human_names_lookup/range"
-              "/delta",
-              u"input_layer/human_names_indicator/human_names_lookup/hash_table"
-              "/Const",
-              u"input_layer/human_names_indicator/SparseToDense/default_value",
-              u"input_layer/human_names_indicator/one_hot/depth",
-              u"input_layer/human_names_indicator/one_hot/on_value",
-              u"input_layer/human_names_indicator/one_hot/off_value",
-              u"input_layer/human_names_indicator/Sum/reduction_indices",
-              u"input_layer/human_names_indicator/Shape",
-              u"input_layer/human_names_indicator/strided_slice/stack",
-              u"input_layer/human_names_indicator/strided_slice/stack_1",
-              u"input_layer/human_names_indicator/strided_slice/stack_2",
-              u"input_layer/human_names_indicator/Reshape/shape/1",
-              u"simple/logits/weight",
-              u"simple/logits/bias",
-              u"simple/complexity",
-              u"bias",
-          ],
-      }, {
-          "testcase_name":
-              "linear_and_dnn",
-          "base_learner_fns": [
-              _dnn_base_learner_fn(),
-              _linear_base_learner_fn()
-          ],
-          "features": {
-              "feature": [[4., 3.]]
-          },
-          "want_nodes": [
-              u"feature",
-              u"dnn/hidden_layer/weight",
-              u"dnn/hidden_layer/weight/read",
-              u"dnn/hidden_layer/bias",
-              u"dnn/hidden_layer/bias/read",
-              u"dnn/hidden_layer/MatMul",
-              u"dnn/hidden_layer/add",
-              u"dnn/logits/weight",
-              u"dnn/logits/weight/read",
-              u"dnn/logits/bias",
-              u"dnn/logits/bias/read",
-              u"dnn/logits/MatMul",
-              u"dnn/logits/add",
-              u"dnn/complexity",
-              u"linear/logits/weight",
-              u"linear/logits/weight/read",
-              u"linear/logits/bias",
-              u"linear/logits/bias/read",
-              u"linear/logits/MatMul",
-              u"linear/logits/add",
-              u"linear/complexity",
-              u"bias",
-          ],
-          "want_consts": [
-              u"feature",
-              u"dnn/hidden_layer/weight",
-              u"dnn/hidden_layer/bias",
-              u"dnn/logits/weight",
-              u"dnn/logits/bias",
-              u"dnn/complexity",
-              u"linear/logits/weight",
-              u"linear/logits/bias",
-              u"linear/complexity",
-              u"bias",
-          ],
-      }, {
-          "testcase_name":
-              "linear_and_dnn_with_persisted_tensors",
-          "base_learner_fns": [
-              _dnn_base_learner_fn(keep_persisted_tensors=True),
-              _linear_base_learner_fn(keep_persisted_tensors=True)
-          ],
-          "features": {
-              "feature": [[4., 3.]]
-          },
-          "want_nodes": [
-              u"feature",
-              u"dnn/hidden_layer/weight",
-              u"dnn/hidden_layer/weight/read",
-              u"dnn/hidden_layer/bias",
-              u"dnn/hidden_layer/bias/read",
-              u"dnn/hidden_layer/MatMul",
-              u"dnn/hidden_layer/add",
-              u"dnn/logits/weight",
-              u"dnn/logits/weight/read",
-              u"dnn/logits/bias",
-              u"dnn/logits/bias/read",
-              u"dnn/logits/MatMul",
-              u"dnn/logits/add",
-              u"dnn/some_persisted_tensor_constant",
-              u"dnn/complexity",
-              u"linear/logits/weight",
-              u"linear/logits/weight/read",
-              u"linear/logits/bias",
-              u"linear/logits/bias/read",
-              u"linear/logits/MatMul",
-              u"linear/logits/add",
-              u"linear/some_persisted_tensor_constant",
-              u"linear/nested_persisted_tensor_constant",
-              u"linear/complexity",
-              u"bias",
-          ],
-          "want_consts": [
-              u"feature",
-              u"dnn/hidden_layer/weight",
-              u"dnn/hidden_layer/bias",
-              u"dnn/logits/weight",
-              u"dnn/logits/bias",
-              u"dnn/some_persisted_tensor_constant",
-              u"dnn/complexity",
-              u"linear/logits/weight",
-              u"linear/logits/bias",
-              u"linear/some_persisted_tensor_constant",
-              u"linear/nested_persisted_tensor_constant",
-              u"linear/complexity",
-              u"bias",
-          ],
-      })
+  @parameterized.named_parameters({
+      "testcase_name":
+          "dnn_no_persisted_tensors",
+      "base_learner_fns": [_dnn_base_learner_fn()],
+      "features": {
+          "feature": [[4., 3.]]
+      },
+      "want_nodes": [
+          u"feature",
+          u"dnn/hidden_layer/weight",
+          u"dnn/hidden_layer/weight/read",
+          u"dnn/hidden_layer/bias",
+          u"dnn/hidden_layer/bias/read",
+          u"dnn/hidden_layer/MatMul",
+          u"dnn/hidden_layer/add",
+          u"dnn/logits/weight",
+          u"dnn/logits/weight/read",
+          u"dnn/logits/bias",
+          u"dnn/logits/bias/read",
+          u"dnn/logits/MatMul",
+          u"dnn/logits/add",
+          u"dnn/complexity",
+          u"dnn/name",
+          u"bias",
+      ],
+      "want_consts": [
+          u"feature",
+          u"dnn/hidden_layer/weight",
+          u"dnn/hidden_layer/bias",
+          u"dnn/logits/weight",
+          u"dnn/logits/bias",
+          u"dnn/complexity",
+          u"dnn/name",
+          u"bias",
+      ],
+  }, {
+      "testcase_name":
+          "dnn_unused_feature",
+      "base_learner_fns": [_dnn_base_learner_fn()],
+      "features": {
+          "feature": [[4., 3.]],
+          "unused": [[1., 2.]]
+      },
+      "want_nodes": [
+          u"feature",
+          u"unused",
+          u"dnn/hidden_layer/weight",
+          u"dnn/hidden_layer/weight/read",
+          u"dnn/hidden_layer/bias",
+          u"dnn/hidden_layer/bias/read",
+          u"dnn/hidden_layer/MatMul",
+          u"dnn/hidden_layer/add",
+          u"dnn/logits/weight",
+          u"dnn/logits/weight/read",
+          u"dnn/logits/bias",
+          u"dnn/logits/bias/read",
+          u"dnn/logits/MatMul",
+          u"dnn/logits/add",
+          u"dnn/complexity",
+          u"dnn/name",
+          u"bias",
+      ],
+      "want_consts": [
+          u"feature",
+          u"unused",
+          u"dnn/hidden_layer/weight",
+          u"dnn/hidden_layer/bias",
+          u"dnn/logits/weight",
+          u"dnn/logits/bias",
+          u"dnn/complexity",
+          u"dnn/name",
+          u"bias",
+      ],
+  }, {
+      "testcase_name":
+          "dnn_with_persisted_tensors",
+      "base_learner_fns": [_dnn_base_learner_fn(keep_persisted_tensors=True)],
+      "features": {
+          "feature": [[4., 3.]]
+      },
+      "want_nodes": [
+          u"feature",
+          u"dnn/hidden_layer/weight",
+          u"dnn/hidden_layer/weight/read",
+          u"dnn/hidden_layer/bias",
+          u"dnn/hidden_layer/bias/read",
+          u"dnn/hidden_layer/MatMul",
+          u"dnn/hidden_layer/add",
+          u"dnn/logits/weight",
+          u"dnn/logits/weight/read",
+          u"dnn/logits/bias",
+          u"dnn/logits/bias/read",
+          u"dnn/logits/MatMul",
+          u"dnn/logits/add",
+          u"dnn/some_persisted_tensor_constant",
+          u"dnn/complexity",
+          u"dnn/name",
+          u"bias",
+      ],
+      "want_consts": [
+          u"feature",
+          u"dnn/hidden_layer/weight",
+          u"dnn/hidden_layer/bias",
+          u"dnn/logits/weight",
+          u"dnn/logits/bias",
+          u"dnn/some_persisted_tensor_constant",
+          u"dnn/complexity",
+          u"dnn/name",
+          u"bias",
+      ],
+  }, {
+      "testcase_name":
+          "linear_and_linear",
+      "base_learner_fns": [
+          _linear_base_learner_fn(),
+          _linear_base_learner_fn()
+      ],
+      "features": {
+          "feature": [[4., 3.]]
+      },
+      "want_nodes": [
+          u"feature",
+          u"linear/logits/weight",
+          u"linear/logits/weight/read",
+          u"linear/logits/bias",
+          u"linear/logits/bias/read",
+          u"linear/logits/MatMul",
+          u"linear/logits/add",
+          u"linear/complexity",
+          u"linear/name",
+          u"linear_1/logits/weight",
+          u"linear_1/logits/weight/read",
+          u"linear_1/logits/bias",
+          u"linear_1/logits/bias/read",
+          u"linear_1/logits/MatMul",
+          u"linear_1/logits/add",
+          u"linear_1/complexity",
+          u"linear_1/name",
+          u"bias",
+      ],
+      "want_consts": [
+          u"feature",
+          u"linear/logits/weight",
+          u"linear/logits/bias",
+          u"linear/complexity",
+          u"linear/name",
+          u"linear_1/logits/weight",
+          u"linear_1/logits/bias",
+          u"linear_1/complexity",
+          u"linear_1/name",
+          u"bias",
+      ],
+  }, {
+      "testcase_name":
+          "simple_with_feature_column",
+      "base_learner_fns": [
+          _simple_base_learner_fn(
+              tf.feature_column.indicator_column(
+                  categorical_column=(
+                      tf.feature_column.categorical_column_with_vocabulary_list(
+                          key="human_names", vocabulary_list=["alice", "bob"])
+                  )))
+      ],
+      "features": {
+          "human_names": [["alice"], ["bob"]]
+      },
+      "want_nodes": [
+          u"human_names",
+          u"input_layer/human_names_indicator/to_sparse_input/ignore_value"
+          "/x",
+          u"input_layer/human_names_indicator/to_sparse_input/NotEqual",
+          u"input_layer/human_names_indicator/to_sparse_input/indices",
+          u"input_layer/human_names_indicator/to_sparse_input/values",
+          u"input_layer/human_names_indicator/to_sparse_input/dense_shape",
+          u"input_layer/human_names_indicator/human_names_lookup/Const",
+          u"input_layer/human_names_indicator/human_names_lookup/Size",
+          u"input_layer/human_names_indicator/human_names_lookup/range"
+          "/start",
+          u"input_layer/human_names_indicator/human_names_lookup/range"
+          "/delta",
+          u"input_layer/human_names_indicator/human_names_lookup/range",
+          u"input_layer/human_names_indicator/human_names_lookup/ToInt64",
+          u"input_layer/human_names_indicator/human_names_lookup"
+          "/hash_table",
+          u"input_layer/human_names_indicator/human_names_lookup"
+          "/hash_table/Const",
+          u"input_layer/human_names_indicator/human_names_lookup"
+          "/hash_table/table_init",
+          u"input_layer/human_names_indicator/hash_table_Lookup",
+          u"input_layer/human_names_indicator/SparseToDense/default_value",
+          u"input_layer/human_names_indicator/SparseToDense",
+          u"input_layer/human_names_indicator/one_hot/depth",
+          u"input_layer/human_names_indicator/one_hot/on_value",
+          u"input_layer/human_names_indicator/one_hot/off_value",
+          u"input_layer/human_names_indicator/one_hot",
+          u"input_layer/human_names_indicator/Sum/reduction_indices",
+          u"input_layer/human_names_indicator/Sum",
+          u"input_layer/human_names_indicator/Shape",
+          u"input_layer/human_names_indicator/strided_slice/stack",
+          u"input_layer/human_names_indicator/strided_slice/stack_1",
+          u"input_layer/human_names_indicator/strided_slice/stack_2",
+          u"input_layer/human_names_indicator/strided_slice",
+          u"input_layer/human_names_indicator/Reshape/shape/1",
+          u"input_layer/human_names_indicator/Reshape/shape",
+          u"input_layer/human_names_indicator/Reshape",
+          u"input_layer/concat",
+          u"simple/logits/weight",
+          u"simple/logits/weight/read",
+          u"simple/logits/bias",
+          u"simple/logits/bias/read",
+          u"simple/logits/MatMul",
+          u"simple/logits/add",
+          u"simple/complexity",
+          u"simple/name",
+          u"bias",
+      ],
+      "want_consts": [
+          u"human_names",
+          u"input_layer/human_names_indicator/to_sparse_input/ignore_value"
+          "/x",
+          u"input_layer/human_names_indicator/to_sparse_input/dense_shape",
+          u"input_layer/human_names_indicator/human_names_lookup/Const",
+          u"input_layer/human_names_indicator/human_names_lookup/Size",
+          u"input_layer/human_names_indicator/human_names_lookup/range"
+          "/start",
+          u"input_layer/human_names_indicator/human_names_lookup/range"
+          "/delta",
+          u"input_layer/human_names_indicator/human_names_lookup/hash_table"
+          "/Const",
+          u"input_layer/human_names_indicator/SparseToDense/default_value",
+          u"input_layer/human_names_indicator/one_hot/depth",
+          u"input_layer/human_names_indicator/one_hot/on_value",
+          u"input_layer/human_names_indicator/one_hot/off_value",
+          u"input_layer/human_names_indicator/Sum/reduction_indices",
+          u"input_layer/human_names_indicator/Shape",
+          u"input_layer/human_names_indicator/strided_slice/stack",
+          u"input_layer/human_names_indicator/strided_slice/stack_1",
+          u"input_layer/human_names_indicator/strided_slice/stack_2",
+          u"input_layer/human_names_indicator/Reshape/shape/1",
+          u"simple/logits/weight",
+          u"simple/logits/bias",
+          u"simple/complexity",
+          u"simple/name",
+          u"bias",
+      ],
+  }, {
+      "testcase_name":
+          "linear_and_dnn",
+      "base_learner_fns": [_dnn_base_learner_fn(),
+                           _linear_base_learner_fn()],
+      "features": {
+          "feature": [[4., 3.]]
+      },
+      "want_nodes": [
+          u"feature",
+          u"dnn/hidden_layer/weight",
+          u"dnn/hidden_layer/weight/read",
+          u"dnn/hidden_layer/bias",
+          u"dnn/hidden_layer/bias/read",
+          u"dnn/hidden_layer/MatMul",
+          u"dnn/hidden_layer/add",
+          u"dnn/logits/weight",
+          u"dnn/logits/weight/read",
+          u"dnn/logits/bias",
+          u"dnn/logits/bias/read",
+          u"dnn/logits/MatMul",
+          u"dnn/logits/add",
+          u"dnn/complexity",
+          u"dnn/name",
+          u"linear/logits/weight",
+          u"linear/logits/weight/read",
+          u"linear/logits/bias",
+          u"linear/logits/bias/read",
+          u"linear/logits/MatMul",
+          u"linear/logits/add",
+          u"linear/complexity",
+          u"linear/name",
+          u"bias",
+      ],
+      "want_consts": [
+          u"feature",
+          u"dnn/hidden_layer/weight",
+          u"dnn/hidden_layer/bias",
+          u"dnn/logits/weight",
+          u"dnn/logits/bias",
+          u"dnn/complexity",
+          u"dnn/name",
+          u"linear/logits/weight",
+          u"linear/logits/bias",
+          u"linear/complexity",
+          u"linear/name",
+          u"bias",
+      ],
+  }, {
+      "testcase_name":
+          "linear_and_dnn_with_persisted_tensors",
+      "base_learner_fns": [
+          _dnn_base_learner_fn(keep_persisted_tensors=True),
+          _linear_base_learner_fn(keep_persisted_tensors=True)
+      ],
+      "features": {
+          "feature": [[4., 3.]]
+      },
+      "want_nodes": [
+          u"feature",
+          u"dnn/hidden_layer/weight",
+          u"dnn/hidden_layer/weight/read",
+          u"dnn/hidden_layer/bias",
+          u"dnn/hidden_layer/bias/read",
+          u"dnn/hidden_layer/MatMul",
+          u"dnn/hidden_layer/add",
+          u"dnn/logits/weight",
+          u"dnn/logits/weight/read",
+          u"dnn/logits/bias",
+          u"dnn/logits/bias/read",
+          u"dnn/logits/MatMul",
+          u"dnn/logits/add",
+          u"dnn/some_persisted_tensor_constant",
+          u"dnn/complexity",
+          u"dnn/name",
+          u"linear/logits/weight",
+          u"linear/logits/weight/read",
+          u"linear/logits/bias",
+          u"linear/logits/bias/read",
+          u"linear/logits/MatMul",
+          u"linear/logits/add",
+          u"linear/some_persisted_tensor_constant",
+          u"linear/nested_persisted_tensor_constant",
+          u"linear/complexity",
+          u"linear/name",
+          u"bias",
+      ],
+      "want_consts": [
+          u"feature",
+          u"dnn/hidden_layer/weight",
+          u"dnn/hidden_layer/bias",
+          u"dnn/logits/weight",
+          u"dnn/logits/bias",
+          u"dnn/some_persisted_tensor_constant",
+          u"dnn/complexity",
+          u"dnn/name",
+          u"linear/logits/weight",
+          u"linear/logits/bias",
+          u"linear/some_persisted_tensor_constant",
+          u"linear/nested_persisted_tensor_constant",
+          u"linear/complexity",
+          u"linear/name",
+          u"bias",
+      ],
+  })
   def test_freeze_ensemble(self,
                            base_learner_fns,
                            features,
@@ -605,175 +628,174 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
             bias=bias,
             features=features)
 
-  @parameterized.named_parameters(
-      {
-          "testcase_name": "linear_no_persisted_tensors",
-          "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
-          "features_to_freeze": {
-              "x": [[-1., 1.]]
-          },
-          "features_to_load": {
-              "x": [[-1., 1.]]
-          },
-          "want_logits": [[-.137752]],
-      }, {
-          "testcase_name": "linear_bias",
-          "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
-          "bias": 3.,
-          "features_to_freeze": {
-              "x": [[-1., 1.]]
-          },
-          "features_to_load": {
-              "x": [[-1., 1.]]
-          },
-          "want_logits": [[-.137752]],
-      }, {
-          "testcase_name": "linear_unused_feature",
-          "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
-          "features_to_freeze": {
-              "x": [[-1., 1.]],
-              "unused": [[0., 2.]]
-          },
-          "features_to_load": {
-              "x": [[-1., 1.]],
-              "unused": [[0., 2.]]
-          },
-          "want_logits": [[-.137752]],
-      }, {
-          "testcase_name": "linear_sparse_feature",
-          "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
-          "features_to_freeze": {
-              "x":
-                  tu.FakeSparseTensor(
-                      indices=[[0, 0], [0, 1]],
-                      values=[-1., 1.],
-                      dense_shape=[1, 2]),
-          },
-          "features_to_load": {
-              "x":
-                  tu.FakeSparseTensor(
-                      indices=[[0, 0], [0, 1]],
-                      values=[-1., 1.],
-                      dense_shape=[1, 2]),
-          },
-          "want_logits": [[-.137752]],
-      }, {
-          "testcase_name": "linear_unused_sparse_feature",
-          "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
-          "features_to_freeze": {
-              "x":
-                  tu.FakeSparseTensor(
-                      indices=[[0, 0], [0, 1]],
-                      values=[-1., 1.],
-                      dense_shape=[1, 2]),
-              "unused":
-                  tu.FakeSparseTensor(
-                      indices=[[0, 0], [0, 1]],
-                      values=[-1., 1.],
-                      dense_shape=[1, 2]),
-          },
-          "features_to_load": {
-              "x":
-                  tu.FakeSparseTensor(
-                      indices=[[0, 0], [0, 1]],
-                      values=[-1., 1.],
-                      dense_shape=[1, 2]),
-              "unused":
-                  tu.FakeSparseTensor(
-                      indices=[[0, 0], [0, 1]],
-                      values=[-1., 1.],
-                      dense_shape=[1, 2]),
-          },
-          "want_logits": [[-.137752]],
-      }, {
-          "testcase_name": "dnn_no_persisted_tensors",
-          "base_learner_fns": [_dnn_base_learner_fn()],
-          "features_to_freeze": {
-              "x": [[-1., 1.]]
-          },
-          "features_to_load": {
-              "x": [[-1., 1.]]
-          },
-          "want_logits": [[-2.857512]],
-      }, {
-          "testcase_name": "dnn_with_persisted_tensors",
-          "base_learner_fns": [_dnn_base_learner_fn()],
-          "features_to_freeze": {
-              "x": [[-1., 1.]]
-          },
-          "features_to_load": {
-              "x": [[-1., 1.]]
-          },
-          "want_logits": [[-2.857512]],
-      }, {
-          "testcase_name":
-              "linear_and_linear",
-          "base_learner_fns": [
-              _linear_base_learner_fn(keep_persisted_tensors=True),
-              _linear_base_learner_fn(keep_persisted_tensors=True, seed=99),
-          ],
-          "features_to_freeze": {
-              "x": [[-1., 1.]]
-          },
-          "features_to_load": {
-              "x": [[-1., 1.]]
-          },
-          "want_logits": [[.733523]],
-      }, {
-          "testcase_name":
-              "linear_and_dnn",
-          "base_learner_fns": [
-              _dnn_base_learner_fn(keep_persisted_tensors=True),
-              _linear_base_learner_fn(keep_persisted_tensors=True)
-          ],
-          "features_to_freeze": {
-              "x": [[-1., 1.]]
-          },
-          "features_to_load": {
-              "x": [[-1., 1.]]
-          },
-          "want_logits": [[-.137752]],
-      }, {
-          "testcase_name": "dnn_with_different_inputs",
-          "base_learner_fns": [_dnn_base_learner_fn()],
-          "features_to_freeze": {
-              "x": [[-1., 1.]]
-          },
-          "features_to_load": {
-              "x": [[2., 3]]
-          },
-          "want_logits": [[14.742406]],
-      }, {
-          "testcase_name":
-              "linear_and_dnn_with_different_inputs",
-          "base_learner_fns": [
-              _dnn_base_learner_fn(keep_persisted_tensors=True),
-              _linear_base_learner_fn(keep_persisted_tensors=True)
-          ],
-          "features_to_freeze": {
-              "x": [[-1., 1.]]
-          },
-          "features_to_load": {
-              "x": [[2., 3]]
-          },
-          "want_logits": [[-1.255581]],
-      }, {
-          "testcase_name":
-              "linear_and_dnn_with_placeholder",
-          "base_learner_fns": [
-              _dnn_base_learner_fn(keep_persisted_tensors=True),
-              _linear_base_learner_fn(keep_persisted_tensors=True)
-          ],
-          "features_placeholder": {
-              "x": [None, 2]
-          },
-          "features_to_freeze":
-              None,
-          "features_to_load": {
-              "x": [[2., 3], [4., -5]]
-          },
-          "want_logits": [[-1.255581], [-.715115]],
-      })
+  @parameterized.named_parameters({
+      "testcase_name": "linear_no_persisted_tensors",
+      "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
+      "features_to_freeze": {
+          "x": [[-1., 1.]]
+      },
+      "features_to_load": {
+          "x": [[-1., 1.]]
+      },
+      "want_logits": [[-.137752]],
+  }, {
+      "testcase_name": "linear_bias",
+      "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
+      "bias": 3.,
+      "features_to_freeze": {
+          "x": [[-1., 1.]]
+      },
+      "features_to_load": {
+          "x": [[-1., 1.]]
+      },
+      "want_logits": [[-.137752]],
+  }, {
+      "testcase_name": "linear_unused_feature",
+      "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
+      "features_to_freeze": {
+          "x": [[-1., 1.]],
+          "unused": [[0., 2.]]
+      },
+      "features_to_load": {
+          "x": [[-1., 1.]],
+          "unused": [[0., 2.]]
+      },
+      "want_logits": [[-.137752]],
+  }, {
+      "testcase_name": "linear_sparse_feature",
+      "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
+      "features_to_freeze": {
+          "x":
+              tu.FakeSparseTensor(
+                  indices=[[0, 0], [0, 1]],
+                  values=[-1., 1.],
+                  dense_shape=[1, 2]),
+      },
+      "features_to_load": {
+          "x":
+              tu.FakeSparseTensor(
+                  indices=[[0, 0], [0, 1]],
+                  values=[-1., 1.],
+                  dense_shape=[1, 2]),
+      },
+      "want_logits": [[-.137752]],
+  }, {
+      "testcase_name": "linear_unused_sparse_feature",
+      "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
+      "features_to_freeze": {
+          "x":
+              tu.FakeSparseTensor(
+                  indices=[[0, 0], [0, 1]],
+                  values=[-1., 1.],
+                  dense_shape=[1, 2]),
+          "unused":
+              tu.FakeSparseTensor(
+                  indices=[[0, 0], [0, 1]],
+                  values=[-1., 1.],
+                  dense_shape=[1, 2]),
+      },
+      "features_to_load": {
+          "x":
+              tu.FakeSparseTensor(
+                  indices=[[0, 0], [0, 1]],
+                  values=[-1., 1.],
+                  dense_shape=[1, 2]),
+          "unused":
+              tu.FakeSparseTensor(
+                  indices=[[0, 0], [0, 1]],
+                  values=[-1., 1.],
+                  dense_shape=[1, 2]),
+      },
+      "want_logits": [[-.137752]],
+  }, {
+      "testcase_name": "dnn_no_persisted_tensors",
+      "base_learner_fns": [_dnn_base_learner_fn()],
+      "features_to_freeze": {
+          "x": [[-1., 1.]]
+      },
+      "features_to_load": {
+          "x": [[-1., 1.]]
+      },
+      "want_logits": [[-2.857512]],
+  }, {
+      "testcase_name": "dnn_with_persisted_tensors",
+      "base_learner_fns": [_dnn_base_learner_fn()],
+      "features_to_freeze": {
+          "x": [[-1., 1.]]
+      },
+      "features_to_load": {
+          "x": [[-1., 1.]]
+      },
+      "want_logits": [[-2.857512]],
+  }, {
+      "testcase_name":
+          "linear_and_linear",
+      "base_learner_fns": [
+          _linear_base_learner_fn(keep_persisted_tensors=True),
+          _linear_base_learner_fn(keep_persisted_tensors=True, seed=99),
+      ],
+      "features_to_freeze": {
+          "x": [[-1., 1.]]
+      },
+      "features_to_load": {
+          "x": [[-1., 1.]]
+      },
+      "want_logits": [[.733523]],
+  }, {
+      "testcase_name":
+          "linear_and_dnn",
+      "base_learner_fns": [
+          _dnn_base_learner_fn(keep_persisted_tensors=True),
+          _linear_base_learner_fn(keep_persisted_tensors=True)
+      ],
+      "features_to_freeze": {
+          "x": [[-1., 1.]]
+      },
+      "features_to_load": {
+          "x": [[-1., 1.]]
+      },
+      "want_logits": [[-.137752]],
+  }, {
+      "testcase_name": "dnn_with_different_inputs",
+      "base_learner_fns": [_dnn_base_learner_fn()],
+      "features_to_freeze": {
+          "x": [[-1., 1.]]
+      },
+      "features_to_load": {
+          "x": [[2., 3]]
+      },
+      "want_logits": [[14.742406]],
+  }, {
+      "testcase_name":
+          "linear_and_dnn_with_different_inputs",
+      "base_learner_fns": [
+          _dnn_base_learner_fn(keep_persisted_tensors=True),
+          _linear_base_learner_fn(keep_persisted_tensors=True)
+      ],
+      "features_to_freeze": {
+          "x": [[-1., 1.]]
+      },
+      "features_to_load": {
+          "x": [[2., 3]]
+      },
+      "want_logits": [[-1.255581]],
+  }, {
+      "testcase_name":
+          "linear_and_dnn_with_placeholder",
+      "base_learner_fns": [
+          _dnn_base_learner_fn(keep_persisted_tensors=True),
+          _linear_base_learner_fn(keep_persisted_tensors=True)
+      ],
+      "features_placeholder": {
+          "x": [None, 2]
+      },
+      "features_to_freeze":
+          None,
+      "features_to_load": {
+          "x": [[2., 3], [4., -5]]
+      },
+      "want_logits": [[-1.255581], [-.715115]],
+  })
   def test_load_frozen_ensemble(self,
                                 base_learner_fns,
                                 features_to_freeze,
@@ -822,31 +844,36 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       init = tf.group(tf.global_variables_initializer(),
                       tf.local_variables_initializer())
       sess.run(init)
-      self.assertAllClose(sess.run(want_ensemble), sess.run(frozen_ensemble))
+      want_ensemble = sess.run(want_ensemble)
+      frozen_ensemble = sess.run(frozen_ensemble)
+      self.assertEqual([w.name for w in want_ensemble],
+                       [w.name for w in frozen_ensemble])
+      self.assertAllClose(
+          [(w.logits, w.weight, w.base_learner) for w in want_ensemble],
+          [(w.logits, w.weight, w.base_learner) for w in frozen_ensemble])
       self.assertAllEqual(bias_value, sess.run(frozen_bias))
 
-  @parameterized.named_parameters(
-      {
-          "testcase_name": "features",
-          "features_to_freeze": {
-              "x": tu.FakePlaceholder(dtype=tf.float32),
-          },
-          "features_to_load": {
-              "x": [[-1., 1.]],
-          },
-      }, {
-          "testcase_name": "sparse_features",
-          "features_to_freeze": {
-              "x": tu.FakeSparsePlaceholder(dtype=tf.float32),
-          },
-          "features_to_load": {
-              "x":
-                  tu.FakeSparseTensor(
-                      indices=[[0, 0], [0, 1]],
-                      values=[-1., 1.],
-                      dense_shape=[1, 2]),
-          },
-      })
+  @parameterized.named_parameters({
+      "testcase_name": "features",
+      "features_to_freeze": {
+          "x": tu.FakePlaceholder(dtype=tf.float32),
+      },
+      "features_to_load": {
+          "x": [[-1., 1.]],
+      },
+  }, {
+      "testcase_name": "sparse_features",
+      "features_to_freeze": {
+          "x": tu.FakeSparsePlaceholder(dtype=tf.float32),
+      },
+      "features_to_load": {
+          "x":
+              tu.FakeSparseTensor(
+                  indices=[[0, 0], [0, 1]],
+                  values=[-1., 1.],
+                  dense_shape=[1, 2]),
+      },
+  })
   def test_load_frozen_ensemble_colocation_bug(self, features_to_freeze,
                                                features_to_load):
     """Test colocation bug b/74595432."""

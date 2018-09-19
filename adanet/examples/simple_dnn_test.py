@@ -32,6 +32,7 @@ class _FakeEnsemble(object):
     persisted_tensors = {"num_layers": tf.constant(num_layers)}
     self._weighted_base_learners = [
         adanet.WeightedBaseLearner(
+            name=None,
             weight=None,
             logits=None,
             base_learner=adanet.BaseLearner(

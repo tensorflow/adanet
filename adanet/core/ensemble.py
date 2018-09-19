@@ -26,17 +26,18 @@ import tensorflow as tf
 
 class WeightedBaseLearner(
     collections.namedtuple("WeightedBaseLearner",
-                           ["weight", "logits", "base_learner"])):
+                           ["name", "weight", "logits", "base_learner"])):
   """An AdaNet weighted base learner.
 
   A weighted base learner is a weight 'w' applied to a base learner's last layer
   'u'. The results is the base learner's logits, regularized by its complexity.
   """
 
-  def __new__(cls, weight, logits, base_learner):
+  def __new__(cls, name, weight, logits, base_learner):
     """Creates a `WeightedBaseLearner` instance.
 
     Args:
+      name: The string `tf.constant` name of `base_learner`.
       weight: The weight `Tensor` to apply to this base learner. The AdaNet
         paper refers to this weight as 'w' in Equations (4), (5), and (6).
       logits: The output `Tensor` after the matrix multiplication of `weight`
@@ -50,7 +51,7 @@ class WeightedBaseLearner(
     """
 
     return super(WeightedBaseLearner, cls).__new__(
-        cls, weight=weight, logits=logits, base_learner=base_learner)
+        cls, name=name, weight=weight, logits=logits, base_learner=base_learner)
 
 
 class Ensemble(
@@ -159,6 +160,19 @@ class MixtureWeightType(object):
   MATRIX = "matrix"
 
 
+def _architecture_as_metric(weighted_base_learners):
+  """Returns a representation of the ensemble's architecture as a tf.metric."""
+
+  joined_names = " | ".join([
+      str(tf.contrib.util.constant_value(w.name))
+      for w in weighted_base_learners
+  ])
+  architecture = tf.convert_to_tensor(
+      "| {} |".format(joined_names), name="architecture")
+  architecture_summary = tf.summary.text("architecture/adanet", architecture)
+  return (architecture_summary, tf.no_op())
+
+
 class _EnsembleBuilder(object):
   """Builds `Ensemble` instances."""
 
@@ -253,6 +267,7 @@ class _EnsembleBuilder(object):
           with tf.variable_scope("weighted_base_learner_{}".format(iteration)):
             weighted_base_learners.append(
                 self._build_weighted_base_learner(
+                    weighted_base_learner.name,
                     weighted_base_learner.base_learner,
                     self._head.logits_dimension,
                     num_base_learners,
@@ -278,6 +293,7 @@ class _EnsembleBuilder(object):
               set(trainable_vars_after) - set(trainable_vars_before))
         weighted_base_learners.append(
             self._build_weighted_base_learner(
+                tf.constant(base_learner_builder.name, name="name"),
                 base_learner, self._head.logits_dimension, num_base_learners))
 
       return self.build_ensemble(
@@ -408,7 +424,8 @@ class _EnsembleBuilder(object):
           base_learner_spec.loss)
       for metric, ops in base_learner_spec.eval_metric_ops.items():
         eval_metric_ops["{}/adanet/base_learner".format(metric)] = ops
-
+      eval_metric_ops["architecture/adanet/ensembles"] = (
+          _architecture_as_metric(weighted_base_learners))
       with tf.name_scope(""):
         summary.scalar("loss/adanet/adanet_weighted_ensemble",
                        adanet_weighted_ensemble_spec.loss)
@@ -482,6 +499,7 @@ class _EnsembleBuilder(object):
     return tf.zeros_initializer()
 
   def _build_weighted_base_learner(self,
+                                   name,
                                    base_learner,
                                    logits_dimension,
                                    num_base_learners,
@@ -489,6 +507,7 @@ class _EnsembleBuilder(object):
     """Builds an `WeightedBaseLearner`.
 
     Args:
+      name: The string `tf.constant` name of `base_learner`.
       base_learner: The `BaseLearner` to weight.
       logits_dimension: The number of outputs from the logits.
       num_base_learners: The number of base learners in the ensemble.
@@ -550,7 +569,7 @@ class _EnsembleBuilder(object):
         logits = tf.multiply(base_learner.logits, weight)
 
     return WeightedBaseLearner(
-        base_learner=base_learner, logits=logits, weight=weight)
+        name=name, base_learner=base_learner, logits=logits, weight=weight)
 
   def _create_bias(self, logits_dimension, prior=None):
     """Returns a bias term vector.
