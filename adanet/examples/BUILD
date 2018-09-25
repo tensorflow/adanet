@@ -21,25 +21,3 @@ py_test(
         "@absl_py//absl/testing:parameterized",
     ],
 )
-
-py_library(
-    name = "nasnet",
-    srcs = ["nasnet.py"],
-    visibility = [
-    ],
-    deps = [
-        "//adanet",
-        "@tf_slim//research/slim:nasnet",
-        "@tf_slim//research/slim:nets_factory",
-    ],
-)
-
-py_test(
-    name = "nasnet_test",
-    srcs = ["nasnet_test.py"],
-    shard_count = 4,
-    deps = [
-        ":nasnet",
-        "@absl_py//absl/testing:parameterized",
-    ],
-)
