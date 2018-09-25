@@ -1,11 +1,7 @@
 # Description:
-# Package `adanet` is a TensorFlow framework for designing, training, and
-# serving adaptive neural network using the AdaNet algorithm.
+# adanet is a TensorFlow AutoML framework for designing, training, and serving
+# adaptive neural network using the AdaNet algorithm.
 # This is a reference implementation of AdaNet as a TensorFlow library.
-
-package(default_visibility = [
-    "//visibility:public",
-])
 
 licenses(["notice"])  # Apache 2.0
 
@@ -13,7 +9,11 @@ exports_files(["LICENSE"])
 
 py_library(
     name = "adanet",
-    srcs = ["__init__.py"],
+    srcs = [
+        "__init__.py",
+        "version.py",
+    ],
+    srcs_version = "PY2AND3",
     visibility = [
         "//visibility:public",
     ],
