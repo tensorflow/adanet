@@ -38,7 +38,7 @@ def _extract_feature(features):
   if unused_key in features:
     del features[unused_key]
   assert len(features) == 1
-  feature = features.values()[0]
+  feature = list(features.values())[0]
   if isinstance(feature, tf.SparseTensor):
     return tf.sparse_tensor_to_dense(feature)
   return feature

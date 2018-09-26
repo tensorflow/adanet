@@ -27,6 +27,14 @@ import adanet.core.testing_utils as tu
 import tensorflow as tf
 
 
+def decode(param):
+  """Decodes the given param when it is bytes."""
+
+  if isinstance(param, float) or isinstance(param, int):
+    return param
+  return param.decode("utf-8")
+
+
 class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
 
   # pylint: disable=g-long-lambda
@@ -38,7 +46,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       },
       "steps": 3,
       "included_base_learner_names": ["foo"],
-      "want_base_learner_reports_materialized": [
+      "want_materialized_reports": [
           MaterializedBaseLearnerReport(
               iteration_number=0,
               name="foo",
@@ -70,7 +78,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       },
       "steps": 3,
       "included_base_learner_names": ["foo"],
-      "want_base_learner_reports_materialized": [
+      "want_materialized_reports": [
           MaterializedBaseLearnerReport(
               iteration_number=0,
               name="foo",
@@ -113,7 +121,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       "steps": 3,
       "iteration_number": 2,
       "included_base_learner_names": ["foo"],
-      "want_base_learner_reports_materialized": [
+      "want_materialized_reports": [
           MaterializedBaseLearnerReport(
               iteration_number=2,
               name="foo",
@@ -170,7 +178,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       },
       "steps": 3,
       "included_base_learner_names": ["foo2"],
-      "want_base_learner_reports_materialized": [
+      "want_materialized_reports": [
           MaterializedBaseLearnerReport(
               iteration_number=0,
               name="foo1",
@@ -225,7 +233,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       },
       "steps": 3,
       "included_base_learner_names": [],
-      "want_base_learner_reports_materialized": [
+      "want_materialized_reports": [
           MaterializedBaseLearnerReport(
               iteration_number=0,
               name="foo1",
@@ -260,7 +268,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       },
       "steps": 3,
       "included_base_learner_names": ["foo1", "foo2"],
-      "want_base_learner_reports_materialized": [
+      "want_materialized_reports": [
           MaterializedBaseLearnerReport(
               iteration_number=0,
               name="foo1",
@@ -291,7 +299,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       },
       "steps": 3,
       "included_base_learner_names": ["foo"],
-      "want_base_learner_reports_materialized": [
+      "want_materialized_reports": [
           MaterializedBaseLearnerReport(
               iteration_number=0,
               name="foo",
@@ -314,7 +322,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       },
       "steps": None,
       "included_base_learner_names": ["foo"],
-      "want_base_learner_reports_materialized": [
+      "want_materialized_reports": [
           MaterializedBaseLearnerReport(
               iteration_number=0,
               name="foo",
@@ -336,7 +344,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       },
       "steps": 3,
       "included_base_learner_names": ["foo"],
-      "want_base_learner_reports_materialized": [
+      "want_materialized_reports": [
           MaterializedBaseLearnerReport(
               iteration_number=0,
               name="foo",
@@ -347,78 +355,69 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
           ),
       ],
   })
-  def test_materialize_base_learner_reports(
-      self,
-      input_fn,
-      base_learner_reports_fn,
-      steps,
-      iteration_number=0,
-      included_base_learner_names=None,
-      want_base_learner_reports_materialized=None):
+  def test_materialize_base_learner_reports(self,
+                                            input_fn,
+                                            base_learner_reports_fn,
+                                            steps,
+                                            iteration_number=0,
+                                            included_base_learner_names=None,
+                                            want_materialized_reports=None):
     tf.constant(0.)  # dummy op so that the session graph is never empty.
     features, labels = input_fn()
     base_learner_reports = base_learner_reports_fn(features, labels)
     with self.test_session() as sess:
       sess.run(tf.initializers.local_variables())
       report_materializer = ReportMaterializer(input_fn=input_fn, steps=steps)
-      base_learner_reports_materialized = (
+      materialized_reports = (
           report_materializer.materialize_base_learner_reports(
               sess, iteration_number, base_learner_reports,
               included_base_learner_names))
       self.assertEqual(
-          len(want_base_learner_reports_materialized),
-          len(base_learner_reports_materialized))
-      base_learner_reports_materialized_dict = {
-          blrm.name: blrm for blrm in base_learner_reports_materialized
+          len(want_materialized_reports), len(materialized_reports))
+      materialized_reports_dict = {
+          blrm.name: blrm for blrm in materialized_reports
       }
-      for want_base_learner_report_materialized in (
-          want_base_learner_reports_materialized):
-        base_learner_report_materialized = (
-            base_learner_reports_materialized_dict[
-                want_base_learner_report_materialized.name])
-        self.assertEqual(iteration_number,
-                         base_learner_report_materialized.iteration_number)
+      for want_materialized_report in want_materialized_reports:
+        materialized_report = (
+            materialized_reports_dict[want_materialized_report.name])
+        self.assertEqual(iteration_number, materialized_report.iteration_number)
         self.assertEqual(
-            set(want_base_learner_report_materialized.hparams.keys()),
-            set(base_learner_report_materialized.hparams.keys()))
+            set(want_materialized_report.hparams.keys()),
+            set(materialized_report.hparams.keys()))
         for hparam_key, want_hparam in (
-            want_base_learner_report_materialized.hparams.items()):
+            want_materialized_report.hparams.items()):
           if isinstance(want_hparam, float):
-            self.assertAllClose(
-                want_hparam,
-                base_learner_report_materialized.hparams[hparam_key])
+            self.assertAllClose(want_hparam,
+                                materialized_report.hparams[hparam_key])
           else:
-            self.assertEqual(
-                want_hparam,
-                base_learner_report_materialized.hparams[hparam_key])
+            self.assertEqual(want_hparam,
+                             materialized_report.hparams[hparam_key])
 
         self.assertSetEqual(
-            set(want_base_learner_report_materialized.attributes.keys()),
-            set(base_learner_report_materialized.attributes.keys()))
+            set(want_materialized_report.attributes.keys()),
+            set(materialized_report.attributes.keys()))
         for attribute_key, want_attribute in (
-            want_base_learner_report_materialized.attributes.items()):
+            want_materialized_report.attributes.items()):
           if isinstance(want_attribute, float):
             self.assertAllClose(
                 want_attribute,
-                base_learner_report_materialized.attributes[attribute_key])
+                decode(materialized_report.attributes[attribute_key]))
           else:
             self.assertEqual(
                 want_attribute,
-                base_learner_report_materialized.attributes[attribute_key])
+                decode(materialized_report.attributes[attribute_key]))
 
         self.assertSetEqual(
-            set(want_base_learner_report_materialized.metrics.keys()),
-            set(base_learner_report_materialized.metrics.keys()))
+            set(want_materialized_report.metrics.keys()),
+            set(materialized_report.metrics.keys()))
         for metric_key, want_metric in (
-            want_base_learner_report_materialized.metrics.items()):
+            want_materialized_report.metrics.items()):
           if isinstance(want_metric, float):
-            self.assertAllClose(
-                want_metric,
-                base_learner_report_materialized.metrics[metric_key])
+            self.assertAllClose(want_metric,
+                                decode(materialized_report.metrics[metric_key]))
           else:
-            self.assertEqual(
-                want_metric,
-                base_learner_report_materialized.metrics[metric_key])
+            self.assertEqual(want_metric,
+                             decode(materialized_report.metrics[metric_key]))
 
 
 if __name__ == "__main__":

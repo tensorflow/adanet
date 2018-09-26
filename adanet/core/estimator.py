@@ -822,7 +822,7 @@ class Estimator(tf.estimator.Estimator):
     # Make directories since model_dir may not have been created yet.
     tf.gfile.MakeDirs(self.model_dir)
     with tf.gfile.GFile(filename, "w") as record_file:
-      record_file.write(os.linesep.join(features.keys()))
+      record_file.write(os.linesep.join(list(features.keys())))
 
   def _filter_recorded_features(self, filename, features):
     """Filters features that are not in the frozen graph.

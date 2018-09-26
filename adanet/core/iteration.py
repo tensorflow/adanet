@@ -25,7 +25,7 @@ from adanet.core.base_learner_report import BaseLearnerReport
 from adanet.core.summary import _ScopedSummary
 
 import numpy as np
-
+from six.moves import zip
 import tensorflow as tf
 
 
@@ -346,7 +346,7 @@ class _IterationBuilder(object):
       for metric_name, metric_ops in all_metrics.items():
         if len(metric_ops) != len(candidates):
           continue
-        values, ops = zip(*metric_ops)
+        values, ops = list(zip(*metric_ops))
         best_value = tf.stack(values)[best_candidate_index]
         best_op = tf.group(ops)
         best_candidate_metric = (best_value, best_op)

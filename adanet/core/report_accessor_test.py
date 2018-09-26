@@ -203,8 +203,7 @@ class ReportAccessorTest(tf.test.TestCase):
                                            materialized_base_learner_reports[1])
     report_accessor.write_iteration_report(2,
                                            materialized_base_learner_reports[2])
-    actual_reports = report_accessor.read_iteration_reports()
-
+    actual_reports = list(report_accessor.read_iteration_reports())
     self.assertEqual(materialized_base_learner_reports, actual_reports)
 
 

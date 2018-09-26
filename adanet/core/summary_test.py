@@ -21,7 +21,14 @@ from __future__ import print_function
 
 from absl.testing import parameterized
 from adanet.core.summary import _ScopedSummary
+from six.moves import range
 import tensorflow as tf
+
+
+def decode(proto_str):
+  """Decodes a proto string."""
+
+  return proto_str.decode("utf-8")
 
 
 class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
@@ -56,7 +63,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
         im = scoped_summary.scalar("inner", i)
       summary_str = s.run(im)
     if skip_summary:
-      self.assertEqual(summary_str, "")
+      self.assertEqual("", decode(summary_str))
       return
     summary = tf.Summary()
     summary.ParseFromString(summary_str)
@@ -136,14 +143,14 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
         im = scoped_summary.image("inner", i, max_outputs=3)
       summary_str = s.run(im)
     if skip_summary:
-      self.assertEqual(summary_str, "")
+      self.assertEqual("", decode(summary_str))
       return
     summary = tf.Summary()
     summary.ParseFromString(summary_str)
     values = summary.value
     self.assertEqual(len(values), 3)
     tags = sorted(v.tag for v in values)
-    expected = sorted("outer/inner/image/{}".format(i) for i in xrange(3))
+    expected = sorted("outer/inner/image/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
 
   @parameterized.named_parameters({
@@ -166,7 +173,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     self.assertEqual(len(values), 3)
     tags = sorted(v.tag for v in values)
     expected = sorted(
-        "family/outer/family/inner/image/{}".format(i) for i in xrange(3))
+        "family/outer/family/inner/image/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
 
   @parameterized.named_parameters({
@@ -188,7 +195,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
         summ_op = scoped_summary.histogram("inner", i)
       summary_str = s.run(summ_op)
     if skip_summary:
-      self.assertEqual(summary_str, "")
+      self.assertEqual("", decode(summary_str))
       return
     summary = tf.Summary()
     summary.ParseFromString(summary_str)
@@ -233,14 +240,14 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
         aud = scoped_summary.audio("inner", i, 0.2, max_outputs=3)
       summary_str = s.run(aud)
     if skip_summary:
-      self.assertEqual(summary_str, "")
+      self.assertEqual("", decode(summary_str))
       return
     summary = tf.Summary()
     summary.ParseFromString(summary_str)
     values = summary.value
     self.assertEqual(len(values), 3)
     tags = sorted(v.tag for v in values)
-    expected = sorted("outer/inner/audio/{}".format(i) for i in xrange(3))
+    expected = sorted("outer/inner/audio/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
 
   @parameterized.named_parameters({
@@ -264,7 +271,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     self.assertEqual(len(values), 3)
     tags = sorted(v.tag for v in values)
     expected = sorted(
-        "family/outer/family/inner/audio/{}".format(i) for i in xrange(3))
+        "family/outer/family/inner/audio/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
 
   @parameterized.named_parameters({

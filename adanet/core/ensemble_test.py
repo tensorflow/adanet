@@ -272,7 +272,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
       # Bias should learn a non-zero value when used.
       if use_bias:
-        self.assertNotAlmostEqual(0., sess.run(ensemble.bias))
+        self.assertNotEqual(0., sess.run(ensemble.bias))
       else:
         self.assertAlmostEqual(0., sess.run(ensemble.bias))
 

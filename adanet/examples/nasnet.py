@@ -93,7 +93,7 @@ class _NASNet(adanet.BaseLearnerBuilder):
     if logits_dimension == 1:
       raise ValueError("Only multi-class classification is supported")
 
-    images = tf.to_float(features.values()[0])
+    images = tf.to_float(list(features.values())[0])
 
     nasnet_fn = nets_factory.get_network_fn(
         self._model_name,

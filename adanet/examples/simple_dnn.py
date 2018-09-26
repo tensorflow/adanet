@@ -22,6 +22,7 @@ from __future__ import print_function
 import functools
 
 import adanet
+from six.moves import range
 import tensorflow as tf
 
 _NUM_LAYERS_KEY = "num_layers"
