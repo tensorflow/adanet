@@ -448,6 +448,9 @@ class _EnsembleBuilder(object):
                 iteration_step=iteration_step,
                 summary=summary,
                 previous_ensemble=previous_ensemble))
+      # Note that these mixture weights are on top of the last_layer of the
+      # base_learner constructed in TRAIN mode, which means that dropout is
+      # still applied when the mixture weights are being trained.
       ensemble_var_list = [w.weight for w in weighted_base_learners]
       if self._use_bias:
         ensemble_var_list.insert(0, bias)
