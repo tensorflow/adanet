@@ -1,6 +1,6 @@
 # AdaNet
 
-**adanet** is a lightweight and scalable TensorFlow AutoML framework for training and deploying adaptive neural networks using the *AdaNet* algorithm [[Cortes et al. ICML 2017](https://arxiv.org/abs/1607.01097)].
+**AdaNet** is a lightweight and scalable TensorFlow AutoML framework for training and deploying adaptive neural networks using the *AdaNet* algorithm [[Cortes et al. ICML 2017](https://arxiv.org/abs/1607.01097)].
 
 *AdaNet* is a machine learning technique that combines several learned networks in order to mitigate the complexity inherent in designing effective neural networks.
 
@@ -44,3 +44,7 @@ You are now ready to experiment with `adanet`.
 ```python
 import adanet
 ```
+
+## License
+
+AdaNet is released under the [Apache License 2.0](LICENSE).
