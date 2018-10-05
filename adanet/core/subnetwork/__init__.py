@@ -1,4 +1,4 @@
-"""An AdaNet algorithm implementation in Tensorflow using a single graph.
+"""TensorFLow AdaNet subnetwork logic.
 
 Copyright 2018 The AdaNet Authors. All Rights Reserved.
 
@@ -19,12 +19,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.core import Ensemble
-from adanet.core import Estimator
-from adanet.core import Evaluator
-from adanet.core import MixtureWeightType
-from adanet.core import ReportMaterializer
-from adanet.core import subnetwork
-from adanet.core import Summary
-from adanet.core import WeightedSubnetwork
-from adanet.core.subnetwork import Subnetwork
+from adanet.core.subnetwork.generator import Builder
+from adanet.core.subnetwork.generator import Generator
+from adanet.core.subnetwork.generator import SimpleGenerator
+from adanet.core.subnetwork.generator import Subnetwork
+from adanet.core.subnetwork.report import MaterializedReport
+from adanet.core.subnetwork.report import Report

@@ -1,4 +1,4 @@
-"""Container for an adanet `BaseLearner`'s attributes and metrics.
+"""Container for an `adanet.Subnetwork`'s attributes and metrics.
 
 Copyright 2018 The AdaNet Authors. All Rights Reserved.
 
@@ -25,22 +25,20 @@ import six
 import tensorflow as tf
 
 
-class BaseLearnerReport(
-    collections.namedtuple("BaseLearnerReport",
-                           ["hparams", "attributes", "metrics"])):
-  """A container for data to be collected about a `BaseLearner`."""
+class Report(
+    collections.namedtuple("Report", ["hparams", "attributes", "metrics"])):
+  """A container for data to be collected about a `Subnetwork`."""
 
   def __new__(cls, hparams, attributes, metrics):
-    """Creates a validated `BaseLearnerReport` instance.
+    """Creates a validated `Report` instance.
 
     Args:
       hparams: A dict mapping strings to python strings, ints, bools, or floats.
-        It is meant to contain the constants that define the
-        `BaseLearnerBuilder`, such as dropout, number of layers, or initial
-        learning rate.
+        It is meant to contain the constants that define the `Builder`, such as
+        dropout, number of layers, or initial learning rate.
       attributes: A dict mapping strings to rank 0 Tensors of dtype string,
         int32, or float32. It is meant to contain properties that may or may not
-        change over the course of training the `BaseLearner`, such as the number
+        change over the course of training the `Subnetwork`, such as the number
         of parameters, the Lipschitz constant, the L_2 norm of the weights, or
         learning rate at materialization time.
       metrics: Dict of metric results keyed by name. The values of the dict are
@@ -53,7 +51,7 @@ class BaseLearnerReport(
         standard deviation of the last layer outputs.
 
     Returns:
-      A validated `BaseLearnerReport` object.
+      A validated `Report` object.
 
     Raises:
       ValueError: If validation fails.
@@ -113,16 +111,16 @@ class BaseLearnerReport(
             "Second element of metric tuple '{}' has value {} and type {}. "
             "Must be a Tensor or Operation.".format(key, value, type(value[1])))
 
-    return super(BaseLearnerReport, cls).__new__(
+    return super(Report, cls).__new__(
         cls, hparams=hparams, attributes=attributes, metrics=metrics)
 
 
-class MaterializedBaseLearnerReport(
-    collections.namedtuple("MaterializedBaseLearnerReport", [
+class MaterializedReport(
+    collections.namedtuple("MaterializedReport", [
         "iteration_number", "name", "hparams", "attributes", "metrics",
         "included_in_final_ensemble"
     ])):
-  """A container for data collected about a `BaseLearner`."""
+  """A container for data collected about a `Subnetwork`."""
 
   def __new__(cls,
               iteration_number,
@@ -131,42 +129,41 @@ class MaterializedBaseLearnerReport(
               attributes,
               metrics,
               included_in_final_ensemble=False):
-    """Creates a validated `MaterializedBaseLearnerReport` instance.
+    """Creates a validated `MaterializedReport` instance.
 
     Args:
       iteration_number: A python integer for the AdaNet iteration number,
         starting from 0.
-      name: A string, which is either the name of the corresponding
-        BaseLearnerBuilder, or "previous_ensemble" if it refers to the
-        previous_ensemble.
+      name: A string, which is either the name of the corresponding Builder, or
+        "previous_ensemble" if it refers to the previous_ensemble.
       hparams: A dict mapping strings to python strings, ints, or floats. These
-        are constants passed from the author of the `BaseLearnerBuilder` that
-        was used to construct this `BaseLearner`. It is meant to contain the
-        arguments that defined the `BaseLearnerBuilder`, such as dropout, number
-        of layers, or initial learning rate.
+        are constants passed from the author of the `Builder` that was used to
+        construct this `Subnetwork`. It is meant to contain the arguments that
+        defined the `Builder`, such as dropout, number of layers, or initial
+        learning rate.
       attributes: A dict mapping strings to python strings, ints, bools, or
         floats. These are python primitives that come from materialized Tensors;
-        these Tensors were defined by the author of the `BaseLearnerBuilder`
-        that was used to construct this `BaseLearner`. It is meant to contain
-        properties that may or may not change over the course of training the
-        `BaseLearner`, such as the number of parameters, the Lipschitz constant,
-        or the L_2 norm of the weights.
+        these Tensors were defined by the author of the `Builder` that was used
+        to construct this `Subnetwork`. It is meant to contain properties that
+        may or may not change over the course of training the `Subnetwork`, such
+        as the number of parameters, the Lipschitz constant, or the L_2 norm of
+        the weights.
       metrics: A dict mapping strings to python strings, ints, or floats. These
         are python primitives that come from metrics that were evaluated on the
-        trained `BaseLearner` over some dataset; these metrics were defined by
-        the author of the `BaseLearnerBuilder` that was used to construct this
-        `BaseLearner`. It is meant to contain performance metrics or measures
+        trained `Subnetwork` over some dataset; these metrics were defined by
+        the author of the `Builder` that was used to construct this
+        `Subnetwork`. It is meant to contain performance metrics or measures
         that could predict generalization, such as the training loss, complexity
         regularized loss, or standard deviation of the last layer outputs.
       included_in_final_ensemble: A boolean denoting whether the associated
-        `BaseLearner` was included in the ensemble at the end of the AdaNet
+        `Subnetwork` was included in the ensemble at the end of the AdaNet
         iteration.
 
     Returns:
-      A `MaterializedBaseLearnerReport` object.
+      A `MaterializedReport` object.
     """
 
-    return super(MaterializedBaseLearnerReport, cls).__new__(
+    return super(MaterializedReport, cls).__new__(
         cls,
         iteration_number=iteration_number,
         name=name,

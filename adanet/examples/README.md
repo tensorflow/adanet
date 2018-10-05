@@ -1,3 +1,3 @@
 # Examples
 
-This directory contains some example user-defined base learners, generators, and complexity measures for AdaNets.
+This directory contains some example user-defined subnetworks, generators, and complexity measures for AdaNets.

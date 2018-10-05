@@ -20,13 +20,13 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.core.base_learner import BaseLearner
-from adanet.core.base_learner import BaseLearnerBuilder
-from adanet.core.base_learner_report import BaseLearnerReport
 from adanet.core.candidate import _Candidate
 from adanet.core.ensemble import Ensemble
 from adanet.core.iteration import _Iteration
 from adanet.core.iteration import _IterationBuilder
+from adanet.core.subnetwork import Builder as SubnetworkBuilder
+from adanet.core.subnetwork import Report as SubnetworkReport
+from adanet.core.subnetwork import Subnetwork
 import adanet.core.testing_utils as tu
 import tensorflow as tf
 
@@ -86,7 +86,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
       "is_over": True,
   }, {
       "testcase_name":
-          "pass_base_learner_report",
+          "pass_subnetwork_report",
       "number":
           1,
       "candidates": [_dummy_candidate()],
@@ -96,8 +96,8 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
           0,
       "is_over":
           True,
-      "base_learner_reports_fn": lambda: {
-          "foo": BaseLearnerReport(
+      "subnetwork_reports_fn": lambda: {
+          "foo": SubnetworkReport(
               hparams={"dropout": 1.0},
               attributes={"aoo": tf.constant("aoo")},
               metrics={"moo": (tf.constant("moo1"), tf.constant("moo2"))})
@@ -109,12 +109,12 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
                estimator_spec,
                best_candidate_index,
                is_over,
-               base_learner_reports_fn=None,
+               subnetwork_reports_fn=None,
                step=0):
-    if base_learner_reports_fn is None:
-      base_learner_reports = {}
+    if subnetwork_reports_fn is None:
+      subnetwork_reports = {}
     else:
-      base_learner_reports = base_learner_reports_fn()
+      subnetwork_reports = subnetwork_reports_fn()
     with self.test_session():
       iteration = _Iteration(
           number=number,
@@ -123,14 +123,14 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
           best_candidate_index=best_candidate_index,
           summaries=[],
           is_over=is_over,
-          base_learner_reports=base_learner_reports,
+          subnetwork_reports=subnetwork_reports,
           step=step)
       self.assertEqual(iteration.number, number)
       self.assertEqual(iteration.candidates, candidates)
       self.assertEqual(iteration.estimator_spec, estimator_spec)
       self.assertEqual(iteration.best_candidate_index, best_candidate_index)
       self.assertEqual(iteration.is_over, is_over)
-      self.assertEqual(iteration.base_learner_reports, base_learner_reports)
+      self.assertEqual(iteration.subnetwork_reports, subnetwork_reports)
       self.assertEqual(iteration.step, step)
 
   @parameterized.named_parameters({
@@ -158,8 +158,8 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
       "testcase_name": "none_best_candidate_index",
       "best_candidate_index": None,
   }, {
-      "testcase_name": "none_base_learner_reports",
-      "base_learner_reports": lambda: None,
+      "testcase_name": "none_subnetwork_reports",
+      "subnetwork_reports": lambda: None,
   }, {
       "testcase_name": "none_step",
       "step": None,
@@ -170,7 +170,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
                       estimator_spec=tu.dummy_estimator_spec(),
                       best_candidate_index=0,
                       is_over=True,
-                      base_learner_reports=lambda: [],
+                      subnetwork_reports=lambda: [],
                       step=0):
     with self.test_session():
       with self.assertRaises(ValueError):
@@ -181,11 +181,11 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
             best_candidate_index=best_candidate_index,
             summaries=[],
             is_over=is_over,
-            base_learner_reports=base_learner_reports(),
+            subnetwork_reports=subnetwork_reports(),
             step=step)
 
 
-class _FakeBaseLearnerBuilder(BaseLearnerBuilder):
+class _FakeBuilder(SubnetworkBuilder):
 
   def __init__(self, name, random_seed=11):
     self._name = name
@@ -199,22 +199,21 @@ class _FakeBaseLearnerBuilder(BaseLearnerBuilder):
   def seed(self):
     return self._random_seed
 
-  def build_base_learner(self,
-                         features,
-                         logits_dimension,
-                         training,
-                         iteration_step,
-                         summary,
-                         previous_ensemble=None):
-    base_learner = BaseLearner(
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
+    return Subnetwork(
         last_layer=tu.dummy_tensor(),
         logits=tu.dummy_tensor([2, logits_dimension]),
         complexity=tu.dummy_tensor(),
         persisted_tensors={"random_seed": self._random_seed})
-    return base_learner
 
-  def build_base_learner_train_op(self, base_learner, loss, var_list, labels,
-                                  iteration_step, summary, previous_ensemble):
+  def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
+                                iteration_step, summary, previous_ensemble):
     return None
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
@@ -222,8 +221,8 @@ class _FakeBaseLearnerBuilder(BaseLearnerBuilder):
     return None
 
 
-class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
-  """A simple DNN base learner builder."""
+class _DNNBuilder(SubnetworkBuilder):
+  """A simple DNN subnetwork builder."""
 
   def __init__(self, name, train_op_fn, layer_size=1, num_layers=1, seed=42):
     self._name = name
@@ -240,13 +239,13 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
   def name(self):
     return self._name
 
-  def build_base_learner(self,
-                         features,
-                         logits_dimension,
-                         training,
-                         iteration_step,
-                         summary,
-                         previous_ensemble=None):
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
     seed = self._seed
     with tf.variable_scope("dnn"):
       persisted_tensors = {}
@@ -271,15 +270,15 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
             units=logits_dimension,
             kernel_initializer=tf.glorot_uniform_initializer(seed=seed))
 
-    return BaseLearner(
+    return Subnetwork(
         last_layer=prev_layer,
         logits=logits,
         complexity=3,
         persisted_tensors=persisted_tensors,
     )
 
-  def train_base_learner(self, loss, var_list, logits, labels, iteration_step,
-                         summary):
+  def train_subnetwork(self, loss, var_list, logits, labels, iteration_step,
+                       summary):
     return self._train_op_fn(loss, var_list)
 
   def train_mixture_weights(self, loss, var_list, logits, labels,
@@ -299,22 +298,22 @@ class _FakeEnsembleBuilder(object):
     if eval_metric_ops_fn:
       self._eval_metric_ops_fn = eval_metric_ops_fn
 
-  def append_new_base_learner(self, ensemble, base_learner_builder,
-                              iteration_step, summary, features, mode, labels):
+  def append_new_subnetwork(self, ensemble, subnetwork_builder, iteration_step,
+                            summary, features, mode, labels):
     del summary
     del mode
     del features
     del labels
     del iteration_step
 
-    num_base_learners = 0
+    num_subnetworks = 0
     if ensemble:
-      num_base_learners += 1
+      num_subnetworks += 1
 
     return tu.dummy_ensemble(
-        name=base_learner_builder.name,
-        num_base_learners=num_base_learners,
-        random_seed=base_learner_builder.seed,
+        name=subnetwork_builder.name,
+        num_subnetworks=num_subnetworks,
+        random_seed=subnetwork_builder.seed,
         dict_predictions=self._dict_predictions,
         eval_metric_ops=self._eval_metric_ops_fn(),
         export_output_key=self._export_output_key)
@@ -364,9 +363,9 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
   # pylint: disable=g-long-lambda
   @parameterized.named_parameters(
       {
-          "testcase_name": "single_base_learner_fn",
+          "testcase_name": "single_subnetwork_fn",
           "ensemble_builder": _FakeEnsembleBuilder(),
-          "base_learner_builders": [_FakeBaseLearnerBuilder("training")],
+          "subnetwork_builders": [_FakeBuilder("training")],
           "features": lambda: [[1., -1., 0.]],
           "labels": lambda: [1],
           "want_loss": 1.403943,
@@ -374,12 +373,12 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           "want_best_candidate_index": 0,
       }, {
           "testcase_name":
-              "single_base_learner_with_eval_metrics",
+              "single_subnetwork_with_eval_metrics",
           "ensemble_builder":
               _FakeEnsembleBuilder(eval_metric_ops_fn=lambda: {
                   "a": (tf.constant(1), tf.constant(2))
               }),
-          "base_learner_builders": [_FakeBaseLearnerBuilder("training",),],
+          "subnetwork_builders": [_FakeBuilder("training",),],
           "features":
               lambda: [[1., -1., 0.]],
           "labels":
@@ -393,14 +392,14 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               0,
       }, {
           "testcase_name":
-              "single_base_learner_with_non_tensor_eval_metric_op",
+              "single_subnetwork_with_non_tensor_eval_metric_op",
           "ensemble_builder":
               _FakeEnsembleBuilder(
                   eval_metric_ops_fn=lambda: {
                       "a": (tf.constant(1), tf.no_op())
                   }
               ),
-          "base_learner_builders": [_FakeBaseLearnerBuilder("training",),],
+          "subnetwork_builders": [_FakeBuilder("training",),],
           "features":
               lambda: [[1., -1., 0.]],
           "labels":
@@ -413,9 +412,9 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           "want_best_candidate_index":
               0,
       }, {
-          "testcase_name": "single_base_learner_done_training_fn",
+          "testcase_name": "single_subnetwork_done_training_fn",
           "ensemble_builder": _FakeEnsembleBuilder(),
-          "base_learner_builders": [_FakeBaseLearnerBuilder("done")],
+          "subnetwork_builders": [_FakeBuilder("done")],
           "features": lambda: [[1., -1., 0.]],
           "labels": lambda: [1],
           "want_loss": 1.403943,
@@ -423,9 +422,9 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           "want_best_candidate_index": 0,
           "want_is_over": True,
       }, {
-          "testcase_name": "single_dict_predictions_base_learner_fn",
+          "testcase_name": "single_dict_predictions_subnetwork_fn",
           "ensemble_builder": _FakeEnsembleBuilder(dict_predictions=True),
-          "base_learner_builders": [_FakeBaseLearnerBuilder("training")],
+          "subnetwork_builders": [_FakeBuilder("training")],
           "features": lambda: [[1., -1., 0.]],
           "labels": lambda: [1],
           "want_loss": 1.403943,
@@ -437,7 +436,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
       }, {
           "testcase_name": "previous_ensemble",
           "ensemble_builder": _FakeEnsembleBuilder(),
-          "base_learner_builders": [_FakeBaseLearnerBuilder("training")],
+          "subnetwork_builders": [_FakeBuilder("training")],
           "features": lambda: [[1., -1., 0.]],
           "labels": lambda: [1],
           "previous_ensemble": lambda: tu.dummy_ensemble("old"),
@@ -449,7 +448,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               "previous_ensemble_is_best",
           "ensemble_builder":
               _FakeEnsembleBuilder(),
-          "base_learner_builders": [_FakeBaseLearnerBuilder("training")],
+          "subnetwork_builders": [_FakeBuilder("training")],
           "features":
               lambda: [[1., -1., 0.]],
           "labels":
@@ -469,7 +468,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               _FakeEnsembleBuilder(eval_metric_ops_fn=lambda: {
                   "a": (tf.constant(1), tf.constant(2))
               }),
-          "base_learner_builders": [_FakeBaseLearnerBuilder("training")],
+          "subnetwork_builders": [_FakeBuilder("training")],
           "features":
               lambda: [[1., -1., 0.]],
           "labels":
@@ -487,12 +486,12 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               1,
       }, {
           "testcase_name":
-              "two_base_learner_fns",
+              "two_subnetwork_fns",
           "ensemble_builder":
               _FakeEnsembleBuilder(),
-          "base_learner_builders": [
-              _FakeBaseLearnerBuilder("training"),
-              _FakeBaseLearnerBuilder("training2", random_seed=7)
+          "subnetwork_builders": [
+              _FakeBuilder("training"),
+              _FakeBuilder("training2", random_seed=7)
           ],
           "features":
               lambda: [[1., -1., 0.]],
@@ -506,12 +505,12 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               0,
       }, {
           "testcase_name":
-              "two_base_learner_fns_other_best",
+              "two_subnetwork_fns_other_best",
           "ensemble_builder":
               _FakeEnsembleBuilder(),
-          "base_learner_builders": [
-              _FakeBaseLearnerBuilder("training"),
-              _FakeBaseLearnerBuilder("training2", random_seed=12)
+          "subnetwork_builders": [
+              _FakeBuilder("training"),
+              _FakeBuilder("training2", random_seed=12)
           ],
           "features":
               lambda: [[1., -1., 0.]],
@@ -525,12 +524,12 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               1,
       }, {
           "testcase_name":
-              "two_base_learner_one_training_fns",
+              "two_subnetwork_one_training_fns",
           "ensemble_builder":
               _FakeEnsembleBuilder(),
-          "base_learner_builders": [
-              _FakeBaseLearnerBuilder("training"),
-              _FakeBaseLearnerBuilder("done", random_seed=7)
+          "subnetwork_builders": [
+              _FakeBuilder("training"),
+              _FakeBuilder("done", random_seed=7)
           ],
           "features":
               lambda: [[1., -1., 0.]],
@@ -544,12 +543,12 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               0,
       }, {
           "testcase_name":
-              "two_base_learner_done_training_fns",
+              "two_subnetwork_done_training_fns",
           "ensemble_builder":
               _FakeEnsembleBuilder(),
-          "base_learner_builders": [
-              _FakeBaseLearnerBuilder("done"),
-              _FakeBaseLearnerBuilder("done1", random_seed=7)
+          "subnetwork_builders": [
+              _FakeBuilder("done"),
+              _FakeBuilder("done1", random_seed=7)
           ],
           "features":
               lambda: [[1., -1., 0.]],
@@ -565,12 +564,12 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               True,
       }, {
           "testcase_name":
-              "two_dict_predictions_base_learner_fns",
+              "two_dict_predictions_subnetwork_fns",
           "ensemble_builder":
               _FakeEnsembleBuilder(dict_predictions=True),
-          "base_learner_builders": [
-              _FakeBaseLearnerBuilder("training"),
-              _FakeBaseLearnerBuilder("training2", random_seed=7)
+          "subnetwork_builders": [
+              _FakeBuilder("training"),
+              _FakeBuilder("training2", random_seed=7)
           ],
           "features":
               lambda: [[1., -1., 0.]],
@@ -586,14 +585,14 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               0,
       }, {
           "testcase_name":
-              "two_dict_predictions_base_learner_fns_predict_classes",
+              "two_dict_predictions_subnetwork_fns_predict_classes",
           "ensemble_builder":
               _FakeEnsembleBuilder(
                   dict_predictions=True,
                   export_output_key=tu.ExportOutputKeys.CLASSIFICATION_CLASSES),
-          "base_learner_builders": [
-              _FakeBaseLearnerBuilder("training"),
-              _FakeBaseLearnerBuilder("training2", random_seed=7)
+          "subnetwork_builders": [
+              _FakeBuilder("training"),
+              _FakeBuilder("training2", random_seed=7)
           ],
           "mode":
               tf.estimator.ModeKeys.PREDICT,
@@ -615,14 +614,14 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           },
       }, {
           "testcase_name":
-              "two_dict_predictions_base_learner_fns_predict_scores",
+              "two_dict_predictions_subnetwork_fns_predict_scores",
           "ensemble_builder":
               _FakeEnsembleBuilder(
                   dict_predictions=True,
                   export_output_key=tu.ExportOutputKeys.CLASSIFICATION_SCORES),
-          "base_learner_builders": [
-              _FakeBaseLearnerBuilder("training"),
-              _FakeBaseLearnerBuilder("training2", random_seed=7)
+          "subnetwork_builders": [
+              _FakeBuilder("training"),
+              _FakeBuilder("training2", random_seed=7)
           ],
           "mode":
               tf.estimator.ModeKeys.PREDICT,
@@ -644,14 +643,14 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           },
       }, {
           "testcase_name":
-              "two_dict_predictions_base_learner_fns_predict_regression",
+              "two_dict_predictions_subnetwork_fns_predict_regression",
           "ensemble_builder":
               _FakeEnsembleBuilder(
                   dict_predictions=True,
                   export_output_key=tu.ExportOutputKeys.REGRESSION),
-          "base_learner_builders": [
-              _FakeBaseLearnerBuilder("training"),
-              _FakeBaseLearnerBuilder("training2", random_seed=7)
+          "subnetwork_builders": [
+              _FakeBuilder("training"),
+              _FakeBuilder("training2", random_seed=7)
           ],
           "mode":
               tf.estimator.ModeKeys.PREDICT,
@@ -671,14 +670,14 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           },
       }, {
           "testcase_name":
-              "two_dict_predictions_base_learner_fns_predict_prediction",
+              "two_dict_predictions_subnetwork_fns_predict_prediction",
           "ensemble_builder":
               _FakeEnsembleBuilder(
                   dict_predictions=True,
                   export_output_key=tu.ExportOutputKeys.PREDICTION),
-          "base_learner_builders": [
-              _FakeBaseLearnerBuilder("training"),
-              _FakeBaseLearnerBuilder("training2", random_seed=7)
+          "subnetwork_builders": [
+              _FakeBuilder("training"),
+              _FakeBuilder("training2", random_seed=7)
           ],
           "mode":
               tf.estimator.ModeKeys.PREDICT,
@@ -705,7 +704,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
       })
   def test_build_iteration(self,
                            ensemble_builder,
-                           base_learner_builders,
+                           subnetwork_builders,
                            features,
                            labels,
                            want_predictions,
@@ -720,7 +719,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
     builder = _IterationBuilder(_FakeCandidateBuilder(), ensemble_builder)
     iteration = builder.build_iteration(
         iteration_number=0,
-        base_learner_builders=base_learner_builders,
+        subnetwork_builders=subnetwork_builders,
         features=features(),
         labels=labels(),
         mode=mode,
@@ -758,18 +757,18 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
         self.assertEqual(1, sess.run(iteration.step))
 
   @parameterized.named_parameters({
-      "testcase_name": "empty_base_learner_builders",
+      "testcase_name": "empty_subnetwork_builders",
       "ensemble_builder": _FakeEnsembleBuilder(),
-      "base_learner_builders": [],
+      "subnetwork_builders": [],
       "want_raises": ValueError,
   }, {
       "testcase_name":
-          "same_base_learner_builder_names",
+          "same_subnetwork_builder_names",
       "ensemble_builder":
           _FakeEnsembleBuilder(),
-      "base_learner_builders": [
-          _FakeBaseLearnerBuilder("same_name"),
-          _FakeBaseLearnerBuilder("same_name")
+      "subnetwork_builders": [
+          _FakeBuilder("same_name"),
+          _FakeBuilder("same_name")
       ],
       "want_raises":
           ValueError,
@@ -777,7 +776,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "testcase_name": "same_name_as_previous_ensemble",
       "ensemble_builder": _FakeEnsembleBuilder(),
       "previous_ensemble_fn": lambda: tu.dummy_ensemble("same_name"),
-      "base_learner_builders": [_FakeBaseLearnerBuilder("same_name"),],
+      "subnetwork_builders": [_FakeBuilder("same_name"),],
       "want_raises": ValueError,
   }, {
       "testcase_name":
@@ -786,9 +785,9 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           _FakeEnsembleBuilder(
               dict_predictions=True,
               export_output_key=tu.ExportOutputKeys.INVALID),
-      "base_learner_builders": [
-          _FakeBaseLearnerBuilder("training"),
-          _FakeBaseLearnerBuilder("training2", random_seed=7)
+      "subnetwork_builders": [
+          _FakeBuilder("training"),
+          _FakeBuilder("training2", random_seed=7)
       ],
       "mode":
           tf.estimator.ModeKeys.PREDICT,
@@ -797,7 +796,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
   })
   def test_build_iteration_error(self,
                                  ensemble_builder,
-                                 base_learner_builders,
+                                 subnetwork_builders,
                                  want_raises,
                                  previous_ensemble_fn=lambda: None,
                                  mode=tf.estimator.ModeKeys.TRAIN):
@@ -808,7 +807,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
       with self.assertRaises(want_raises):
         builder.build_iteration(
             iteration_number=0,
-            base_learner_builders=base_learner_builders,
+            subnetwork_builders=subnetwork_builders,
             features=features,
             labels=labels,
             mode=mode,
@@ -820,10 +819,10 @@ class _HeadEnsembleBuilder(object):
   def __init__(self, head):
     self._head = head
 
-  def append_new_base_learner(self, ensemble, base_learner_builder,
-                              iteration_step, summary, features, mode, labels):
+  def append_new_subnetwork(self, ensemble, subnetwork_builder, iteration_step,
+                            summary, features, mode, labels):
     del ensemble
-    del base_learner_builder
+    del subnetwork_builder
     del iteration_step
     del summary
 
@@ -833,7 +832,7 @@ class _HeadEnsembleBuilder(object):
         features=features, mode=mode, labels=labels, logits=logits)
     return Ensemble(
         name="test",
-        weighted_base_learners=None,
+        weighted_subnetworks=None,
         bias=None,
         logits=None,
         predictions=estimator_spec.predictions,
@@ -863,7 +862,7 @@ class ExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
     mode = tf.estimator.ModeKeys.PREDICT
     iteration = builder.build_iteration(
         iteration_number=0,
-        base_learner_builders=[_FakeBaseLearnerBuilder("test")],
+        subnetwork_builders=[_FakeBuilder("test")],
         features=features,
         labels=labels,
         mode=mode)

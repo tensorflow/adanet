@@ -19,8 +19,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.core.base_learner import BaseLearner
-from adanet.core.ensemble import WeightedBaseLearner
+from adanet.core.ensemble import WeightedSubnetwork
+from adanet.core.subnetwork import Subnetwork
 import tensorflow as tf
 
 
@@ -33,13 +33,13 @@ class _EnsembleFreezer(object):
     The following frozen keys are defined:
 
     * `BIAS`: Ensemble bias term `Tensor`.
-    * `COMPLEXITY`: base learner complexity `Tensor`.
-    * `LAST_LAYER`: base learner's last layer `Tensor`.
-    * `LOGITS`: base learner's mixture-weighted logits `Tensor`.
-    * `NAME`: base learner's name `Tensor`.
-    * `PERSISTED_TENSORS`: base learner persisted `Tensors`.
+    * `COMPLEXITY`: subnetwork complexity `Tensor`.
+    * `LAST_LAYER`: subnetwork's last layer `Tensor`.
+    * `LOGITS`: subnetwork's mixture-weighted logits `Tensor`.
+    * `NAME`: subnetwork's name `Tensor`.
+    * `PERSISTED_TENSORS`: subnetwork persisted `Tensors`.
     * `PERSISTED_TENSORS_SEPARATOR`: Separator symbol for persisted tensor keys.
-    * `WEIGHT`: the mixture weight `Tensor` of each base learner.
+    * `WEIGHT`: the mixture weight `Tensor` of each subnetwork.
     """
 
     BIAS = "bias"
@@ -101,17 +101,17 @@ class _EnsembleFreezer(object):
 
     return "un" + wrapped_name
 
-  def freeze_ensemble(self, sess, filename, weighted_base_learners, bias,
+  def freeze_ensemble(self, sess, filename, weighted_subnetworks, bias,
                       features):
-    """Freezes an ensemble of base learners' weights and persists its subgraph.
+    """Freezes an ensemble of subnetworks' weights and persists its subgraph.
 
     Specifically, this method prunes all nodes from the current graph definition
-    unrelated to the ensemble's `WeightedBaseLearner`s' subgraphs. A subgraph is
+    unrelated to the ensemble's `WeightedSubnetwork`s' subgraphs. A subgraph is
     defined as any ops that contribute to their outputs, complexity, and side
     inputs.
 
     These tensors-to-keep are added to named graph collections, so that the
-    `WeightedBaseLearners` can be easily restored with only the information
+    `WeightedSubnetworks` can be easily restored with only the information
     stored in the frozen graph. Next this method freezes the pruned subgraphs'
     non-local variables by converting them to constants. The final pruned graph
     is serialized and written to disk as a `MetaGraphDef` proto.
@@ -121,7 +121,7 @@ class _EnsembleFreezer(object):
     Args:
       sess: `Session` instance with most recent variable values loaded.
       filename: String filename for the `MetaGraphDef` proto to be written.
-      weighted_base_learners: List of `WeightedBaseLearner` instances to freeze.
+      weighted_subnetworks: List of `WeightedSubnetwork` instances to freeze.
       bias: The ensemble's `Tensor` bias vector.
       features: Dictionary of wrapped `Tensor` objects keyed by feature name.
         Ops for unused features will not be pruned.
@@ -138,9 +138,9 @@ class _EnsembleFreezer(object):
     collection_set = set(
         [tf.GraphKeys.LOCAL_VARIABLES, tf.GraphKeys.TABLE_INITIALIZERS])
 
-    for index, weighted_base_learner in enumerate(weighted_base_learners):
-      self._freeze_weighted_base_learner(
-          weighted_base_learner=weighted_base_learner,
+    for index, weighted_subnetwork in enumerate(weighted_subnetworks):
+      self._freeze_weighted_subnetwork(
+          weighted_subnetwork=weighted_subnetwork,
           index=index,
           collection_set=collection_set,
           destination_nodes=destination_nodes)
@@ -201,66 +201,66 @@ class _EnsembleFreezer(object):
     tf.add_to_collection(self.Keys.BIAS, bias)
     collection_set.add(self.Keys.BIAS)
 
-  def _freeze_weighted_base_learner(self, index, weighted_base_learner,
-                                    collection_set, destination_nodes):
-    """Freezes a `WeightedBaseLearner`.
+  def _freeze_weighted_subnetwork(self, index, weighted_subnetwork,
+                                  collection_set, destination_nodes):
+    """Freezes a `WeightedSubnetwork`.
 
-    Converts a `WeightedBaseLearner`'s variables to constants and stores its
+    Converts a `WeightedSubnetwork`'s variables to constants and stores its
     ops in collections so that they easily be restored into a
-    `WeightedBaseLearner` instance.
+    `WeightedSubnetwork` instance.
 
     Args:
-      index: Index of the `WeightedBaseLearner` in the `Ensemble`.
-      weighted_base_learner: The `WeightedBaseLearner` to freeze.
+      index: Index of the `WeightedSubnetwork` in the `Ensemble`.
+      weighted_subnetwork: The `WeightedSubnetwork` to freeze.
       collection_set: Set of string names of collections to keep.
       destination_nodes: Set of string names of ops to keep.
     """
 
     tensors_to_persist = {
-        self.Keys.NAME: weighted_base_learner.name,
-        self.Keys.WEIGHT: weighted_base_learner.weight,
-        self.Keys.LOGITS: weighted_base_learner.logits,
+        self.Keys.NAME: weighted_subnetwork.name,
+        self.Keys.WEIGHT: weighted_subnetwork.weight,
+        self.Keys.LOGITS: weighted_subnetwork.logits,
     }
     for field, tensor in tensors_to_persist.items():
-      collection_key = self._weighted_base_learner_collection_key(index, field)
+      collection_key = self._weighted_subnetwork_collection_key(index, field)
       self._clear_collection(collection_key)
       self._keep_tensors(
           collection_set=collection_set,
           destination_nodes=destination_nodes,
           collection_key=collection_key,
           tensor=tensor)
-    self._freeze_base_learner(
-        base_learner=weighted_base_learner.base_learner,
+    self._freeze_subnetwork(
+        subnetwork=weighted_subnetwork.subnetwork,
         index=index,
         collection_set=collection_set,
         destination_nodes=destination_nodes)
 
-  def _freeze_base_learner(self, index, base_learner, collection_set,
-                           destination_nodes):
-    """Freezes a `BaseLearner`.
+  def _freeze_subnetwork(self, index, subnetwork, collection_set,
+                         destination_nodes):
+    """Freezes a `Subnetwork`.
 
-    Converts a `BaseLearner`'s variables to constants and stores its ops in
-    collections so that they easily be restored into a `BaseLearner` instance.
+    Converts a `Subnetwork`'s variables to constants and stores its ops in
+    collections so that they easily be restored into a `Subnetwork` instance.
 
     Args:
-      index: Index of the `BaseLearner` in the `Ensemble`.
-      base_learner: The `BaseLearner` to freeze.
+      index: Index of the `Subnetwork` in the `Ensemble`.
+      subnetwork: The `Subnetwork` to freeze.
       collection_set: Set of string names of collections to keep.
       destination_nodes: Set of string names of ops to keep.
     """
 
     tensors_to_persist = {
-        self.Keys.COMPLEXITY: base_learner.complexity,
-        self.Keys.LAST_LAYER: base_learner.last_layer,
-        self.Keys.LOGITS: base_learner.logits,
+        self.Keys.COMPLEXITY: subnetwork.complexity,
+        self.Keys.LAST_LAYER: subnetwork.last_layer,
+        self.Keys.LOGITS: subnetwork.logits,
     }
     tensors_to_persist = self._persist_persisted_tensors(
         prefix=self.Keys.PERSISTED_TENSORS,
-        persisted_tensors=base_learner.persisted_tensors,
+        persisted_tensors=subnetwork.persisted_tensors,
         tensors_to_persist=tensors_to_persist)
 
     for field, tensor in tensors_to_persist.items():
-      collection_key = self._base_learner_collection_key(index, field)
+      collection_key = self._subnetwork_collection_key(index, field)
       self._clear_collection(collection_key)
       self._keep_tensors(
           collection_set=collection_set,
@@ -331,10 +331,10 @@ class _EnsembleFreezer(object):
     return tensors_to_persist
 
   def load_frozen_ensemble(self, filename, features):
-    """Loads ensemble `WeightedBaseLearners` and bias from a `MetaGraphDef`.
+    """Loads ensemble `WeightedSubnetworks` and bias from a `MetaGraphDef`.
 
     This methods imports the graph of a frozen ensemble into the default graph
-    and reconstructs it `WeightedBaseLearners` and bias. The frozen features
+    and reconstructs it `WeightedSubnetworks` and bias. The frozen features
     are replaced with those given in the arguments.
 
     This method should only be called up to once per graph.
@@ -344,7 +344,7 @@ class _EnsembleFreezer(object):
       features: Dictionary of wrapped `Tensor` objects keyed by feature name.
 
     Returns:
-      A two-tuple of a list of frozen `WeightedBaseLearners` instances and a
+      A two-tuple of a list of frozen `WeightedSubnetworks` instances and a
         bias term `Tensor`.
     """
 
@@ -361,41 +361,41 @@ class _EnsembleFreezer(object):
       else:
         input_map[self._unwrapped_name(feature.name)] = feature
 
-    # Import base learner's meta graph into default graph. Since there are no
+    # Import subnetwork's meta graph into default graph. Since there are no
     # variables to restore, import_meta_graph does not create a `Saver`.
     tf.train.import_meta_graph(
         meta_graph_or_file=filename, input_map=input_map, clear_devices=True)
 
-    weighted_base_learners = []
+    weighted_subnetworks = []
     index = 0
     while True:
-      weighted_base_learner = self._reconstruct_weighted_base_learner(index)
-      if weighted_base_learner is None:
+      weighted_subnetwork = self._reconstruct_weighted_subnetwork(index)
+      if weighted_subnetwork is None:
         break
-      weighted_base_learners.append(weighted_base_learner)
+      weighted_subnetworks.append(weighted_subnetwork)
       index += 1
 
     bias_collection = tf.get_collection(self.Keys.BIAS)
     assert len(bias_collection) == 1
     bias_tensor = bias_collection[-1]
-    return weighted_base_learners, bias_tensor
+    return weighted_subnetworks, bias_tensor
 
-  def _reconstruct_weighted_base_learner(self, index):
-    """Reconstructs a `WeightedBaseLearner` from the graph's collections.
+  def _reconstruct_weighted_subnetwork(self, index):
+    """Reconstructs a `WeightedSubnetwork` from the graph's collections.
 
     Args:
-      index: Integer index of the base learner in a list of base learners.
+      index: Integer index of the subnetwork in a list of subnetworks.
 
     Returns:
-      A frozen `WeightedBaseLearner` instance or `None` if there is no
-        `WeightedBaseLearner` frozen at index.
+      A frozen `WeightedSubnetwork` instance or `None` if there is no
+        `WeightedSubnetwork` frozen at index.
     """
 
     name = None
     weight = None
     logits = None
     for key in tf.get_default_graph().get_all_collection_keys():
-      prefix = self._weighted_base_learner_collection_key(index, "")
+      prefix = self._weighted_subnetwork_collection_key(index, "")
       if prefix not in key:
         continue
 
@@ -405,7 +405,7 @@ class _EnsembleFreezer(object):
       assert len(frozen_collection) == 1
       frozen_tensor = frozen_collection[-1]
 
-      field = self._weighted_base_learner_collection_key_field(key, index)
+      field = self._weighted_subnetwork_collection_key_field(key, index)
       if field is None:
         continue
       if field == self.Keys.NAME:
@@ -418,26 +418,26 @@ class _EnsembleFreezer(object):
         weight = frozen_tensor
         continue
 
-    # No weighted base learner found at given index.
+    # No weighted subnetwork found at given index.
     if name is None and weight is None and logits is None:
       return None
 
-    base_learner = self._reconstruct_base_learner(index)
-    return WeightedBaseLearner(
-        name=name, logits=logits, weight=weight, base_learner=base_learner)
+    subnetwork = self._reconstruct_subnetwork(index)
+    return WeightedSubnetwork(
+        name=name, logits=logits, weight=weight, subnetwork=subnetwork)
 
-  def _reconstruct_base_learner(self, index):
-    """Reconstructs a `BaseLearner` from the graph's collections.
+  def _reconstruct_subnetwork(self, index):
+    """Reconstructs a `Subnetwork` from the graph's collections.
 
     Args:
-      index: Integer index of the base learner in a list of base learners.
+      index: Integer index of the subnetwork in a list of subnetworks.
 
     Returns:
-      A frozen `BaseLearner` instance.
+      A frozen `Subnetwork` instance.
 
     Raises:
-      ValueError: If a field in the frozen collection does not belong to a base
-        learner. This should not happen if the collection was created by
+      ValueError: If a field in the frozen collection does not belong to a
+        subnetwork. This should not happen if the collection was created by
         `freeze_ensemble`.
     """
 
@@ -446,7 +446,7 @@ class _EnsembleFreezer(object):
     complexity = None
     persisted_tensors = {}
     for key in tf.get_default_graph().get_all_collection_keys():
-      prefix = self._base_learner_collection_key(index, "")
+      prefix = self._subnetwork_collection_key(index, "")
       if prefix not in key:
         continue
 
@@ -456,7 +456,7 @@ class _EnsembleFreezer(object):
       assert len(frozen_collection) == 1
       frozen_tensor = frozen_collection[-1]
 
-      field = self._base_learner_collection_key_field(key, index)
+      field = self._subnetwork_collection_key_field(key, index)
       if field is None:
         continue
       if field == self.Keys.LAST_LAYER:
@@ -481,7 +481,7 @@ class _EnsembleFreezer(object):
       # freeze_ensemble.
       raise ValueError("'{}' in not a valid field.".format(field))
 
-    return BaseLearner(
+    return Subnetwork(
         last_layer=last_layer,
         logits=logits,
         complexity=complexity,
@@ -513,62 +513,62 @@ class _EnsembleFreezer(object):
     nested_persisted_tensors[fields[-1]] = frozen_tensor
     return persisted_tensors
 
-  def _weighted_base_learner_collection_key(self, index, field):
+  def _weighted_subnetwork_collection_key(self, index, field):
     """Returns the collection key for the given arguments.
 
     Args:
-      index: Integer index of the weighted base learner in a list.
-      field: String name of one of the weighted base learner's fields.
+      index: Integer index of the weighted subnetwork in a list.
+      field: String name of one of the weighted subnetwork's fields.
 
     Returns:
       String collection key.
     """
 
-    return "{}/weighted_base_learner/{}".format(index, field)
+    return "{}/weighted_subnetwork/{}".format(index, field)
 
-  def _weighted_base_learner_collection_key_field(self, collection_key, index):
-    """Returns a weighted base learner's field name from the given arguments.
+  def _weighted_subnetwork_collection_key_field(self, collection_key, index):
+    """Returns a weighted subnetwork's field name from the given arguments.
 
     Args:
       collection_key: String name of the collection where the field `Tensor` is
         stored during freezing.
-      index: Integer index of the weighted base learner in a list.
+      index: Integer index of the weighted subnetwork in a list.
 
     Returns:
-      String name of one of the weighted base learner's fields.
+      String name of one of the weighted subnetwork's fields.
     """
 
-    prefix = "{}/weighted_base_learner/".format(index)
+    prefix = "{}/weighted_subnetwork/".format(index)
     if not collection_key.startswith(prefix):
       return None
     return collection_key.replace(prefix, "")
 
-  def _base_learner_collection_key(self, index, field):
+  def _subnetwork_collection_key(self, index, field):
     """Returns the collection key for the given arguments.
 
     Args:
-      index: Integer index of the base learner in a list of base learners.
-      field: String name of one of the base learner's fields.
+      index: Integer index of the subnetwork in a list of subnetworks.
+      field: String name of one of the subnetwork's fields.
 
     Returns:
       String collection key.
     """
 
-    return "{}/weighted_base_learner/base_learner/{}".format(index, field)
+    return "{}/weighted_subnetwork/subnetwork/{}".format(index, field)
 
-  def _base_learner_collection_key_field(self, collection_key, index):
-    """Returns a base learner's field name from the given arguments.
+  def _subnetwork_collection_key_field(self, collection_key, index):
+    """Returns a subnetwork's field name from the given arguments.
 
     Args:
       collection_key: String name of the collection where the field `Tensor` is
         stored during freezing.
-      index: Integer index of the base learner in a list of base learners.
+      index: Integer index of the subnetwork in a list of subnetworks.
 
     Returns:
-      String name of one of the base learner's fields.
+      String name of one of the subnetwork's fields.
     """
 
-    prefix = "{}/weighted_base_learner/base_learner/".format(index)
+    prefix = "{}/weighted_subnetwork/subnetwork/".format(index)
     if not collection_key.startswith(prefix):
       return None
     return collection_key.replace(prefix, "")

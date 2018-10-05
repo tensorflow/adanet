@@ -80,8 +80,8 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
           all_reports=[]):
         names.append(builder.name)
 
-        # 1. Build base learner graph.
-        base_learner = builder.build_base_learner(
+        # 1. Build subnetwork graph.
+        subnetwork = builder.build_subnetwork(
             features,
             logits_dimension=2,
             training=True,
@@ -89,29 +89,29 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
             summary=tf.summary,
             previous_ensemble=None)
 
-        # 2. Build base learner train ops.
-        base_learner_loss = tf.reduce_mean(
+        # 2. Build subnetwork train ops.
+        subnetwork_loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(
-                logits=base_learner.logits, labels=labels))
-        base_learner_train_op = builder.build_base_learner_train_op(
-            base_learner,
-            base_learner_loss,
+                logits=subnetwork.logits, labels=labels))
+        subnetwork_train_op = builder.build_subnetwork_train_op(
+            subnetwork,
+            subnetwork_loss,
             var_list=None,
             labels=labels,
             iteration_step=iteration_step,
             summary=tf.summary,
             previous_ensemble=None)
-        self.assertIsNotNone(base_learner_train_op)
+        self.assertIsNotNone(subnetwork_train_op)
 
         # 3. Build mixture weight train ops.
 
         # Stop gradients since mixture weights should have not propagate
         # beyond top layer.
-        base_learner_logits = tf.stop_gradient(base_learner.logits)
+        subnetwork_logits = tf.stop_gradient(subnetwork.logits)
 
         # Mixture weight will initialize to a one-valued scalar.
         mixture_weight_logits = tf.layers.dense(
-            base_learner_logits,
+            subnetwork_logits,
             units=1,
             use_bias=False,
             kernel_initializer=tf.ones_initializer())
@@ -144,7 +144,7 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
       "testcase_name": "multiple_features",
       "features": {"x": [1], "y": [2]},
   })
-  def test_build_base_learner_errors(self, logits_dimension=2, features=None):
+  def test_build_subnetwork_errors(self, logits_dimension=2, features=None):
     if not features:
       features = {"x": tf.random_normal(shape=[2, 32, 32, 3])}
     optimizer_fn = tf.train.GradientDescentOptimizer
@@ -160,7 +160,7 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
         all_reports=[])[0]
     with self.assertRaises(ValueError):
       iteration_step = tf.train.create_global_step()
-      builder.build_base_learner(
+      builder.build_subnetwork(
           features,
           logits_dimension=logits_dimension,
           training=True,

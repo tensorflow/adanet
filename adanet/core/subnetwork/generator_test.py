@@ -1,4 +1,4 @@
-"""Test AdaNet single graph base learner implementation.
+"""Test AdaNet single graph subnetwork implementation.
 
 Copyright 2018 The AdaNet Authors. All Rights Reserved.
 
@@ -20,45 +20,52 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.core.base_learner import BaseLearner
-import adanet.core.testing_utils as tu
+from adanet.core.subnetwork.generator import Subnetwork
 import tensorflow as tf
 
 
-class BaseLearnerTest(parameterized.TestCase, tf.test.TestCase):
+def dummy_tensor(shape=(), random_seed=42):
+  """Returns a randomly initialized tensor."""
+
+  return tf.Variable(
+      tf.random_normal(shape=shape, seed=random_seed),
+      trainable=False).read_value()
+
+
+class SubnetworkTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.named_parameters({
       "testcase_name": "empty_persisted_tensors",
-      "last_layer": tu.dummy_tensor(),
-      "logits": tu.dummy_tensor(),
-      "complexity": tu.dummy_tensor(),
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
       "persisted_tensors": {},
   }, {
       "testcase_name": "persisted_tensors",
-      "last_layer": tu.dummy_tensor(),
-      "logits": tu.dummy_tensor(),
-      "complexity": tu.dummy_tensor(),
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
       "persisted_tensors": {
-          "hidden_layer": tu.dummy_tensor(),
+          "hidden_layer": dummy_tensor(),
       },
   }, {
       "testcase_name": "nested_persisted_tensors",
-      "last_layer": tu.dummy_tensor(),
-      "logits": tu.dummy_tensor(),
-      "complexity": tu.dummy_tensor(),
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
       "persisted_tensors": {
-          "hidden_layer": tu.dummy_tensor(),
+          "hidden_layer": dummy_tensor(),
           "nested": {
-              "foo": tu.dummy_tensor(),
+              "foo": dummy_tensor(),
               "nested": {
-                  "foo": tu.dummy_tensor(),
+                  "foo": dummy_tensor(),
               },
           },
       },
   })
   def test_new(self, last_layer, logits, complexity, persisted_tensors):
     with self.test_session():
-      got = BaseLearner(last_layer, logits, complexity, persisted_tensors)
+      got = Subnetwork(last_layer, logits, complexity, persisted_tensors)
       self.assertEqual(got.last_layer, last_layer)
       self.assertEqual(got.logits, logits)
       self.assertEqual(got.complexity, complexity)
@@ -67,59 +74,59 @@ class BaseLearnerTest(parameterized.TestCase, tf.test.TestCase):
   @parameterized.named_parameters({
       "testcase_name": "none_last_layer",
       "last_layer": None,
-      "logits": tu.dummy_tensor(),
-      "complexity": tu.dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
       "persisted_tensors": {},
   }, {
       "testcase_name": "none_logits",
-      "last_layer": tu.dummy_tensor(),
+      "last_layer": dummy_tensor(),
       "logits": None,
-      "complexity": tu.dummy_tensor(),
+      "complexity": dummy_tensor(),
       "persisted_tensors": {},
   }, {
       "testcase_name": "none_complexity",
-      "last_layer": tu.dummy_tensor(),
-      "logits": tu.dummy_tensor(),
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
       "complexity": None,
       "persisted_tensors": {},
   }, {
       "testcase_name": "none_persisted_tensors",
-      "last_layer": tu.dummy_tensor(),
-      "logits": tu.dummy_tensor(),
-      "complexity": tu.dummy_tensor(),
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
       "persisted_tensors": None,
   }, {
       "testcase_name": "empty_list_persisted_tensors",
-      "last_layer": tu.dummy_tensor(),
-      "logits": tu.dummy_tensor(),
-      "complexity": tu.dummy_tensor(),
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
       "persisted_tensors": [],
   }, {
       "testcase_name": "list_persisted_tensors",
-      "last_layer": tu.dummy_tensor(),
-      "logits": tu.dummy_tensor(),
-      "complexity": tu.dummy_tensor(),
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
       "persisted_tensors": [1.],
   }, {
       "testcase_name": "empty_nested_persisted_tensors",
-      "last_layer": tu.dummy_tensor(),
-      "logits": tu.dummy_tensor(),
-      "complexity": tu.dummy_tensor(),
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
       "persisted_tensors": {
-          "value": tu.dummy_tensor(),
+          "value": dummy_tensor(),
           "nested": {},
       },
   }, {
       "testcase_name": "empty_nested_persisted_tensors_recursive",
-      "last_layer": tu.dummy_tensor(),
-      "logits": tu.dummy_tensor(),
-      "complexity": tu.dummy_tensor(),
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
       "persisted_tensors": {
-          "value": tu.dummy_tensor(),
+          "value": dummy_tensor(),
           "nested": {
-              "value": tu.dummy_tensor(),
+              "value": dummy_tensor(),
               "nested": {
-                  "value": tu.dummy_tensor(),
+                  "value": dummy_tensor(),
                   "nested": {},
               },
           },
@@ -128,7 +135,7 @@ class BaseLearnerTest(parameterized.TestCase, tf.test.TestCase):
   def test_new_errors(self, last_layer, logits, complexity, persisted_tensors):
     with self.test_session():
       with self.assertRaises(ValueError):
-        BaseLearner(last_layer, logits, complexity, persisted_tensors)
+        Subnetwork(last_layer, logits, complexity, persisted_tensors)
 
 
 if __name__ == "__main__":

@@ -20,8 +20,8 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.core.base_learner_report import BaseLearnerReport
-from adanet.core.base_learner_report import MaterializedBaseLearnerReport
+from adanet.core import subnetwork
+
 from adanet.core.report_materializer import ReportMaterializer
 import adanet.core.testing_utils as tu
 import tensorflow as tf
@@ -39,15 +39,15 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
 
   # pylint: disable=g-long-lambda
   @parameterized.named_parameters({
-      "testcase_name": "one_empty_base_learner",
+      "testcase_name": "one_empty_subnetwork",
       "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
-      "base_learner_reports_fn": lambda features, labels: {
-          "foo": BaseLearnerReport(hparams={}, attributes={}, metrics={}),
+      "subnetwork_reports_fn": lambda features, labels: {
+          "foo": subnetwork.Report(hparams={}, attributes={}, metrics={}),
       },
       "steps": 3,
-      "included_base_learner_names": ["foo"],
+      "included_subnetwork_names": ["foo"],
       "want_materialized_reports": [
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=0,
               name="foo",
               hparams={},
@@ -57,10 +57,10 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
           ),
       ],
   }, {
-      "testcase_name": "one_base_learner",
+      "testcase_name": "one_subnetwork",
       "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
-      "base_learner_reports_fn": lambda features, labels: {
-          "foo": BaseLearnerReport(
+      "subnetwork_reports_fn": lambda features, labels: {
+          "foo": subnetwork.Report(
               hparams={
                   "learning_rate": 1.e-5,
                   "optimizer": "sgd",
@@ -77,9 +77,9 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
           ),
       },
       "steps": 3,
-      "included_base_learner_names": ["foo"],
+      "included_subnetwork_names": ["foo"],
       "want_materialized_reports": [
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=0,
               name="foo",
               hparams={
@@ -99,10 +99,10 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
           ),
       ],
   }, {
-      "testcase_name": "one_base_learner_iteration_2",
+      "testcase_name": "one_subnetwork_iteration_2",
       "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
-      "base_learner_reports_fn": lambda features, labels: {
-          "foo": BaseLearnerReport(
+      "subnetwork_reports_fn": lambda features, labels: {
+          "foo": subnetwork.Report(
               hparams={
                   "learning_rate": 1.e-5,
                   "optimizer": "sgd",
@@ -120,9 +120,9 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       },
       "steps": 3,
       "iteration_number": 2,
-      "included_base_learner_names": ["foo"],
+      "included_subnetwork_names": ["foo"],
       "want_materialized_reports": [
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=2,
               name="foo",
               hparams={
@@ -142,10 +142,10 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
           ),
       ],
   }, {
-      "testcase_name": "two_base_learners",
+      "testcase_name": "two_subnetworks",
       "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
-      "base_learner_reports_fn": lambda features, labels: {
-          "foo1": BaseLearnerReport(
+      "subnetwork_reports_fn": lambda features, labels: {
+          "foo1": subnetwork.Report(
               hparams={
                   "learning_rate": 1.e-5,
                   "optimizer": "sgd",
@@ -160,7 +160,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
               },
               metrics={},
           ),
-          "foo2": BaseLearnerReport(
+          "foo2": subnetwork.Report(
               hparams={
                   "learning_rate": 1.e-6,
                   "optimizer": "sgd",
@@ -177,9 +177,9 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
           ),
       },
       "steps": 3,
-      "included_base_learner_names": ["foo2"],
+      "included_subnetwork_names": ["foo2"],
       "want_materialized_reports": [
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=0,
               name="foo1",
               hparams={
@@ -197,7 +197,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
               metrics={},
               included_in_final_ensemble=False,
           ),
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=0,
               name="foo2",
               hparams={
@@ -217,24 +217,24 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
           ),
       ],
   }, {
-      "testcase_name": "two_base_learners_zero_included",
+      "testcase_name": "two_subnetworks_zero_included",
       "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
-      "base_learner_reports_fn": lambda features, labels: {
-          "foo1": BaseLearnerReport(
+      "subnetwork_reports_fn": lambda features, labels: {
+          "foo1": subnetwork.Report(
               hparams={},
               attributes={},
               metrics={},
           ),
-          "foo2": BaseLearnerReport(
+          "foo2": subnetwork.Report(
               hparams={},
               attributes={},
               metrics={},
           ),
       },
       "steps": 3,
-      "included_base_learner_names": [],
+      "included_subnetwork_names": [],
       "want_materialized_reports": [
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=0,
               name="foo1",
               hparams={},
@@ -242,7 +242,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
               metrics={},
               included_in_final_ensemble=False,
           ),
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=0,
               name="foo2",
               hparams={},
@@ -252,24 +252,24 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
           ),
       ],
   }, {
-      "testcase_name": "two_base_learners_both_included",
+      "testcase_name": "two_subnetworks_both_included",
       "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
-      "base_learner_reports_fn": lambda features, labels: {
-          "foo1": BaseLearnerReport(
+      "subnetwork_reports_fn": lambda features, labels: {
+          "foo1": subnetwork.Report(
               hparams={},
               attributes={},
               metrics={},
           ),
-          "foo2": BaseLearnerReport(
+          "foo2": subnetwork.Report(
               hparams={},
               attributes={},
               metrics={},
           ),
       },
       "steps": 3,
-      "included_base_learner_names": ["foo1", "foo2"],
+      "included_subnetwork_names": ["foo1", "foo2"],
       "want_materialized_reports": [
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=0,
               name="foo1",
               hparams={},
@@ -277,7 +277,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
               metrics={},
               included_in_final_ensemble=True,
           ),
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=0,
               name="foo2",
               hparams={},
@@ -290,17 +290,17 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       "testcase_name": "materialize_metrics",
       "input_fn": tu.dummy_input_fn([[1., 1.], [1., 1.], [1., 1.]],
                                     [[1.], [2.], [3.]]),
-      "base_learner_reports_fn": lambda features, labels: {
-          "foo": BaseLearnerReport(
+      "subnetwork_reports_fn": lambda features, labels: {
+          "foo": subnetwork.Report(
               hparams={},
               attributes={},
               metrics={"moo": tf.metrics.mean(labels)},
           ),
       },
       "steps": 3,
-      "included_base_learner_names": ["foo"],
+      "included_subnetwork_names": ["foo"],
       "want_materialized_reports": [
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=0,
               name="foo",
               hparams={},
@@ -313,17 +313,17 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
       "testcase_name": "materialize_metrics_none_steps",
       "input_fn": tu.dataset_input_fn([[1., 1.], [1., 1.], [1., 1.]],
                                       [[1.], [2.], [3.]]),
-      "base_learner_reports_fn": lambda features, labels: {
-          "foo": BaseLearnerReport(
+      "subnetwork_reports_fn": lambda features, labels: {
+          "foo": subnetwork.Report(
               hparams={},
               attributes={},
               metrics={"moo": tf.metrics.mean(labels)},
           ),
       },
       "steps": None,
-      "included_base_learner_names": ["foo"],
+      "included_subnetwork_names": ["foo"],
       "want_materialized_reports": [
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=0,
               name="foo",
               hparams={},
@@ -335,17 +335,17 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name": "materialize_metrics_non_tensor_op",
       "input_fn": tu.dummy_input_fn([[1., 2]], [[3.]]),
-      "base_learner_reports_fn": lambda features, labels: {
-          "foo": BaseLearnerReport(
+      "subnetwork_reports_fn": lambda features, labels: {
+          "foo": subnetwork.Report(
               hparams={},
               attributes={},
               metrics={"moo": (tf.constant(42), tf.no_op())},
           ),
       },
       "steps": 3,
-      "included_base_learner_names": ["foo"],
+      "included_subnetwork_names": ["foo"],
       "want_materialized_reports": [
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=0,
               name="foo",
               hparams={},
@@ -355,23 +355,23 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
           ),
       ],
   })
-  def test_materialize_base_learner_reports(self,
-                                            input_fn,
-                                            base_learner_reports_fn,
-                                            steps,
-                                            iteration_number=0,
-                                            included_base_learner_names=None,
-                                            want_materialized_reports=None):
+  def test_materialize_subnetwork_reports(self,
+                                          input_fn,
+                                          subnetwork_reports_fn,
+                                          steps,
+                                          iteration_number=0,
+                                          included_subnetwork_names=None,
+                                          want_materialized_reports=None):
     tf.constant(0.)  # dummy op so that the session graph is never empty.
     features, labels = input_fn()
-    base_learner_reports = base_learner_reports_fn(features, labels)
+    subnetwork_reports = subnetwork_reports_fn(features, labels)
     with self.test_session() as sess:
       sess.run(tf.initializers.local_variables())
       report_materializer = ReportMaterializer(input_fn=input_fn, steps=steps)
       materialized_reports = (
-          report_materializer.materialize_base_learner_reports(
-              sess, iteration_number, base_learner_reports,
-              included_base_learner_names))
+          report_materializer.materialize_subnetwork_reports(
+              sess, iteration_number, subnetwork_reports,
+              included_subnetwork_names))
       self.assertEqual(
           len(want_materialized_reports), len(materialized_reports))
       materialized_reports_dict = {

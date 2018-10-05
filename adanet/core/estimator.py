@@ -152,18 +152,18 @@ class Estimator(tf.estimator.Estimator):
 
   AdaNet is as defined in the paper: https://arxiv.org/abs/1607.01097.
 
-  The AdaNet algorithm uses a base learning algorithm to iteratively generate a
-  set of candidate base learners to add to an ensemble that minimizes the loss
-  function defined in Equation (4). At the end of each iteration, the best
-  ensemble is chosen based on its complexity-regularized train loss. New
-  base learners are allowed to use any base learner weights within the previous
-  iteration's ensemble in order to improve upon them. If the complexity-
-  regularized loss of the new ensemble, as defined in Equation (4), is less than
-  that of the previous iteration's ensemble, the AdaNet algorithm continues onto
-  the next iteration.
+  The AdaNet algorithm uses a weak learning algorithm to iteratively generate a
+  set of candidate subnetworks that attempt to minimize the loss function
+  defined in Equation (4) as part of an ensemble. At the end of each iteration,
+  the best candidate is chosen based on its ensemble's complexity-regularized
+  train loss. New subnetworks are allowed to use any subnetwork weights within
+  the previous iteration's ensemble in order to improve upon them. If the
+  complexity- regularized loss of the new ensemble, as defined in Equation (4),
+  is less than that of the previous iteration's ensemble, the AdaNet algorithm
+  continues onto the next iteration.
 
   AdaNet attempts to minimize the following loss function to learn the mixture
-  weights 'w' of each base learner 'h' in the ensemble with differentiable
+  weights 'w' of each subnetwork 'h' in the ensemble with differentiable
   convex non-increasing surrogate loss function Phi:
 
   Equation (4):
@@ -173,15 +173,16 @@ class Estimator(tf.estimator.Estimator):
 
     where Gamma_j = lambda * r_j + beta, with lambda >= 0 and beta >= 0.
 
-  This implementation trains candidate subnetworks in parallel using a single
-  graph per iteration. At the end of each iteration, the estimator saves the
-  sub-graph of the best subnetwork ensemble and its weights as a separate
-  checkpoint. At the beginning of the next iteration, the estimator imports
-  the previous iteration's frozen graph and adds ops for the next candidates
-  as part of a new graph and session. This allows the estimator have the
-  performance of Tensorflow's static graph constraint (minus the performance
-  hit of reconstructing a graph between iterations), while having the
-  flexibility of having a dynamic graph.
+  This implementation uses an `adanet.subnetwork.Generator` as its weak learning
+  algorithm for generating candidate subnetworks. These are trained in parallel
+  using a single graph per iteration. At the end of each iteration, the
+  estimator saves the sub-graph of the best subnetwork ensemble and its weights
+  as a separate checkpoint. At the beginning of the next iteration, the
+  estimator imports the previous iteration's frozen graph and adds ops for the
+  next candidates as part of a new graph and session. This allows the estimator
+  have the performance of Tensorflow's static graph constraint (minus the
+  performance hit of reconstructing a graph between iterations), while having
+  the flexibility of having a dynamic graph.
 
   NOTE: Subclassing `tf.estimator.Estimator` is only necessary to work with
   `tf.estimator.train_and_evaluate` which asserts that the estimator argument is
@@ -198,11 +199,11 @@ class Estimator(tf.estimator.Estimator):
     FREEZE_ENSEMBLE = "freeze_ensemble"
     FROZEN_ENSEMBLE_NAME = "previous_ensemble"
     INCREMENT_ITERATION = "increment_iteration"
-    BASE_LEARNER_BUILDER_GENERATOR = "base_learner_builder_generator"
+    SUBNETWORK_GENERATOR = "subnetwork_generator"
 
   def __init__(self,
                head,
-               base_learner_builder_generator,
+               subnetwork_generator,
                max_iteration_steps,
                mixture_weight_type=MixtureWeightType.SCALAR,
                mixture_weight_initializer=None,
@@ -223,21 +224,21 @@ class Estimator(tf.estimator.Estimator):
     Regarding the options for `mixture_weight_type`:
 
     A `SCALAR` mixture weight is a rank 0 tensor. It performs an element-
-    wise multiplication with its base learner's logits. This mixture weight
+    wise multiplication with its subnetwork's logits. This mixture weight
     is the simplest to learn, the quickest to train, and most likely to
     generalize well.
 
     A `VECTOR` mixture weight is a tensor of shape [k] where k is the
     ensemble's logits dimension as defined by `head`. It is similar to
     `SCALAR` in that it performs an element-wise multiplication with its
-    base learner's logits, but is more flexible in learning a base
-    learner's preferences per class.
+    subnetwork's logits, but is more flexible in learning a subnetworks's
+    preferences per class.
 
     A `MATRIX` mixture weight is a tensor of shape [a, b] where a is the
-    number of outputs from the base learner's `last_layer` and b is the
+    number of outputs from the subnetwork's `last_layer` and b is the
     number of outputs from the ensemble's `logits`. This weight
-    matrix-multiplies the base learner's `last_layer`. This mixture weight
-    offers the most flexibility and expressivity, allowing base learners to
+    matrix-multiplies the subnetwork's `last_layer`. This mixture weight
+    offers the most flexibility and expressivity, allowing subnetworks to
     have outputs of different dimensionalities. However, it also has the
     most trainable parameters (a*b), and is therefore the most sensitive to
     learning rates and regularization.
@@ -245,61 +246,58 @@ class Estimator(tf.estimator.Estimator):
     Args:
       head: A `tf.contrib.estimator.Head` instance for computing loss and
         evaluation metrics for every candidate.
-      base_learner_builder_generator: The `adanet.BaseLearnerBuilderGenerator`
-        which defines the candidate base learners to train and evaluate at every
-        AdaNet iteration.
+      subnetwork_generator: The `adanet.subnetwork.Generator` which defines the
+        candidate subnetworks to train and evaluate at every AdaNet iteration.
       max_iteration_steps: Total number of steps for which to train candidates
         per iteration. If `OutOfRange` or `StopIteration` occurs in the middle,
         training stops before `max_iteration_steps` steps.
       mixture_weight_type: The `adanet.MixtureWeightType` defining which mixture
-        weight type to learn in the linear combination of base learner outputs.
+        weight type to learn in the linear combination of subnetwork outputs.
       mixture_weight_initializer: The initializer for mixture_weights. When
         `None`, the default is different according to `mixture_weight_type`.
-        `SCALAR` initializes to 1/N where N is the number of base learners in
-        the ensemble giving a uniform average. `VECTOR` initializes each entry
-        to 1/N where N is the number of base learners in the ensemble giving a
+        `SCALAR` initializes to 1/N where N is the number of subnetworks in the
+        ensemble giving a uniform average. `VECTOR` initializes each entry to
+        1/N where N is the number of subnetworks in the ensemble giving a
         uniform average. `MATRIX` uses `tf.zeros_initializer`.
       warm_start_mixture_weights: Whether, at the beginning of an iteration, to
-        initialize the mixture weights of the base learners from the previous
+        initialize the mixture weights of the subnetworks from the previous
         ensemble to their learned value at the previous iteration, as opposed to
         retraining them from scratch. Takes precedence over the value for
-        `mixture_weight_initializer` for base learners from previous iterations.
+        `mixture_weight_initializer` for subnetworks from previous iterations.
       adanet_lambda: Float multiplier 'lambda' for applying L1 regularization to
-        base learners' mixture weights 'w' in the ensemble proportional to their
+        subnetworks' mixture weights 'w' in the ensemble proportional to their
         complexity. See Equation (4) in the AdaNet paper.
       adanet_beta: Float L1 regularization multiplier 'beta' to apply equally to
-        all base learners' weights 'w' in the ensemble regardless of their
+        all subnetworks' weights 'w' in the ensemble regardless of their
         complexity. See Equation (4) in the AdaNet paper.
       evaluator: An `Evaluator` for comparing `Ensemble` instances in evaluation
         mode using the training set, or a holdout set. When `None`, they are
         compared using a moving average of their `Ensemble`'s AdaNet loss during
         training.
       report_materializer: A `ReportMaterializer` for materializing a
-        `BaseLearnerBuilder`'s `BaseLearnerReports` into
-        `MaterializedBaseLearnerReport`s. These reports are made available to
-        the BaseLearnerBuilderGenerator at the next iteration, so that it can
-        adapt its search space. When `None`, the BaseLearnerBuilderGenerators'
+        `Builder`'s `subnetwork.Reports` into `subnetwork.MaterializedReport`s.
+        These reports are made available to the Generator at the next iteration,
+        so that it can adapt its search space. When `None`, the Generators'
         `generate_candidates` method will receive empty Lists for their
         `previous_ensemble_reports` and `all_reports` arguments.
       use_bias: Whether to add a bias term to the ensemble's logits. Adding a
         bias allows the ensemble to learn a shift in the data, often leading to
         more stable training and better predictions.
       replicate_ensemble_in_training: Whether to freeze a copy of the ensembled
-        base learners' subgraphs in training mode in addition to prediction
-        mode. A copy of the base learners' subgraphs is always saved in
-        prediction mode so that at prediction time, the ensemble and composing
-        base learners are all in prediction mode. This argument only affects the
-        outputs of the frozen base learners in the ensemble. When `False` and
-        during candidate training, the frozen base learners in the ensemble are
-        in prediction mode, so training-only ops like dropout are not applied to
-        them. When `True` and training the candidates, the frozen base learners
-        will be in training mode as well, so they will apply training-only ops
-        like dropout. However when `True`, this doubles the amount of disk space
-        required to store the frozen ensembles, and increases the preparation
-        stage between boosting iterations. This argument is useful for
-        regularizing learning mixture weights, or for making training-only side
-        inputs available in subsequent iterations. For most use-cases, this
-        should be `False`.
+        subnetworks' subgraphs in training mode in addition to prediction mode.
+        A copy of the subnetworks' subgraphs is always saved in prediction mode
+        so that at prediction time, the ensemble and composing subnetworks are
+        all in prediction mode. This argument only affects the outputs of the
+        frozen subnetworks in the ensemble. When `False` and during candidate
+        training, the frozen subnetworks in the ensemble are in prediction mode,
+        so training-only ops like dropout are not applied to them. When `True`
+        and training the candidates, the frozen subnetworks will be in training
+        mode as well, so they will apply training-only ops like dropout. However
+        when `True`, this doubles the amount of disk space required to store the
+        frozen ensembles, and increases the preparation stage between boosting
+        iterations. This argument is useful for regularizing learning mixture
+        weights, or for making training-only side inputs available in subsequent
+        iterations. For most use-cases, this should be `False`.
       adanet_loss_decay: Float decay for the exponential-moving-average of the
         AdaNet objective throughout training. This moving average is a data-
         driven way tracking the best candidate with only the training set.
@@ -312,7 +310,7 @@ class Estimator(tf.estimator.Estimator):
       model_dir: Directory to save model parameters, graph and etc. This can
         also be used to load checkpoints from the directory into a estimator to
         continue training a previously saved model.
-      report_dir: Directory where the `MaterializedBaseLearnerReport`s
+      report_dir: Directory where the `adanet.subnetwork.MaterializedReport`s
         materialized by `report_materializer` would be saved. If
         `report_materializer` is None, this will not save anything. If `None` or
         empty string, defaults to "<model_dir>/report".
@@ -322,15 +320,15 @@ class Estimator(tf.estimator.Estimator):
       An `Estimator` instance.
 
     Raises:
-      ValueError: If `base_learner_builder_generator` is `None`.
+      ValueError: If `subnetwork_generator` is `None`.
       ValueError: If `max_iteration_steps` is <= 0.
     """
 
     # TODO: Add argument to specify how many frozen graph
     # checkpoints to keep.
 
-    if base_learner_builder_generator is None:
-      raise ValueError("base_learner_builder_generator can't be None.")
+    if subnetwork_generator is None:
+      raise ValueError("subnetwork_generator can't be None.")
     if max_iteration_steps <= 0.:
       raise ValueError("max_iteration_steps must be > 0.")
 
@@ -368,15 +366,14 @@ class Estimator(tf.estimator.Estimator):
     self._inside_adanet_training_loop = False
 
     # This `Estimator` is responsible for bookkeeping across iterations, and
-    # for training the base learners in both a local and distributed setting.
+    # for training the subnetworks in both a local and distributed setting.
     # Subclassing improves future-proofing against new private methods being
     # added to `tf.estimator.Estimator` that are expected to be callable by
     # external functions, such as in b/110435640.
     super(Estimator, self).__init__(
         model_fn=self._model_fn,
         params={
-            self._Keys.BASE_LEARNER_BUILDER_GENERATOR:
-                base_learner_builder_generator,
+            self._Keys.SUBNETWORK_GENERATOR: subnetwork_generator,
         },
         config=config,
         model_dir=model_dir)
@@ -564,7 +561,7 @@ class Estimator(tf.estimator.Estimator):
       input_fn = self._placeholder_input_fn
     self._call_adanet_model_fn(input_fn, tf.estimator.ModeKeys.EVAL, params)
 
-    # Then materialize and store the base learner reports.
+    # Then materialize and store the subnetwork reports.
     if self._report_materializer:
       params = self.params.copy()
       params[self._Keys.MATERIALIZE_REPORT] = True
@@ -664,7 +661,7 @@ class Estimator(tf.estimator.Estimator):
       return self._freezer.freeze_ensemble(
           sess=sess,
           filename=filename,
-          weighted_base_learners=best_candidate.ensemble.weighted_base_learners,
+          weighted_subnetworks=best_candidate.ensemble.weighted_subnetworks,
           bias=best_candidate.ensemble.bias,
           features=features)
 
@@ -699,8 +696,8 @@ class Estimator(tf.estimator.Estimator):
       coord = tf.train.Coordinator()
       tf.train.start_queue_runners(sess=sess, coord=coord)
       if self._evaluator:
-        new_learners = [c.ensemble for c in current_iteration.candidates]
-        index = self._evaluator.best_ensemble_index(sess, new_learners)
+        candidates = [c.ensemble for c in current_iteration.candidates]
+        index = self._evaluator.best_ensemble_index(sess, candidates)
       else:
         index = sess.run(current_iteration.best_candidate_index)
     best_candidate = current_iteration.candidates[index]
@@ -711,10 +708,10 @@ class Estimator(tf.estimator.Estimator):
     return index
 
   def _materialize_report(self, current_iteration):
-    """Generates reports as defined by `BaseLearnerBuilder`s.
+    """Generates reports as defined by `Builder`s.
 
-    Materializes the Tensors and metrics defined in the `BaseLearnerBuilder`s'
-    `build_base_learner_report` method using `ReportMaterializer`, and stores
+    Materializes the Tensors and metrics defined in the `Builder`s'
+    `build_subnetwork_report` method using `ReportMaterializer`, and stores
     them to disk using `_ReportAccessor`.
 
     Args:
@@ -725,7 +722,7 @@ class Estimator(tf.estimator.Estimator):
     tf.logging.info("Starting metric logging for iteration %s",
                     current_iteration.number)
 
-    included_base_learner_names = [
+    included_subnetwork_names = [
         # best ensemble name
         current_iteration.candidates[self._best_ensemble_index].ensemble.name
     ]
@@ -737,15 +734,14 @@ class Estimator(tf.estimator.Estimator):
       saver.restore(sess, latest_checkpoint)
       coord = tf.train.Coordinator()
       tf.train.start_queue_runners(sess=sess, coord=coord)
-      materialized_base_learner_reports = (
-          self._report_materializer.materialize_base_learner_reports(
+      materialized_reports = (
+          self._report_materializer.materialize_subnetwork_reports(
               sess, current_iteration.number,
-              current_iteration.base_learner_reports,
-              included_base_learner_names))
-      self._report_accessor.write_iteration_report(
-          current_iteration.number, materialized_base_learner_reports)
+              current_iteration.subnetwork_reports, included_subnetwork_names))
+      self._report_accessor.write_iteration_report(current_iteration.number,
+                                                   materialized_reports)
 
-    tf.logging.info("Finished saving base learner reports for iteration %s",
+    tf.logging.info("Finished saving subnetwork reports for iteration %s",
                     current_iteration.number)
 
   def _training_hooks(self, current_iteration, training):
@@ -854,69 +850,68 @@ class Estimator(tf.estimator.Estimator):
     extra_features = recorded_feature_names - set(features.keys())
     if extra_features:
       tf.logging.warning(
-          "Features dict contains features absent from frozen graph: [{}].".
-          format(", ".join(sorted(["'{}'".format(f) for f in extra_features]))))
+          "Features dict contains features absent from frozen graph: [{}]."
+          .format(", ".join(sorted(
+              ["'{}'".format(f) for f in extra_features]))))
     missing_features = set(features.keys()) - recorded_feature_names
     if missing_features:
       tf.logging.warning(
-          "Features dict is missing features present in frozen graph: [{}].".
-          format(", ".join(
+          "Features dict is missing features present in frozen graph: [{}]."
+          .format(", ".join(
               sorted(["'{}'".format(f) for f in missing_features]))))
     filtered_feature_names = recorded_feature_names & set(features.keys())
     return {key: features[key] for key in filtered_feature_names}
 
-  def _collate_base_learner_reports(self, iteration_number):
-    """Prepares BaseLearnerReports to be passed to BaseLearnerBuilderGenerator.
+  def _collate_subnetwork_reports(self, iteration_number):
+    """Prepares subnetwork.Reports to be passed to Generator.
 
-    Reads MaterializedBaseLearnerReports from past iterations,
+    Reads subnetwork.MaterializedReports from past iterations,
     collates those that were included in previous_ensemble into
-    previous_ensemble_reports as a List of MaterializedBaseLearnerReports,
+    previous_ensemble_reports as a List of subnetwork.MaterializedReports,
     and collates all reports from previous iterations into all_reports as
-    another List of MaterializedBaseLearnerReports.
+    another List of subnetwork.MaterializedReports.
 
     Args:
       iteration_number: Python integer AdaNet iteration number, starting from 0.
 
     Returns:
-      (previous_ensemble_reports: List<MaterializedBaseLearnerReport>,
-       materialized_base_learner_reports: List<MaterializedBaseLearnerReport>)
+      (previous_ensemble_reports: List<subnetwork.MaterializedReport>,
+       materialized_reports: List<MaterializedReport>)
     """
 
-    materialized_base_learner_reports_all = (
-        self._report_accessor.read_iteration_reports())
+    materialized_reports_all = (self._report_accessor.read_iteration_reports())
     previous_ensemble_reports = []
     all_reports = []
 
     # Since the number of iteration reports changes after the
     # MATERIALIZE_REPORT phase, we need to make sure that we always pass the
-    # same reports to the BaseLearnerBuilderGenerator in the same iteration,
+    # same reports to the Generator in the same iteration,
     # otherwise the graph that is built in the FREEZE_ENSEMBLE phase would be
     # different from the graph built in the training phase.
 
     # Iteration 0 should have 0 iteration reports passed to the
-    #   BaseLearnerBuilderGenerator, since there are no previous iterations.
-    # Iteration 1 should have 1 list of reports for BaseLearnerBuilders
+    #   Generator, since there are no previous iterations.
+    # Iteration 1 should have 1 list of reports for Builders
     #   generated in iteration 0.
     # Iteration 2 should have 2 lists of reports -- one for iteration 0,
     #   one for iteration 1. Note that the list of reports for iteration >= 1
     #   should contain "previous_ensemble", in addition to the
-    #   BaseLearnerBuilders at the start of that iteration.
+    #   Builders at the start of that iteration.
     # Iteration t should have t lists of reports.
 
-    for i, iteration_reports in enumerate(
-        materialized_base_learner_reports_all):
+    for i, iteration_reports in enumerate(materialized_reports_all):
 
       # This ensures that the FREEZE_ENSEMBLE phase does not pass the reports
       # generated in the previous phase of the same iteration to the
-      # BaseLearnerBuilderGenerator when building the graph.
+      # Generator when building the graph.
       if i >= iteration_number:
         break
 
-      # Assumes that only one base learner is added to the ensemble in
+      # Assumes that only one subnetwork is added to the ensemble in
       # each iteration.
       chosen_blb_in_this_iteration = [
-          base_learner_report for base_learner_report in iteration_reports
-          if base_learner_report.included_in_final_ensemble
+          subnetwork_report for subnetwork_report in iteration_reports
+          if subnetwork_report.included_in_final_ensemble
       ][0]
       previous_ensemble_reports.append(chosen_blb_in_this_iteration)
 
@@ -998,7 +993,7 @@ class Estimator(tf.estimator.Estimator):
       ensemble = self._freezer.load_frozen_ensemble(
           filename=frozen_graph_filename, features=filtered_features)
 
-    builder_generator = params[self._Keys.BASE_LEARNER_BUILDER_GENERATOR]
+    builder_generator = params[self._Keys.SUBNETWORK_GENERATOR]
 
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
     previous_ensemble_summary = _ScopedSummary(self._Keys.FROZEN_ENSEMBLE_NAME,
@@ -1007,30 +1002,30 @@ class Estimator(tf.estimator.Estimator):
     previous_ensemble_reports, all_reports = [], []
     if self._report_materializer:
       previous_ensemble_reports, all_reports = (
-          self._collate_base_learner_reports(iteration_number))
+          self._collate_subnetwork_reports(iteration_number))
 
     with tf.variable_scope("adanet"):
-      previous_weighted_base_learners, bias = ensemble
+      previous_weighted_subnetworks, bias = ensemble
       previous_ensemble = None
-      if previous_weighted_base_learners:
+      if previous_weighted_subnetworks:
         with tf.variable_scope(self._Keys.FROZEN_ENSEMBLE_NAME):
           previous_ensemble = self._ensemble_builder.build_ensemble(
               name=self._Keys.FROZEN_ENSEMBLE_NAME,
-              weighted_base_learners=previous_weighted_base_learners,
+              weighted_subnetworks=previous_weighted_subnetworks,
               summary=previous_ensemble_summary,
               bias=bias,
               features=features,
               iteration_step=None,
               mode=mode,
               labels=labels)
-      base_learner_builders = builder_generator.generate_candidates(
+      subnetwork_builders = builder_generator.generate_candidates(
           previous_ensemble=previous_ensemble,
           iteration_number=iteration_number,
           previous_ensemble_reports=previous_ensemble_reports,
           all_reports=all_reports)
       current_iteration = self._iteration_builder.build_iteration(
           iteration_number=iteration_number,
-          base_learner_builders=base_learner_builders,
+          subnetwork_builders=subnetwork_builders,
           features=features,
           labels=labels,
           mode=mode,

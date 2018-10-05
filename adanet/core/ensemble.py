@@ -24,40 +24,41 @@ import collections
 import tensorflow as tf
 
 
-class WeightedBaseLearner(
-    collections.namedtuple("WeightedBaseLearner",
-                           ["name", "weight", "logits", "base_learner"])):
-  """An AdaNet weighted base learner.
+class WeightedSubnetwork(
+    collections.namedtuple("WeightedSubnetwork",
+                           ["name", "weight", "logits", "subnetwork"])):
+  """An AdaNet weighted subnetwork.
 
-  A weighted base learner is a weight 'w' applied to a base learner's last layer
-  'u'. The results is the base learner's logits, regularized by its complexity.
+  A weighted subnetwork is a weight 'w' applied to a subnetwork's last layer
+  'u'. The results is the weighted subnetwork's logits, regularized by its
+  complexity.
   """
 
-  def __new__(cls, name, weight, logits, base_learner):
-    """Creates a `WeightedBaseLearner` instance.
+  def __new__(cls, name, weight, logits, subnetwork):
+    """Creates a `WeightedSubnetwork` instance.
 
     Args:
-      name: The string `tf.constant` name of `base_learner`.
-      weight: The weight `Tensor` to apply to this base learner. The AdaNet
-        paper refers to this weight as 'w' in Equations (4), (5), and (6).
+      name: The string `tf.constant` name of `subnetwork`.
+      weight: The weight `Tensor` to apply to this subnetwork. The AdaNet paper
+        refers to this weight as 'w' in Equations (4), (5), and (6).
       logits: The output `Tensor` after the matrix multiplication of `weight`
-        and the base_learner's `last_layer`. The weight's shape is [batch_size,
+        and the subnetwork's `last_layer`. The weight's shape is [batch_size,
         logits_dimension]. It is equivalent to a linear logits layer in a neural
         network.
-      base_learner: The `BaseLearner` to weight.
+      subnetwork: The `adanet.Subnetwork` to weight.
 
     Returns:
-      A `WeightedBaseLearner` object.
+      A `WeightedSubnetwork` object.
     """
 
-    return super(WeightedBaseLearner, cls).__new__(
-        cls, name=name, weight=weight, logits=logits, base_learner=base_learner)
+    return super(WeightedSubnetwork, cls).__new__(
+        cls, name=name, weight=weight, logits=logits, subnetwork=subnetwork)
 
 
 class Ensemble(
     collections.namedtuple("Ensemble", [
         "name",
-        "weighted_base_learners",
+        "weighted_subnetworks",
         "bias",
         "logits",
         "predictions",
@@ -71,9 +72,9 @@ class Ensemble(
     ])):
   """An AdaNet ensemble.
 
-  An ensemble is a collection of base learners which forms a strong learner
+  An ensemble is a collection of subnetworks which forms a neural network
   through the weighted sum of their outputs. It is represented by 'f' throughout
-  the AdaNet paper. Its component base learners' weights are complexity
+  the AdaNet paper. Its component subnetworks' weights are complexity
   regularized (Gamma) as defined in Equation (4).
 
   # TODO: Remove fields related to training and evaluation.
@@ -81,7 +82,7 @@ class Ensemble(
 
   def __new__(cls,
               name,
-              weighted_base_learners,
+              weighted_subnetworks,
               bias,
               logits,
               predictions,
@@ -96,11 +97,11 @@ class Ensemble(
 
     Args:
       name: String name of this ensemble. Should be unique in the graph.
-      weighted_base_learners: List of `WeightedBaseLearner` instances that form
+      weighted_subnetworks: List of `WeightedSubnetwork` instances that form
         this ensemble. Ordered from first to most recent.
       bias: `Tensor` bias vector for the ensemble logits.
       logits: Logits `Tensor`. The result of the function 'f' as defined in
-        Section 5.1 which is the sum of the logits of all `WeightedBaseLearner`
+        Section 5.1 which is the sum of the logits of all `WeightedSubnetwork`
         instances in ensemble.
       predictions: Predictions `Tensor` or dict of `Tensor`.
       loss: Loss `Tensor` as defined by the surrogate loss function Phi in
@@ -108,7 +109,7 @@ class Ensemble(
       adanet_loss: Loss `Tensor` as defined by F(w) in Equation (4). Must be
         either scalar, or with shape `[1]`. The AdaNet algorithm aims to
         minimize this objective which balances training loss with the total
-        complexity of the base learners in the ensemble.
+        complexity of the subnetworks in the ensemble.
       complexity_regularized_loss: Loss `Tensor` as defined by F(w,u) in
         Equation (5). Must be either scalar, or with shape `[1]`.
       train_op: Op for the training step.
@@ -127,12 +128,12 @@ class Ensemble(
       An `Ensemble` object.
     """
 
-    # TODO: Make weighted_base_learners property a tuple so that
+    # TODO: Make weighted_subnetworks property a tuple so that
     # `Ensemble` is immutable.
     return super(Ensemble, cls).__new__(
         cls,
         name=name,
-        weighted_base_learners=weighted_base_learners,
+        weighted_subnetworks=weighted_subnetworks,
         bias=bias,
         logits=logits,
         predictions=predictions,
@@ -146,7 +147,7 @@ class Ensemble(
 
 
 class MixtureWeightType(object):
-  """Mixture weight types available for learning base learner contributions.
+  """Mixture weight types available for learning subnetwork contributions.
 
   The following mixture weight types are defined:
 
@@ -160,12 +161,11 @@ class MixtureWeightType(object):
   MATRIX = "matrix"
 
 
-def _architecture_as_metric(weighted_base_learners):
+def _architecture_as_metric(weighted_subnetworks):
   """Returns a representation of the ensemble's architecture as a tf.metric."""
 
   joined_names = " | ".join([
-      str(tf.contrib.util.constant_value(w.name))
-      for w in weighted_base_learners
+      str(tf.contrib.util.constant_value(w.name)) for w in weighted_subnetworks
   ])
   architecture = tf.convert_to_tensor(
       "| {} |".format(joined_names), name="architecture")
@@ -192,20 +192,20 @@ class _EnsembleBuilder(object):
         weight type to learn.
       mixture_weight_initializer: The initializer for mixture_weights. When
         `None`, the default is different according to `mixture_weight_type`.
-        `SCALAR` initializes to 1/N where N is the number of base learners in
-        the ensemble giving a uniform average. `VECTOR` initializes each entry
-        to 1/N where N is the number of base learners in the ensemble giving a
+        `SCALAR` initializes to 1/N where N is the number of subnetworks in the
+        ensemble giving a uniform average. `VECTOR` initializes each entry to
+        1/N where N is the number of subnetworks in the ensemble giving a
         uniform average. `MATRIX` uses `tf.zeros_initializer`.
       warm_start_mixture_weights: Whether, at the beginning of an iteration, to
-        initialize the mixture weights of the base learners from the previous
+        initialize the mixture weights of the subnetworks from the previous
         ensemble to their learned value at the previous iteration, as opposed to
         retraining them from scratch. Takes precedence over the value for
-        `mixture_weight_initializer` for base learners from previous iterations.
+        `mixture_weight_initializer` for subnetworks from previous iterations.
       adanet_lambda: Float multiplier 'lambda' for applying L1 regularization to
-        base learners' mixture weights 'w' in the ensemble proportional to their
+        subnetworks' mixture weights 'w' in the ensemble proportional to their
         complexity. See Equation (4) in the AdaNet paper.
       adanet_beta: Float L1 regularization multiplier 'beta' to apply equally to
-        all base learners' weights 'w' in the ensemble regardless of their
+        all subnetworks' weights 'w' in the ensemble regardless of their
         complexity. See Equation (4) in the AdaNet paper.
       use_bias: Whether to add a bias term to the ensemble's logits.
 
@@ -221,28 +221,28 @@ class _EnsembleBuilder(object):
     self._adanet_beta = adanet_beta
     self._use_bias = use_bias
 
-  def append_new_base_learner(self,
-                              ensemble,
-                              base_learner_builder,
-                              iteration_step,
-                              summary,
-                              features,
-                              mode,
-                              labels=None):
-    """Adds a `BaseLearner` to an `Ensemble` from iteration t-1 for iteration t.
+  def append_new_subnetwork(self,
+                            ensemble,
+                            subnetwork_builder,
+                            iteration_step,
+                            summary,
+                            features,
+                            mode,
+                            labels=None):
+    """Adds a `Subnetwork` to an `Ensemble` from iteration t-1 for iteration t.
 
     For iteration t > 0, the ensemble is built given the `Ensemble` for t-1 and
-    the new base learner to train as part of the ensemble. The `Ensemble` at
-    iteration 0 is comprised of just the base learner.
+    the new subnetwork to train as part of the ensemble. The `Ensemble` at
+    iteration 0 is comprised of just the subnetwork.
 
-    The base learner is first given a weight 'w' in a `WeightedBaseLearner`
-    which determines its contribution to the ensemble. The base learner's
+    The subnetwork is first given a weight 'w' in a `WeightedSubnetwork`
+    which determines its contribution to the ensemble. The subnetwork's
     complexity L1-regularizes this weight.
 
     Args:
-      ensemble: The recipient `Ensemble` for the `BaseLearner`.
-      base_learner_builder: A `adanet.BaseLearnerBuilder` instance which defines
-        how to train the base learner and ensemble mixture weights.
+      ensemble: The recipient `Ensemble` for the `Subnetwork`.
+      subnetwork_builder: A `adanet.Builder` instance which defines how to train
+        the subnetwork and ensemble mixture weights.
       iteration_step: Integer `Tensor` representing the step since the beginning
         of the current iteration, as opposed to the global step.
       summary: A `_ScopedSummary` instance for recording ensemble summaries.
@@ -251,26 +251,26 @@ class _EnsembleBuilder(object):
       labels: Labels `Tensor`, or `dict` of same. Can be None during inference.
 
     Returns:
-      An new `Ensemble` instance with the `BaseLearner` appended.
+      An new `Ensemble` instance with the `Subnetwork` appended.
     """
 
-    with tf.variable_scope("ensemble_{}".format(base_learner_builder.name)):
-      weighted_base_learners = []
+    with tf.variable_scope("ensemble_{}".format(subnetwork_builder.name)):
+      weighted_subnetworks = []
       iteration = 0
-      num_base_learners = 1
+      num_subnetworks = 1
       if ensemble:
-        num_base_learners += len(ensemble.weighted_base_learners)
-        for weighted_base_learner in ensemble.weighted_base_learners:
+        num_subnetworks += len(ensemble.weighted_subnetworks)
+        for weighted_subnetwork in ensemble.weighted_subnetworks:
           weight_initializer = None
           if self._warm_start_mixture_weights:
-            weight_initializer = weighted_base_learner.weight
-          with tf.variable_scope("weighted_base_learner_{}".format(iteration)):
-            weighted_base_learners.append(
-                self._build_weighted_base_learner(
-                    weighted_base_learner.name,
-                    weighted_base_learner.base_learner,
+            weight_initializer = weighted_subnetwork.weight
+          with tf.variable_scope("weighted_subnetwork_{}".format(iteration)):
+            weighted_subnetworks.append(
+                self._build_weighted_subnetwork(
+                    weighted_subnetwork.name,
+                    weighted_subnetwork.subnetwork,
                     self._head.logits_dimension,
-                    num_base_learners,
+                    num_subnetworks,
                     weight_initializer=weight_initializer))
           iteration += 1
         bias = self._create_bias(
@@ -278,10 +278,10 @@ class _EnsembleBuilder(object):
       else:
         bias = self._create_bias(self._head.logits_dimension)
 
-      with tf.variable_scope("weighted_base_learner_{}".format(iteration)):
-        with tf.variable_scope("base_learner"):
+      with tf.variable_scope("weighted_subnetwork_{}".format(iteration)):
+        with tf.variable_scope("subnetwork"):
           trainable_vars_before = tf.trainable_variables()
-          base_learner = base_learner_builder.build_base_learner(
+          subnetwork = subnetwork_builder.build_subnetwork(
               features=features,
               logits_dimension=self._head.logits_dimension,
               training=mode == tf.estimator.ModeKeys.TRAIN,
@@ -291,42 +291,42 @@ class _EnsembleBuilder(object):
           trainable_vars_after = tf.trainable_variables()
           var_list = list(
               set(trainable_vars_after) - set(trainable_vars_before))
-        weighted_base_learners.append(
-            self._build_weighted_base_learner(
-                tf.constant(base_learner_builder.name, name="name"),
-                base_learner, self._head.logits_dimension, num_base_learners))
+        weighted_subnetworks.append(
+            self._build_weighted_subnetwork(
+                tf.constant(subnetwork_builder.name, name="name"), subnetwork,
+                self._head.logits_dimension, num_subnetworks))
 
       return self.build_ensemble(
-          name=base_learner_builder.name,
-          weighted_base_learners=weighted_base_learners,
+          name=subnetwork_builder.name,
+          weighted_subnetworks=weighted_subnetworks,
           summary=summary,
           bias=bias,
           features=features,
           mode=mode,
           iteration_step=iteration_step,
           labels=labels,
-          base_learner_builder=base_learner_builder,
+          subnetwork_builder=subnetwork_builder,
           var_list=var_list,
           previous_ensemble=ensemble)
 
   def build_ensemble(self,
                      name,
-                     weighted_base_learners,
+                     weighted_subnetworks,
                      summary,
                      bias,
                      features,
                      mode,
                      iteration_step,
                      labels=None,
-                     base_learner_builder=None,
+                     subnetwork_builder=None,
                      var_list=None,
                      previous_ensemble=None):
-    """Builds an `Ensemble` with the given `WeightedBaseLearner`s.
+    """Builds an `Ensemble` with the given `WeightedSubnetwork`s.
 
     Args:
       name: The string name of the ensemble. Typically the name of the builder
-        that returned the given `BaseLearner`.
-      weighted_base_learners: List of `WeightedBaseLearner` instances that form
+        that returned the given `Subnetwork`.
+      weighted_subnetworks: List of `WeightedSubnetwork` instances that form
         this ensemble. Ordered from first to most recent.
       summary: A `_ScopedSummary` instance for recording ensemble summaries.
       bias: `Tensor` bias vector for the ensemble logits.
@@ -335,43 +335,43 @@ class _EnsembleBuilder(object):
       iteration_step: Integer `Tensor` representing the step since the beginning
         of the current iteration, as opposed to the global step.
       labels: Labels `Tensor`, or `dict` of same. Can be None during inference.
-      base_learner_builder: A `adanet.BaseLearnerBuilder` instance which defines
-        how to train the base learner and ensemble mixture weights.
+      subnetwork_builder: A `adanet.Builder` instance which defines how to train
+        the subnetwork and ensemble mixture weights.
       var_list: Optional list or tuple of `Variable` objects to update to
         minimize `loss`.
       previous_ensemble: Link the rest of the `Ensemble` from iteration t-1.
-        Used for creating the base learner train_op.
+        Used for creating the subnetwork train_op.
 
     Returns:
       An `Ensemble` instance.
     """
 
-    base_learner_logits = []
+    subnetwork_logits = []
     ensemble_complexity_regularization = 0
     total_weight_l1_norms = 0
     weights = []
-    for weighted_base_learner in weighted_base_learners:
-      weight_l1_norm = tf.norm(weighted_base_learner.weight, ord=1)
+    for weighted_subnetwork in weighted_subnetworks:
+      weight_l1_norm = tf.norm(weighted_subnetwork.weight, ord=1)
       total_weight_l1_norms += weight_l1_norm
       ensemble_complexity_regularization += self._complexity_regularization(
-          weight_l1_norm, weighted_base_learner.base_learner.complexity)
-      base_learner_logits.append(weighted_base_learner.logits)
+          weight_l1_norm, weighted_subnetwork.subnetwork.complexity)
+      subnetwork_logits.append(weighted_subnetwork.logits)
       weights.append(weight_l1_norm)
 
     with tf.variable_scope("logits"):
       ensemble_logits = bias
-      for logits in base_learner_logits:
+      for logits in subnetwork_logits:
         ensemble_logits = tf.add(ensemble_logits, logits)
 
     with tf.name_scope(""):
       summary.histogram("mixture_weights/adanet/adanet_weighted_ensemble",
                         weights)
       for iteration, weight in enumerate(weights):
-        learner = "adanet/adanet_weighted_ensemble/base_learner_{}".format(
+        scope = "adanet/adanet_weighted_ensemble/subnetwork_{}".format(
             iteration)
-        summary.scalar("mixture_weight_norms/{}".format(learner), weight)
+        summary.scalar("mixture_weight_norms/{}".format(scope), weight)
         fraction = weight / total_weight_l1_norms
-        summary.scalar("mixture_weight_fractions/{}".format(learner), fraction)
+        summary.scalar("mixture_weight_fractions/{}".format(scope), fraction)
 
     # The AdaNet-weighted ensemble.
     adanet_weighted_ensemble_spec = self._head.create_estimator_spec(
@@ -381,13 +381,13 @@ class _EnsembleBuilder(object):
         labels=labels,
         train_op_fn=lambda _: tf.no_op())
 
-    # A baseline ensemble: the uniform-average of base learner outputs.
+    # A baseline ensemble: the uniform-average of subnetwork outputs.
     # It is practically free to compute, requiring no additional training, and
     # tends to generalize very well. However the AdaNet-weighted ensemble
     # should perform at least as well given the correct hyperparameters.
     uniform_average_ensemble_logits = tf.add_n([
-        wwl.base_learner.logits for wwl in weighted_base_learners
-    ]) / len(weighted_base_learners)
+        wwl.subnetwork.logits for wwl in weighted_subnetworks
+    ]) / len(weighted_subnetworks)
     uniform_average_ensemble_spec = self._head.create_estimator_spec(
         features=features,
         mode=mode,
@@ -395,12 +395,12 @@ class _EnsembleBuilder(object):
         labels=labels,
         train_op_fn=lambda _: tf.no_op())
 
-    # The base learner.
-    new_base_learner = weighted_base_learners[-1].base_learner
-    base_learner_spec = self._head.create_estimator_spec(
+    # The subnetwork.
+    new_subnetwork = weighted_subnetworks[-1].subnetwork
+    subnetwork_spec = self._head.create_estimator_spec(
         features=features,
         mode=mode,
-        logits=new_base_learner.logits,
+        logits=new_subnetwork.logits,
         labels=labels,
         train_op_fn=lambda _: tf.no_op())
 
@@ -420,16 +420,16 @@ class _EnsembleBuilder(object):
       for metric, ops in avg_metric_ops.items():
         eval_metric_ops["{}/adanet/uniform_average_ensemble".format(
             metric)] = ops
-      eval_metric_ops["loss/adanet/base_learner"] = tf.metrics.mean(
-          base_learner_spec.loss)
-      for metric, ops in base_learner_spec.eval_metric_ops.items():
-        eval_metric_ops["{}/adanet/base_learner".format(metric)] = ops
+      eval_metric_ops["loss/adanet/subnetwork"] = tf.metrics.mean(
+          subnetwork_spec.loss)
+      for metric, ops in subnetwork_spec.eval_metric_ops.items():
+        eval_metric_ops["{}/adanet/subnetwork".format(metric)] = ops
       eval_metric_ops["architecture/adanet/ensembles"] = (
-          _architecture_as_metric(weighted_base_learners))
+          _architecture_as_metric(weighted_subnetworks))
       with tf.name_scope(""):
         summary.scalar("loss/adanet/adanet_weighted_ensemble",
                        adanet_weighted_ensemble_spec.loss)
-        summary.scalar("loss/adanet/base_learner", base_learner_spec.loss)
+        summary.scalar("loss/adanet/subnetwork", subnetwork_spec.loss)
         summary.scalar("loss/adanet/uniform_average_ensemble",
                        uniform_average_ensemble_spec.loss)
 
@@ -437,36 +437,36 @@ class _EnsembleBuilder(object):
     complexity_regularized_loss = adanet_loss
 
     train_op = None
-    if mode == tf.estimator.ModeKeys.TRAIN and base_learner_builder:
-      with tf.variable_scope("train_base_learner"):
-        base_learner_train_op = (
-            base_learner_builder.build_base_learner_train_op(
-                base_learner=new_base_learner,
-                loss=base_learner_spec.loss,
+    if mode == tf.estimator.ModeKeys.TRAIN and subnetwork_builder:
+      with tf.variable_scope("train_subnetwork"):
+        subnetwork_train_op = (
+            subnetwork_builder.build_subnetwork_train_op(
+                subnetwork=new_subnetwork,
+                loss=subnetwork_spec.loss,
                 var_list=var_list,
                 labels=labels,
                 iteration_step=iteration_step,
                 summary=summary,
                 previous_ensemble=previous_ensemble))
       # Note that these mixture weights are on top of the last_layer of the
-      # base_learner constructed in TRAIN mode, which means that dropout is
+      # subnetwork constructed in TRAIN mode, which means that dropout is
       # still applied when the mixture weights are being trained.
-      ensemble_var_list = [w.weight for w in weighted_base_learners]
+      ensemble_var_list = [w.weight for w in weighted_subnetworks]
       if self._use_bias:
         ensemble_var_list.insert(0, bias)
       with tf.variable_scope("train_mixture_weights"):
-        ensemble_train_op = base_learner_builder.build_mixture_weights_train_op(
+        ensemble_train_op = subnetwork_builder.build_mixture_weights_train_op(
             loss=adanet_loss,
             var_list=ensemble_var_list,
             logits=ensemble_logits,
             labels=labels,
             iteration_step=iteration_step,
             summary=summary)
-      train_op = tf.group(base_learner_train_op, ensemble_train_op)
+      train_op = tf.group(subnetwork_train_op, ensemble_train_op)
 
     return Ensemble(
         name=name,
-        weighted_base_learners=weighted_base_learners,
+        weighted_subnetworks=weighted_subnetworks,
         bias=bias,
         logits=ensemble_logits,
         predictions=adanet_weighted_ensemble_spec.predictions,
@@ -479,55 +479,55 @@ class _EnsembleBuilder(object):
         export_outputs=adanet_weighted_ensemble_spec.export_outputs)
 
   def _complexity_regularization(self, weight_l1_norm, complexity):
-    """For a base learner, computes: (lambda * r(h) + beta) * |w|."""
+    """For a subnetwork, computes: (lambda * r(h) + beta) * |w|."""
 
     if self._adanet_lambda == 0. and self._adanet_beta == 0.:
       return tf.constant(0., name="zero")
     return tf.scalar_mul(self._adanet_gamma(complexity), weight_l1_norm)
 
   def _adanet_gamma(self, complexity):
-    """For a base learner, computes: lambda * r(h) + beta."""
+    """For a subnetwork, computes: lambda * r(h) + beta."""
 
     if self._adanet_lambda == 0.:
       return self._adanet_beta
     return tf.scalar_mul(self._adanet_lambda,
                          tf.to_float(complexity)) + self._adanet_beta
 
-  def _select_mixture_weight_initializer(self, num_base_learners):
+  def _select_mixture_weight_initializer(self, num_subnetworks):
     if self._mixture_weight_initializer:
       return self._mixture_weight_initializer
     if (self._mixture_weight_type == MixtureWeightType.SCALAR or
         self._mixture_weight_type == MixtureWeightType.VECTOR):
-      return tf.constant_initializer(1. / num_base_learners)
+      return tf.constant_initializer(1. / num_subnetworks)
     return tf.zeros_initializer()
 
-  def _build_weighted_base_learner(self,
-                                   name,
-                                   base_learner,
-                                   logits_dimension,
-                                   num_base_learners,
-                                   weight_initializer=None):
-    """Builds an `WeightedBaseLearner`.
+  def _build_weighted_subnetwork(self,
+                                 name,
+                                 subnetwork,
+                                 logits_dimension,
+                                 num_subnetworks,
+                                 weight_initializer=None):
+    """Builds an `WeightedSubnetwork`.
 
     Args:
-      name: The string `tf.constant` name of `base_learner`.
-      base_learner: The `BaseLearner` to weight.
+      name: The string `tf.constant` name of `subnetwork`.
+      subnetwork: The `Subnetwork` to weight.
       logits_dimension: The number of outputs from the logits.
-      num_base_learners: The number of base learners in the ensemble.
+      num_subnetworks: The number of subnetworks in the ensemble.
       weight_initializer: Initializer for the weight variable. Can be a
         `Constant` prior weight to use for warm-starting.
 
     Returns:
-      A `WeightedBaseLearner` instance.
+      A `WeightedSubnetwork` instance.
 
     Raises:
-      ValueError: When the base learner's last layer and logits dimension do
+      ValueError: When the subnetwork's last layer and logits dimension do
         not match and requiring a SCALAR or VECTOR mixture weight.
     """
 
-    # Treat base learners as if their weights are frozen, and ensure that
+    # Treat subnetworks as if their weights are frozen, and ensure that
     # mixture weight gradients do not propagate through.
-    last_layer = tf.stop_gradient(base_learner.last_layer)
+    last_layer = tf.stop_gradient(subnetwork.last_layer)
 
     weight_shape = None
     static_shape = last_layer.get_shape().as_list()
@@ -537,7 +537,7 @@ class _EnsembleBuilder(object):
 
     if weight_initializer is None:
       weight_initializer = self._select_mixture_weight_initializer(
-          num_base_learners)
+          num_subnetworks)
       if self._mixture_weight_type == MixtureWeightType.SCALAR:
         weight_shape = []
       if self._mixture_weight_type == MixtureWeightType.VECTOR:
@@ -569,10 +569,10 @@ class _EnsembleBuilder(object):
         if ndims == 3:
           logits = tf.reshape(logits, [batch_size, -1, logits_dimension])
       else:
-        logits = tf.multiply(base_learner.logits, weight)
+        logits = tf.multiply(subnetwork.logits, weight)
 
-    return WeightedBaseLearner(
-        name=name, base_learner=base_learner, logits=logits, weight=weight)
+    return WeightedSubnetwork(
+        name=name, subnetwork=subnetwork, logits=logits, weight=weight)
 
   def _create_bias(self, logits_dimension, prior=None):
     """Returns a bias term vector.

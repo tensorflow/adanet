@@ -1,4 +1,4 @@
-"""Materializes the BaseLearnerReports.
+"""Materializes the subnetwork.Reports.
 
 Copyright 2018 The AdaNet Authors. All Rights Reserved.
 
@@ -21,12 +21,12 @@ from __future__ import print_function
 
 import math
 
-from adanet.core.base_learner_report import MaterializedBaseLearnerReport
+from adanet.core import subnetwork
 import tensorflow as tf
 
 
 class ReportMaterializer(object):
-  """Materializes BaseLearnerReport."""
+  """Materializes subnetwork.Report."""
 
   def __init__(self, input_fn, steps=None):
     """Initializes an `ReportMaterializer` instance.
@@ -52,14 +52,14 @@ class ReportMaterializer(object):
 
   @property
   def input_fn(self):
-    """Returns the input_fn that materialize_base_learner_reports would run on.
+    """Returns the input_fn that materialize_subnetwork_reports would run on.
 
     Even though this property appears to be unused, it would be used to build
     the AdaNet model graph inside AdaNet estimator.train(). After the graph is
     built, the queue_runners are started and the initializers are run,
     AdaNet estimator.train() passes its tf.Session as an argument to
-    materialize_base_learner_reports(), thus indirectly making input_fn
-    available to materialize_base_learner_reports.
+    materialize_subnetwork_reports(), thus indirectly making input_fn
+    available to materialize_subnetwork_reports.
     """
     return self._input_fn
 
@@ -68,43 +68,43 @@ class ReportMaterializer(object):
     """Return the number of steps."""
     return self._steps
 
-  def materialize_base_learner_reports(self, sess, iteration_number,
-                                       base_learner_reports,
-                                       included_base_learner_names):
-    """Materializes the Tensor objects in base_learner_reports using sess.
+  def materialize_subnetwork_reports(self, sess, iteration_number,
+                                     subnetwork_reports,
+                                     included_subnetwork_names):
+    """Materializes the Tensor objects in subnetwork_reports using sess.
 
-    This converts the Tensors in base_learner_reports to ndarrays, logs the
+    This converts the Tensors in subnetwork_reports to ndarrays, logs the
     progress, converts the ndarrays to python primitives, then packages them
-    into `MaterializedBaseLearnerReports`.
+    into `adanet.subnetwork.MaterializedReports`.
 
     Args:
       sess: `Session` instance with most recent variable values loaded.
       iteration_number: Integer iteration number.
-      base_learner_reports: Dict mapping string names to `BaseLearnerReport`
+      subnetwork_reports: Dict mapping string names to `subnetwork.Report`
         objects to be materialized.
-      included_base_learner_names: List of string names of the
-        `BaseLearnerReport`s that are included in the final ensemble.
+      included_subnetwork_names: List of string names of the
+        `subnetwork.Report`s that are included in the final ensemble.
 
     Returns:
-      List of `MaterializedBaseLearnerReport` objects.
+      List of `adanet.subnetwork.MaterializedReport` objects.
     """
 
     # A metric is a tuple where the first element is a Tensor and
     # the second element is an update op. We collate the update ops here.
     metric_update_ops = []
-    for base_learner_report in base_learner_reports.values():
-      for metric_tuple in base_learner_report.metrics.values():
+    for subnetwork_report in subnetwork_reports.values():
+      for metric_tuple in subnetwork_report.metrics.values():
         metric_update_ops.append(metric_tuple[1])
 
     # Extract the Tensors to be materialized.
     tensors_to_materialize = {}
-    for name, base_learner_report in base_learner_reports.items():
+    for name, subnetwork_report in subnetwork_reports.items():
       metrics = {
           metric_key: metric_tuple[0]
-          for metric_key, metric_tuple in base_learner_report.metrics.items()
+          for metric_key, metric_tuple in subnetwork_report.metrics.items()
       }
       tensors_to_materialize[name] = {
-          "attributes": base_learner_report.attributes,
+          "attributes": subnetwork_report.attributes,
           "metrics": metrics
       }
 
@@ -133,10 +133,10 @@ class ReportMaterializer(object):
         break
 
     materialized_tensors_dict = sess.run(tensors_to_materialize)
-    tf.logging.info("Materialized base_learner_reports.")
+    tf.logging.info("Materialized subnetwork_reports.")
 
     # Convert scalar ndarrays into python primitives, then place them into
-    # MaterializedBaseLearnerReports.
+    # subnetwork.MaterializedReports.
     materialized_reports = []
     for name, materialized_tensors in materialized_tensors_dict.items():
       attributes = {
@@ -148,11 +148,11 @@ class ReportMaterializer(object):
           for key, value in materialized_tensors["metrics"].items()
       }
       materialized_reports.append(
-          MaterializedBaseLearnerReport(
+          subnetwork.MaterializedReport(
               iteration_number=iteration_number,
               name=name,
-              hparams=base_learner_reports[name].hparams,
+              hparams=subnetwork_reports[name].hparams,
               attributes=attributes,
               metrics=metrics,
-              included_in_final_ensemble=(name in included_base_learner_names)))
+              included_in_final_ensemble=(name in included_subnetwork_names)))
     return materialized_reports

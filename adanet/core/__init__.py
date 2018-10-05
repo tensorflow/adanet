@@ -19,15 +19,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.core.base_learner import BaseLearner
-from adanet.core.base_learner import BaseLearnerBuilder
-from adanet.core.base_learner import BaseLearnerBuilderGenerator
-from adanet.core.base_learner import SimpleBaseLearnerBuilderGenerator
-from adanet.core.base_learner_report import BaseLearnerReport
-from adanet.core.base_learner_report import MaterializedBaseLearnerReport
 from adanet.core.ensemble import Ensemble
 from adanet.core.ensemble import MixtureWeightType
-from adanet.core.ensemble import WeightedBaseLearner
+from adanet.core.ensemble import WeightedSubnetwork
 from adanet.core.estimator import Estimator
 from adanet.core.evaluator import Evaluator
 from adanet.core.report_materializer import ReportMaterializer

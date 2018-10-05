@@ -23,24 +23,24 @@ import os
 import shutil
 
 from absl.testing import parameterized
-from adanet.core.base_learner import BaseLearner
-from adanet.core.base_learner import BaseLearnerBuilder
-from adanet.core.base_learner import BaseLearnerBuilderGenerator
-from adanet.core.base_learner import SimpleBaseLearnerBuilderGenerator
-from adanet.core.base_learner_report import BaseLearnerReport
-from adanet.core.base_learner_report import MaterializedBaseLearnerReport
 from adanet.core.ensemble import MixtureWeightType
 from adanet.core.estimator import Estimator
 from adanet.core.evaluator import Evaluator
 from adanet.core.report_materializer import ReportMaterializer
+from adanet.core.subnetwork import Builder
+from adanet.core.subnetwork import Generator
+from adanet.core.subnetwork import MaterializedReport
+from adanet.core.subnetwork import Report
+from adanet.core.subnetwork import SimpleGenerator
+from adanet.core.subnetwork import Subnetwork
 import adanet.core.testing_utils as tu
 import tensorflow as tf
 
 from tensorflow.python.estimator.export import export
 
 
-class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
-  """A simple DNN base learner builder."""
+class _DNNBuilder(Builder):
+  """A simple DNN subnetwork builder."""
 
   def __init__(self,
                name,
@@ -60,13 +60,13 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
   def name(self):
     return self._name
 
-  def build_base_learner(self,
-                         features,
-                         logits_dimension,
-                         training,
-                         iteration_step,
-                         summary,
-                         previous_ensemble=None):
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
     seed = self._seed
     if previous_ensemble:
       # Increment seed so different iterations don't learn the exact same thing.
@@ -81,8 +81,8 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
         hidden_layer = tf.matmul(features["x"], w)
 
       if previous_ensemble:
-        other_hidden_layer = previous_ensemble.weighted_base_learners[
-            -1].base_learner.persisted_tensors["hidden_layer"]
+        other_hidden_layer = previous_ensemble.weighted_subnetworks[
+            -1].subnetwork.persisted_tensors["hidden_layer"]
         hidden_layer = tf.concat([hidden_layer, other_hidden_layer], axis=1)
 
       # Use a leaky-relu activation so that gradients can flow even when
@@ -106,14 +106,14 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
     with tf.name_scope(""):
       summary.scalar("scalar", 3)
 
-    return BaseLearner(
+    return Subnetwork(
         last_layer=last_layer if self._return_penultimate_layer else logits,
         logits=logits,
         complexity=3,
         persisted_tensors=persisted_tensors)
 
-  def build_base_learner_train_op(self, base_learner, loss, var_list, labels,
-                                  iteration_step, summary, previous_ensemble):
+  def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
+                                iteration_step, summary, previous_ensemble):
     optimizer = tf.train.GradientDescentOptimizer(
         learning_rate=self._learning_rate)
     return optimizer.minimize(loss, var_list=var_list)
@@ -124,8 +124,8 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
         learning_rate=self._mixture_weight_learning_rate)
     return optimizer.minimize(loss, var_list=var_list)
 
-  def build_base_learner_report(self):
-    return BaseLearnerReport(
+  def build_subnetwork_report(self):
+    return Report(
         hparams={"layer_size": self._layer_size},
         attributes={"complexity": tf.constant(3, dtype=tf.int32)},
         metrics={
@@ -134,8 +134,8 @@ class _DNNBaseLearnerBuilder(BaseLearnerBuilder):
         })
 
 
-class _SimpleBaseLearnerBuilder(BaseLearnerBuilder):
-  """A simple base learner builder that takes feature_columns."""
+class _SimpleBuilder(Builder):
+  """A simple subnetwork builder that takes feature_columns."""
 
   def __init__(self, name, feature_columns, seed=42):
     self._name = name
@@ -146,13 +146,13 @@ class _SimpleBaseLearnerBuilder(BaseLearnerBuilder):
   def name(self):
     return self._name
 
-  def build_base_learner(self,
-                         features,
-                         logits_dimension,
-                         training,
-                         iteration_step,
-                         summary,
-                         previous_ensemble=None):
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
     seed = self._seed
     if previous_ensemble:
       # Increment seed so different iterations don't learn the exact same thing.
@@ -169,15 +169,15 @@ class _SimpleBaseLearnerBuilder(BaseLearnerBuilder):
           logits_dimension,
           kernel_initializer=tf.glorot_uniform_initializer(seed=seed))
 
-    return BaseLearner(
+    return Subnetwork(
         last_layer=last_layer,
         logits=logits,
         complexity=1,
         persisted_tensors={},
     )
 
-  def build_base_learner_train_op(self, base_learner, loss, var_list, labels,
-                                  iteration_step, summary, previous_ensemble):
+  def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
+                                iteration_step, summary, previous_ensemble):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=3.)
     return optimizer.minimize(loss, var_list=var_list)
 
@@ -187,8 +187,8 @@ class _SimpleBaseLearnerBuilder(BaseLearnerBuilder):
     return optimizer.minimize(loss, var_list=var_list)
 
 
-class _LinearBaseLearnerBuilder(BaseLearnerBuilder):
-  """A simple linear base learner builder."""
+class _LinearBuilder(Builder):
+  """A simple linear subnetwork builder."""
 
   def __init__(self, name, mixture_weight_learning_rate=.1, seed=42):
     self._name = name
@@ -199,28 +199,28 @@ class _LinearBaseLearnerBuilder(BaseLearnerBuilder):
   def name(self):
     return self._name
 
-  def build_base_learner(self,
-                         features,
-                         logits_dimension,
-                         training,
-                         iteration_step,
-                         summary,
-                         previous_ensemble=None):
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
 
     logits = tf.layers.dense(
         features["x"],
         logits_dimension,
         kernel_initializer=tf.glorot_uniform_initializer(seed=self._seed))
 
-    return BaseLearner(
+    return Subnetwork(
         last_layer=features["x"],
         logits=logits,
         complexity=1,
         persisted_tensors={},
     )
 
-  def build_base_learner_train_op(self, base_learner, loss, var_list, labels,
-                                  iteration_step, summary, previous_ensemble):
+  def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
+                                iteration_step, summary, previous_ensemble):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
     return optimizer.minimize(loss, var_list=var_list)
 
@@ -231,22 +231,22 @@ class _LinearBaseLearnerBuilder(BaseLearnerBuilder):
     return optimizer.minimize(loss, var_list=var_list)
 
 
-class _FakeBaseLearnerBuilderGenerator(BaseLearnerBuilderGenerator):
-  """BaseLearnerBuilderGenerator that exposed generate_candidates' arguments."""
+class _FakeGenerator(Generator):
+  """Generator that exposed generate_candidates' arguments."""
 
-  def __init__(self, spy_fn, base_learner_builders):
+  def __init__(self, spy_fn, subnetwork_builders):
     """Checks the arguments passed to generate_candidates.
 
     Args:
       spy_fn: (iteration_number, previous_ensemble_reports, all_reports) -> ().
         Spies on the arguments passed to generate_candidates whenever it is
         called.
-      base_learner_builders: List of `BaseLearnerBuilder`s to return in every
-        call to generate_candidates.
+      subnetwork_builders: List of `Builder`s to return in every call
+        to generate_candidates.
     """
 
     self._spy_fn = spy_fn
-    self._base_learner_builders = base_learner_builders
+    self._subnetwork_builders = subnetwork_builders
 
   def generate_candidates(self, previous_ensemble, iteration_number,
                           previous_ensemble_reports, all_reports):
@@ -254,7 +254,7 @@ class _FakeBaseLearnerBuilderGenerator(BaseLearnerBuilderGenerator):
 
     del previous_ensemble  # unused
     self._spy_fn(iteration_number, previous_ensemble_reports, all_reports)
-    return self._base_learner_builders
+    return self._subnetwork_builders
 
 
 class _ModifierSessionRunHook(tf.train.SessionRunHook):
@@ -311,67 +311,41 @@ class EstimatorTestCase(parameterized.TestCase, tf.test.TestCase):
 class EstimatorTest(EstimatorTestCase):
 
   @parameterized.named_parameters({
-      "testcase_name":
-          "one_step",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([_DNNBaseLearnerBuilder("dnn")]),
-      "max_iteration_steps":
-          1,
-      "steps":
-          1,
-      "max_steps":
-          None,
-      "want_accuracy":
-          .75,
-      "want_loss":
-          .69314,
+      "testcase_name": "one_step",
+      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+      "max_iteration_steps": 1,
+      "steps": 1,
+      "max_steps": None,
+      "want_accuracy": .75,
+      "want_loss": .69314,
   }, {
-      "testcase_name":
-          "single_builder_max_steps",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([_DNNBaseLearnerBuilder("dnn")]),
-      "max_iteration_steps":
-          200,
-      "max_steps":
-          300,
-      "want_accuracy":
-          1.,
-      "want_loss":
-          .00834,
+      "testcase_name": "single_builder_max_steps",
+      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+      "max_iteration_steps": 200,
+      "max_steps": 300,
+      "want_accuracy": 1.,
+      "want_loss": .00834,
   }, {
-      "testcase_name":
-          "single_builder_steps",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([_DNNBaseLearnerBuilder("dnn")]),
-      "max_iteration_steps":
-          200,
-      "steps":
-          300,
-      "max_steps":
-          None,
-      "want_accuracy":
-          1.,
-      "want_loss":
-          .00834,
+      "testcase_name": "single_builder_steps",
+      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+      "max_iteration_steps": 200,
+      "steps": 300,
+      "max_steps": None,
+      "want_accuracy": 1.,
+      "want_loss": .00834,
   }, {
-      "testcase_name":
-          "single_builder_no_bias",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([_DNNBaseLearnerBuilder("dnn")]),
-      "max_iteration_steps":
-          200,
-      "use_bias":
-          False,
-      "want_accuracy":
-          .75,
-      "want_loss":
-          .36746,
+      "testcase_name": "single_builder_no_bias",
+      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+      "max_iteration_steps": 200,
+      "use_bias": False,
+      "want_accuracy": .75,
+      "want_loss": .36746,
   }, {
       "testcase_name":
           "single_builder_scalar_mixture_weight",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator(
-              [_DNNBaseLearnerBuilder("dnn", return_penultimate_layer=False)]),
+      "subnetwork_generator":
+          SimpleGenerator(
+              [_DNNBuilder("dnn", return_penultimate_layer=False)]),
       "max_iteration_steps":
           200,
       "mixture_weight_type":
@@ -383,9 +357,9 @@ class EstimatorTest(EstimatorTestCase):
   }, {
       "testcase_name":
           "single_builder_vector_mixture_weight",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator(
-              [_DNNBaseLearnerBuilder("dnn", return_penultimate_layer=False)]),
+      "subnetwork_generator":
+          SimpleGenerator(
+              [_DNNBuilder("dnn", return_penultimate_layer=False)]),
       "max_iteration_steps":
           200,
       "mixture_weight_type":
@@ -395,51 +369,33 @@ class EstimatorTest(EstimatorTestCase):
       "want_loss":
           3.1415e-6,
   }, {
-      "testcase_name":
-          "single_builder_replicate_ensemble_in_training",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([_DNNBaseLearnerBuilder("dnn")]),
-      "replicate_ensemble_in_training":
-          True,
-      "max_iteration_steps":
-          200,
-      "max_steps":
-          300,
-      "want_accuracy":
-          1.,
-      "want_loss":
-          .14729,
+      "testcase_name": "single_builder_replicate_ensemble_in_training",
+      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+      "replicate_ensemble_in_training": True,
+      "max_iteration_steps": 200,
+      "max_steps": 300,
+      "want_accuracy": 1.,
+      "want_loss": .14729,
   }, {
-      "testcase_name":
-          "single_builder_with_hook",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([_DNNBaseLearnerBuilder("dnn")]),
-      "max_iteration_steps":
-          200,
+      "testcase_name": "single_builder_with_hook",
+      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+      "max_iteration_steps": 200,
       "hooks": [_ModifierSessionRunHook()],
-      "want_accuracy":
-          1.,
-      "want_loss":
-          .00834,
+      "want_accuracy": 1.,
+      "want_loss": .00834,
   }, {
-      "testcase_name":
-          "high_max_iteration_steps",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([_DNNBaseLearnerBuilder("dnn")]),
-      "max_iteration_steps":
-          500,
-      "want_accuracy":
-          .75,
-      "want_loss":
-          .59545,
+      "testcase_name": "high_max_iteration_steps",
+      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+      "max_iteration_steps": 500,
+      "want_accuracy": .75,
+      "want_loss": .59545,
   }, {
       "testcase_name":
           "two_builders",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([
-              _DNNBaseLearnerBuilder("dnn"),
-              _DNNBaseLearnerBuilder("dnn2", seed=99)
-          ]),
+      "subnetwork_generator":
+          SimpleGenerator(
+              [_DNNBuilder("dnn"),
+               _DNNBuilder("dnn2", seed=99)]),
       "max_iteration_steps":
           200,
       "want_accuracy":
@@ -449,11 +405,10 @@ class EstimatorTest(EstimatorTestCase):
   }, {
       "testcase_name":
           "two_builders_different_layer_sizes",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([
-              _DNNBaseLearnerBuilder("dnn"),
-              _DNNBaseLearnerBuilder("dnn2", layer_size=3)
-          ]),
+      "subnetwork_generator":
+          SimpleGenerator(
+              [_DNNBuilder("dnn"),
+               _DNNBuilder("dnn2", layer_size=3)]),
       "max_iteration_steps":
           200,
       "want_accuracy":
@@ -463,11 +418,10 @@ class EstimatorTest(EstimatorTestCase):
   }, {
       "testcase_name":
           "evaluator_good_input",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([
-              _DNNBaseLearnerBuilder("dnn"),
-              _DNNBaseLearnerBuilder("dnn2", layer_size=3)
-          ]),
+      "subnetwork_generator":
+          SimpleGenerator(
+              [_DNNBuilder("dnn"),
+               _DNNBuilder("dnn2", layer_size=3)]),
       "evaluator":
           Evaluator(input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=3),
       "max_iteration_steps":
@@ -479,11 +433,10 @@ class EstimatorTest(EstimatorTestCase):
   }, {
       "testcase_name":
           "evaluator_bad_input",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([
-              _DNNBaseLearnerBuilder("dnn"),
-              _DNNBaseLearnerBuilder("dnn2", layer_size=3)
-          ]),
+      "subnetwork_generator":
+          SimpleGenerator(
+              [_DNNBuilder("dnn"),
+               _DNNBuilder("dnn2", layer_size=3)]),
       "evaluator":
           Evaluator(input_fn=tu.dummy_input_fn([[1., 1.]], [[1.]]), steps=3),
       "max_iteration_steps":
@@ -495,11 +448,10 @@ class EstimatorTest(EstimatorTestCase):
   }, {
       "testcase_name":
           "report_materializer",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([
-              _DNNBaseLearnerBuilder("dnn"),
-              _DNNBaseLearnerBuilder("dnn2", layer_size=3)
-          ]),
+      "subnetwork_generator":
+          SimpleGenerator(
+              [_DNNBuilder("dnn"),
+               _DNNBuilder("dnn2", layer_size=3)]),
       "report_materializer":
           ReportMaterializer(
               input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1),
@@ -511,7 +463,7 @@ class EstimatorTest(EstimatorTestCase):
           .00176,
   })
   def test_lifecycle(self,
-                     base_learner_builder_generator,
+                     subnetwork_generator,
                      want_accuracy,
                      want_loss,
                      max_iteration_steps,
@@ -528,7 +480,7 @@ class EstimatorTest(EstimatorTestCase):
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
     estimator = Estimator(
         head=_head(),
-        base_learner_builder_generator=base_learner_builder_generator,
+        subnetwork_generator=subnetwork_generator,
         max_iteration_steps=max_iteration_steps,
         mixture_weight_type=mixture_weight_type,
         mixture_weight_initializer=tf.zeros_initializer(),
@@ -622,10 +574,8 @@ class EstimatorTest(EstimatorTestCase):
     report_materializer = ReportMaterializer(input_fn=train_input_fn, steps=1)
     estimator = Estimator(
         head=tf.contrib.estimator.binary_classification_head(),
-        base_learner_builder_generator=SimpleBaseLearnerBuilderGenerator([
-            _SimpleBaseLearnerBuilder(
-                name="simple", feature_columns=[feature_column])
-        ]),
+        subnetwork_generator=SimpleGenerator(
+            [_SimpleBuilder(name="simple", feature_columns=[feature_column])]),
         report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
@@ -637,48 +587,32 @@ class EstimatorTest(EstimatorTestCase):
     estimator.train(input_fn=train_input_fn, max_steps=3)
 
   @parameterized.named_parameters({
-      "testcase_name": "no_base_learner_builder_generator",
-      "base_learner_builder_generator": None,
+      "testcase_name": "no_subnetwork_generator",
+      "subnetwork_generator": None,
       "max_iteration_steps": 100,
   }, {
-      "testcase_name":
-          "negative_max_iteration_steps",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([_DNNBaseLearnerBuilder("dnn")]),
-      "max_iteration_steps":
-          -1,
+      "testcase_name": "negative_max_iteration_steps",
+      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+      "max_iteration_steps": -1,
   }, {
-      "testcase_name":
-          "zero_max_iteration_steps",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([_DNNBaseLearnerBuilder("dnn")]),
-      "max_iteration_steps":
-          0,
+      "testcase_name": "zero_max_iteration_steps",
+      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+      "max_iteration_steps": 0,
   }, {
-      "testcase_name":
-          "steps_and_max_steps",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([_DNNBaseLearnerBuilder("dnn")]),
-      "max_iteration_steps":
-          1,
-      "steps":
-          1,
-      "max_steps":
-          1,
+      "testcase_name": "steps_and_max_steps",
+      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+      "max_iteration_steps": 1,
+      "steps": 1,
+      "max_steps": 1,
   }, {
-      "testcase_name":
-          "zero_steps",
-      "base_learner_builder_generator":
-          SimpleBaseLearnerBuilderGenerator([_DNNBaseLearnerBuilder("dnn")]),
-      "max_iteration_steps":
-          1,
-      "steps":
-          0,
-      "max_steps":
-          None,
+      "testcase_name": "zero_steps",
+      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+      "max_iteration_steps": 1,
+      "steps": 0,
+      "max_steps": None,
   })
   def test_train_error(self,
-                       base_learner_builder_generator,
+                       subnetwork_generator,
                        max_iteration_steps,
                        steps=None,
                        max_steps=10):
@@ -687,7 +621,7 @@ class EstimatorTest(EstimatorTestCase):
     with self.assertRaises(ValueError):
       estimator = Estimator(
           head=_head(),
-          base_learner_builder_generator=base_learner_builder_generator,
+          subnetwork_generator=subnetwork_generator,
           report_materializer=report_materializer,
           mixture_weight_type=MixtureWeightType.MATRIX,
           mixture_weight_initializer=tf.zeros_initializer(),
@@ -703,13 +637,12 @@ class EstimatorCallingModelFnDirectlyTest(EstimatorTestCase):
   """Tests b/112108745. Warn users not to call model_fn directly."""
 
   def test_calling_model_fn_directly(self):
-    base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
-        [_DNNBaseLearnerBuilder("dnn")])
+    subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
-        base_learner_builder_generator=base_learner_builder_generator,
+        subnetwork_generator=subnetwork_generator,
         report_materializer=report_materializer,
         max_iteration_steps=3,
         use_bias=True,
@@ -759,13 +692,12 @@ class EstimatorCheckpointTest(EstimatorTestCase):
         save_checkpoints_steps=1,
         keep_checkpoint_max=keep_checkpoint_max,
     )
-    base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
-        [_DNNBaseLearnerBuilder("dnn")])
+    subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
-        base_learner_builder_generator=base_learner_builder_generator,
+        subnetwork_generator=subnetwork_generator,
         report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
@@ -852,13 +784,13 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
     """Tests that summaries are written to candidate directory."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
-    base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
-        [_DNNBaseLearnerBuilder("dnn", mixture_weight_learning_rate=.01)])
+    subnetwork_generator = SimpleGenerator(
+        [_DNNBuilder("dnn", mixture_weight_learning_rate=.01)])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
-        base_learner_builder_generator=base_learner_builder_generator,
+        subnetwork_generator=subnetwork_generator,
         report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
@@ -898,7 +830,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
         0.,
         _check_eventfile_for_keyword(
             "mixture_weight_norms/adanet/"
-            "adanet_weighted_ensemble/base_learner_0", candidate_subdir),
+            "adanet_weighted_ensemble/subnetwork_0", candidate_subdir),
         places=3)
 
   @parameterized.named_parameters({
@@ -978,15 +910,13 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
 
     seed = 42
     run_config = tf.estimator.RunConfig(tf_random_seed=seed)
-    base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator([
-        _LinearBaseLearnerBuilder(
-            "linear", mixture_weight_learning_rate=.01, seed=seed)
-    ])
+    subnetwork_generator = SimpleGenerator(
+        [_LinearBuilder("linear", mixture_weight_learning_rate=.01, seed=seed)])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=head,
-        base_learner_builder_generator=base_learner_builder_generator,
+        subnetwork_generator=subnetwork_generator,
         report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
@@ -1038,7 +968,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
         ))
     self.assertIsNotNone(
         _check_eventfile_for_keyword(
-            "loss/adanet/base_learner",
+            "loss/adanet/subnetwork",
             candidate_subdir,
         ))
     for metric in want_summaries:
@@ -1054,13 +984,12 @@ class EstimatorMembersOverrideTest(EstimatorTestCase):
     """Assert that AdaNet estimator does not break other estimators."""
 
     config = tf.estimator.RunConfig()
-    base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
-        [_DNNBaseLearnerBuilder("dnn")])
+    subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     adanet = Estimator(
         head=_head(),
-        base_learner_builder_generator=base_learner_builder_generator,
+        subnetwork_generator=subnetwork_generator,
         report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
@@ -1132,13 +1061,12 @@ class EstimatorDifferentFeaturesPerModeTest(EstimatorTestCase):
     """Tests tests different numbers of features per mode."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
-    base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
-        [_DNNBaseLearnerBuilder("dnn")])
+    subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
-        base_learner_builder_generator=base_learner_builder_generator,
+        subnetwork_generator=subnetwork_generator,
         report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
@@ -1185,13 +1113,12 @@ class EstimatorExportSavedModelForPredictTest(EstimatorTestCase):
     """Tests new SavedModel exporting functionality."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
-    base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
-        [_DNNBaseLearnerBuilder("dnn")])
+    subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
-        base_learner_builder_generator=base_learner_builder_generator,
+        subnetwork_generator=subnetwork_generator,
         report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
@@ -1232,13 +1159,12 @@ class EstimatorExportSavedModelForEvalTest(EstimatorTestCase):
     """Tests new SavedModel exporting functionality."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
-    base_learner_builder_generator = SimpleBaseLearnerBuilderGenerator(
-        [_DNNBaseLearnerBuilder("dnn")])
+    subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=_head(),
-        base_learner_builder_generator=base_learner_builder_generator,
+        subnetwork_generator=subnetwork_generator,
         report_materializer=report_materializer,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
@@ -1337,14 +1263,12 @@ class EstimatorReportTest(EstimatorTestCase):
   @parameterized.named_parameters(
       {
           "testcase_name":
-              "one_iteration_one_base_learner",
-          "base_learner_builders": [
-              _DNNBaseLearnerBuilder("dnn", layer_size=1),
-          ],
+              "one_iteration_one_subnetwork",
+          "subnetwork_builders": [_DNNBuilder("dnn", layer_size=1),],
           "num_iterations":
               1,
           "want_materialized_iteration_reports": [[
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=0,
                   name="dnn",
                   hparams={"layer_size": 1},
@@ -1362,19 +1286,19 @@ class EstimatorReportTest(EstimatorTestCase):
       },
       {
           "testcase_name":
-              "one_iteration_three_base_learners",
-          "base_learner_builders": [
-              # learning_rate is set to 0 for all but one BaseLearnerBuilder
+              "one_iteration_three_subnetworks",
+          "subnetwork_builders": [
+              # learning_rate is set to 0 for all but one Builder
               # to make sure that only one of them can learn.
-              _DNNBaseLearnerBuilder("dnn_1", layer_size=1, learning_rate=0.),
-              _DNNBaseLearnerBuilder("dnn_2", layer_size=2, learning_rate=0.),
+              _DNNBuilder("dnn_1", layer_size=1, learning_rate=0.),
+              _DNNBuilder("dnn_2", layer_size=2, learning_rate=0.),
               # fixing the match for dnn_3 to win.
-              _DNNBaseLearnerBuilder("dnn_3", layer_size=3, learning_rate=3.),
+              _DNNBuilder("dnn_3", layer_size=3, learning_rate=3.),
           ],
           "num_iterations":
               1,
           "want_materialized_iteration_reports": [[
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=0,
                   name="dnn_1",
                   hparams={"layer_size": 1},
@@ -1386,7 +1310,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   },
                   included_in_final_ensemble=False,
               ),
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=0,
                   name="dnn_2",
                   hparams={"layer_size": 2},
@@ -1398,7 +1322,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   },
                   included_in_final_ensemble=False,
               ),
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=0,
                   name="dnn_3",
                   hparams={"layer_size": 3},
@@ -1416,15 +1340,13 @@ class EstimatorReportTest(EstimatorTestCase):
       },
       {
           "testcase_name":
-              "three_iterations_one_base_learner",
-          "base_learner_builders": [
-              _DNNBaseLearnerBuilder("dnn", layer_size=1),
-          ],
+              "three_iterations_one_subnetwork",
+          "subnetwork_builders": [_DNNBuilder("dnn", layer_size=1),],
           "num_iterations":
               3,
           "want_materialized_iteration_reports": [
               [
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=0,
                       name="dnn",
                       hparams={"layer_size": 1},
@@ -1438,7 +1360,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   )
               ],
               [
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=1,
                       name="previous_ensemble",
                       hparams={},
@@ -1446,7 +1368,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       metrics={},
                       included_in_final_ensemble=False,
                   ),
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=1,
                       name="dnn",
                       hparams={"layer_size": 1},
@@ -1460,7 +1382,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   ),
               ],
               [
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=2,
                       name="previous_ensemble",
                       hparams={},
@@ -1468,7 +1390,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       metrics={},
                       included_in_final_ensemble=False,
                   ),
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=2,
                       name="dnn",
                       hparams={"layer_size": 1},
@@ -1483,7 +1405,7 @@ class EstimatorReportTest(EstimatorTestCase):
               ],
           ],
           "want_previous_ensemble_reports": [
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=0,
                   name="dnn",
                   hparams={"layer_size": 1},
@@ -1495,7 +1417,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   },
                   included_in_final_ensemble=True,
               ),
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=1,
                   name="dnn",
                   hparams={"layer_size": 1},
@@ -1509,7 +1431,7 @@ class EstimatorReportTest(EstimatorTestCase):
               ),
           ],
           "want_all_reports": [
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=0,
                   name="dnn",
                   hparams={"layer_size": 1},
@@ -1521,7 +1443,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   },
                   included_in_final_ensemble=True,
               ),
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=1,
                   name="previous_ensemble",
                   hparams={},
@@ -1529,7 +1451,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   metrics={},
                   included_in_final_ensemble=False,
               ),
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=1,
                   name="dnn",
                   hparams={"layer_size": 1},
@@ -1545,20 +1467,20 @@ class EstimatorReportTest(EstimatorTestCase):
       },
       {
           "testcase_name":
-              "three_iterations_three_base_learners",
-          "base_learner_builders": [
-              # learning_rate is set to 0 for all but one BaseLearnerBuilder
+              "three_iterations_three_subnetworks",
+          "subnetwork_builders": [
+              # learning_rate is set to 0 for all but one Builder
               # to make sure that only one of them can learn.
-              _DNNBaseLearnerBuilder("dnn_1", layer_size=1, learning_rate=0.),
-              _DNNBaseLearnerBuilder("dnn_2", layer_size=2, learning_rate=0.),
+              _DNNBuilder("dnn_1", layer_size=1, learning_rate=0.),
+              _DNNBuilder("dnn_2", layer_size=2, learning_rate=0.),
               # fixing the match for dnn_3 to win in every iteration.
-              _DNNBaseLearnerBuilder("dnn_3", layer_size=3, learning_rate=3.),
+              _DNNBuilder("dnn_3", layer_size=3, learning_rate=3.),
           ],
           "num_iterations":
               3,
           "want_materialized_iteration_reports": [
               [
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=0,
                       name="dnn_1",
                       hparams={"layer_size": 1},
@@ -1570,7 +1492,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       },
                       included_in_final_ensemble=False,
                   ),
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=0,
                       name="dnn_2",
                       hparams={"layer_size": 2},
@@ -1582,7 +1504,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       },
                       included_in_final_ensemble=False,
                   ),
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=0,
                       name="dnn_3",
                       hparams={"layer_size": 3},
@@ -1596,7 +1518,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   ),
               ],
               [
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=1,
                       name="previous_ensemble",
                       hparams={},
@@ -1604,7 +1526,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       metrics={},
                       included_in_final_ensemble=False,
                   ),
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=1,
                       name="dnn_1",
                       hparams={"layer_size": 1},
@@ -1616,7 +1538,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       },
                       included_in_final_ensemble=False,
                   ),
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=1,
                       name="dnn_2",
                       hparams={"layer_size": 2},
@@ -1628,7 +1550,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       },
                       included_in_final_ensemble=False,
                   ),
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=1,
                       name="dnn_3",
                       hparams={"layer_size": 3},
@@ -1642,7 +1564,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   ),
               ],
               [
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=2,
                       name="previous_ensemble",
                       hparams={},
@@ -1650,7 +1572,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       metrics={},
                       included_in_final_ensemble=False,
                   ),
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=2,
                       name="dnn_1",
                       hparams={"layer_size": 1},
@@ -1662,7 +1584,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       },
                       included_in_final_ensemble=False,
                   ),
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=2,
                       name="dnn_2",
                       hparams={"layer_size": 2},
@@ -1674,7 +1596,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       },
                       included_in_final_ensemble=False,
                   ),
-                  MaterializedBaseLearnerReport(
+                  MaterializedReport(
                       iteration_number=2,
                       name="dnn_3",
                       hparams={"layer_size": 3},
@@ -1689,7 +1611,7 @@ class EstimatorReportTest(EstimatorTestCase):
               ],
           ],
           "want_previous_ensemble_reports": [
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=0,
                   name="dnn_3",
                   hparams={"layer_size": 3},
@@ -1701,7 +1623,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   },
                   included_in_final_ensemble=True,
               ),
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=1,
                   name="dnn_3",
                   hparams={"layer_size": 3},
@@ -1715,7 +1637,7 @@ class EstimatorReportTest(EstimatorTestCase):
               ),
           ],
           "want_all_reports": [
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=0,
                   name="dnn_1",
                   hparams={"layer_size": 1},
@@ -1727,7 +1649,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   },
                   included_in_final_ensemble=False,
               ),
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=0,
                   name="dnn_2",
                   hparams={"layer_size": 2},
@@ -1739,7 +1661,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   },
                   included_in_final_ensemble=False,
               ),
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=0,
                   name="dnn_3",
                   hparams={"layer_size": 3},
@@ -1751,7 +1673,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   },
                   included_in_final_ensemble=True,
               ),
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=1,
                   name="previous_ensemble",
                   hparams={},
@@ -1759,7 +1681,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   metrics={},
                   included_in_final_ensemble=False,
               ),
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=1,
                   name="dnn_1",
                   hparams={"layer_size": 1},
@@ -1771,7 +1693,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   },
                   included_in_final_ensemble=False,
               ),
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=1,
                   name="dnn_2",
                   hparams={"layer_size": 2},
@@ -1783,7 +1705,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   },
                   included_in_final_ensemble=False,
               ),
-              MaterializedBaseLearnerReport(
+              MaterializedReport(
                   iteration_number=1,
                   name="dnn_3",
                   hparams={"layer_size": 3},
@@ -1798,7 +1720,7 @@ class EstimatorReportTest(EstimatorTestCase):
           ],
       },
   )
-  def testReportGenerationAndUsage(self, base_learner_builders, num_iterations,
+  def testReportGenerationAndUsage(self, subnetwork_builders, num_iterations,
                                    want_materialized_iteration_reports,
                                    want_previous_ensemble_reports,
                                    want_all_reports):
@@ -1813,8 +1735,8 @@ class EstimatorReportTest(EstimatorTestCase):
           "all_reports": all_reports,
       }
 
-    base_learner_builder_generator = _FakeBaseLearnerBuilderGenerator(
-        spy_fn=_spy_fn, base_learner_builders=base_learner_builders)
+    subnetwork_generator = _FakeGenerator(
+        spy_fn=_spy_fn, subnetwork_builders=subnetwork_builders)
 
     max_iteration_steps = 5
     max_steps = max_iteration_steps * num_iterations + 1
@@ -1822,7 +1744,7 @@ class EstimatorReportTest(EstimatorTestCase):
     train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
     estimator = Estimator(
         head=_head(),
-        base_learner_builder_generator=base_learner_builder_generator,
+        subnetwork_generator=subnetwork_generator,
         mixture_weight_type=MixtureWeightType.MATRIX,
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
@@ -1840,33 +1762,28 @@ class EstimatorReportTest(EstimatorTestCase):
         report_accessor.read_iteration_reports())
     self.assertEqual(num_iterations, len(materialized_iteration_reports))
     for i in range(num_iterations):
-      want_materialized_base_learner_reports = (
-          want_materialized_iteration_reports[i])
-      materialized_base_learner_reports = materialized_iteration_reports[i]
-      self.compare_report_lists(want_materialized_base_learner_reports,
-                                materialized_base_learner_reports)
+      want_materialized_reports = (want_materialized_iteration_reports[i])
+      materialized_reports = materialized_iteration_reports[i]
+      self.compare_report_lists(want_materialized_reports, materialized_reports)
 
       # Compute argmin adanet loss.
       argmin_adanet_loss = 0
       smallest_known_adanet_loss = float("inf")
-      for j, materialized_base_learner_report in enumerate(
-          materialized_base_learner_reports):
+      for j, materialized_subnetwork_report in enumerate(materialized_reports):
         if (smallest_known_adanet_loss >
-            materialized_base_learner_report.metrics["adanet_loss"]):
+            materialized_subnetwork_report.metrics["adanet_loss"]):
           smallest_known_adanet_loss = (
-              materialized_base_learner_report.metrics["adanet_loss"])
+              materialized_subnetwork_report.metrics["adanet_loss"])
           argmin_adanet_loss = j
 
-      # Check that the base_learner with the lowest adanet loss is the one
+      # Check that the subnetwork with the lowest adanet loss is the one
       # that is included in the final ensemble.
-      for j, materialized_base_learner_reports in enumerate(
-          materialized_base_learner_reports):
-        self.assertEqual(
-            j == argmin_adanet_loss,
-            materialized_base_learner_reports.included_in_final_ensemble)
+      for j, materialized_reports in enumerate(materialized_reports):
+        self.assertEqual(j == argmin_adanet_loss,
+                         materialized_reports.included_in_final_ensemble)
 
     # Check the arguments passed into the generate_candidates method of the
-    # BaseLearnerBuilderGenerator.
+    # Generator.
     iteration_report = self._iteration_reports[num_iterations - 1]
     self.compare_report_lists(want_previous_ensemble_reports,
                               iteration_report["previous_ensemble_reports"])

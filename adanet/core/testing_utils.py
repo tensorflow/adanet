@@ -19,9 +19,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.core.base_learner import BaseLearner
 from adanet.core.ensemble import Ensemble
-from adanet.core.ensemble import WeightedBaseLearner
+from adanet.core.ensemble import WeightedSubnetwork
+from adanet.core.subnetwork import Subnetwork
 import tensorflow as tf
 
 
@@ -45,7 +45,7 @@ class ExportOutputKeys(object):
 
 def dummy_ensemble(name,
                    random_seed=42,
-                   num_base_learners=1,
+                   num_subnetworks=1,
                    bias=0.,
                    loss=None,
                    adanet_loss=None,
@@ -59,7 +59,7 @@ def dummy_ensemble(name,
   Args:
     name: Ensemble's name.
     random_seed: A scalar random seed.
-    num_base_learners: The number of fake base learners in this ensemble.
+    num_subnetworks: The number of fake subnetworks in this ensemble.
     bias: Bias value.
     loss: Float loss to return. When None, it's picked from a random
       distribution.
@@ -100,12 +100,12 @@ def dummy_ensemble(name,
     }
   else:
     predictions = logits
-  weighted_base_learners = [
-      WeightedBaseLearner(
+  weighted_subnetworks = [
+      WeightedSubnetwork(
           name=tf.constant(name),
           logits=dummy_tensor([2, 1], random_seed * 4),
           weight=dummy_tensor([2, 1], random_seed * 4),
-          base_learner=BaseLearner(
+          subnetwork=Subnetwork(
               last_layer=dummy_tensor([1, 2], random_seed * 4),
               logits=dummy_tensor([2, 1], random_seed * 4),
               complexity=1.,
@@ -116,7 +116,7 @@ def dummy_ensemble(name,
   bias = tf.constant(bias)
   return Ensemble(
       name=name,
-      weighted_base_learners=weighted_base_learners * num_base_learners,
+      weighted_subnetworks=weighted_subnetworks * num_subnetworks,
       bias=bias,
       logits=logits,
       predictions=predictions,

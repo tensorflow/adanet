@@ -32,7 +32,7 @@ class _Candidate(
         ["ensemble", "adanet_loss", "is_training", "is_previous_best"])):
   """An AdaNet candidate.
 
-  A `_Candidate` tracks the progress of a candidate base learner's training
+  A `_Candidate` tracks the progress of a candidate subnetwork's training
   within an ensemble, as well as their AdaNet loss over time.
   """
 

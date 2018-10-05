@@ -22,7 +22,7 @@ from __future__ import print_function
 import os
 
 from adanet.core import report_pb2 as report_proto
-from adanet.core.base_learner_report import MaterializedBaseLearnerReport
+from adanet.core import subnetwork
 import six
 import tensorflow as tf
 
@@ -35,8 +35,8 @@ def _parse_iteration_report_proto(iteration_pb_string):
   return iteration_report_pb
 
 
-def _iteration_report_pb_to_base_learner_reports(iteration_report_pb):
-  """Converts IterationReport proto to `MaterializedBaseLearnerReport` list."""
+def _iteration_report_pb_to_subnetwork_reports(iteration_report_pb):
+  """Converts IterationReport proto to a `MaterializedReport` list."""
 
   def _proto_map_to_dict(proto, field_name):
     """Converts map field of a proto to a dict.
@@ -65,7 +65,7 @@ def _iteration_report_pb_to_base_learner_reports(iteration_report_pb):
       elif proto_field[key].HasField("bool_value"):
         value = proto_field[key].bool_value
       else:
-        raise ValueError("{} map in base_learner_report_pb has invalid field. "
+        raise ValueError("{} map in subnetwork_report_pb has invalid field. "
                          "key: {} value: {} type: {}".format(
                              field_name, key, proto_field[key],
                              type(proto_field[key])))
@@ -74,23 +74,23 @@ def _iteration_report_pb_to_base_learner_reports(iteration_report_pb):
     return dictionary
 
   return [
-      MaterializedBaseLearnerReport(
+      subnetwork.MaterializedReport(
           iteration_number=iteration_report_pb.iteration_number,
-          name=base_learner_report_pb.name,
+          name=subnetwork_report_pb.name,
           hparams=_proto_map_to_dict(
-              proto=base_learner_report_pb, field_name="hparams"),
+              proto=subnetwork_report_pb, field_name="hparams"),
           attributes=_proto_map_to_dict(
-              proto=base_learner_report_pb, field_name="attributes"),
+              proto=subnetwork_report_pb, field_name="attributes"),
           metrics=_proto_map_to_dict(
-              proto=base_learner_report_pb, field_name="metrics"),
+              proto=subnetwork_report_pb, field_name="metrics"),
           included_in_final_ensemble=(
-              base_learner_report_pb.included_in_final_ensemble))
-      for base_learner_report_pb in iteration_report_pb.base_learner_reports
+              subnetwork_report_pb.included_in_final_ensemble))
+      for subnetwork_report_pb in iteration_report_pb.subnetwork_reports
   ]
 
 
-def _create_base_learner_report_proto(materialized_base_learner_report):
-  """Creates a BaseLearner proto."""
+def _create_subnetwork_report_proto(materialized_subnetwork_report):
+  """Creates a Subnetwork proto."""
 
   def _update_proto_map_from_dict(proto, field_name, dictionary):
     """Updates map field of proto with key-values in dictionary.
@@ -122,33 +122,33 @@ def _create_base_learner_report_proto(materialized_base_learner_report):
                          "bool, or float, but its type is {}.".format(
                              field_name, key, type(value)))
 
-  base_learner_report_pb = report_proto.BaseLearnerReport()
-  base_learner_report_pb.name = materialized_base_learner_report.name
+  subnetwork_report_pb = report_proto.SubnetworkReport()
+  subnetwork_report_pb.name = materialized_subnetwork_report.name
   _update_proto_map_from_dict(
-      proto=base_learner_report_pb,
+      proto=subnetwork_report_pb,
       field_name="hparams",
-      dictionary=materialized_base_learner_report.hparams)
+      dictionary=materialized_subnetwork_report.hparams)
   _update_proto_map_from_dict(
-      proto=base_learner_report_pb,
+      proto=subnetwork_report_pb,
       field_name="attributes",
-      dictionary=materialized_base_learner_report.attributes)
+      dictionary=materialized_subnetwork_report.attributes)
   _update_proto_map_from_dict(
-      proto=base_learner_report_pb,
+      proto=subnetwork_report_pb,
       field_name="metrics",
-      dictionary=materialized_base_learner_report.metrics)
-  base_learner_report_pb.included_in_final_ensemble = (
-      materialized_base_learner_report.included_in_final_ensemble)
+      dictionary=materialized_subnetwork_report.metrics)
+  subnetwork_report_pb.included_in_final_ensemble = (
+      materialized_subnetwork_report.included_in_final_ensemble)
 
-  return base_learner_report_pb
+  return subnetwork_report_pb
 
 
-def _create_iteration_report_pb(iteration_number, base_learner_report_pb_list):
+def _create_iteration_report_pb(iteration_number, subnetwork_report_pb_list):
   """Creates an IterationReport proto."""
 
   iteration_report_pb = report_proto.IterationReport()
 
   iteration_report_pb.iteration_number = iteration_number
-  iteration_report_pb.base_learner_reports.extend(base_learner_report_pb_list)
+  iteration_report_pb.subnetwork_reports.extend(subnetwork_report_pb_list)
 
   return iteration_report_pb
 
@@ -170,26 +170,25 @@ class _ReportAccessor(object):
     tf.gfile.MakeDirs(report_dir)
     self._full_filepath = os.path.join(report_dir, filename)
 
-  def write_iteration_report(self, iteration_number,
-                             materialized_base_learner_reports):
-    """Writes the `MaterializedBaseLearnerReports` at an iteration to Report.
+  def write_iteration_report(self, iteration_number, materialized_reports):
+    """Writes an iteration's `MaterializedReports` to a `Report` proto.
 
     TODO: Remove iteration_number from the argument of this method.
 
-    Note that even materialized_base_learner_reports also contain iteration
+    Note that even materialized_reports also contain iteration
     number, those are ignored -- only the iteration_number that is passed into
     this method would be written to the proto.
 
     Args:
       iteration_number: Int for the iteration number.
-      materialized_base_learner_reports: A list of
-        `MaterializedBaseLearnerReport` objects.
+      materialized_reports: A list of `adanet.subnetwork.MaterializedReport`
+        objects.
     """
 
     iteration_report_pb = _create_iteration_report_pb(
         iteration_number=iteration_number,
-        base_learner_report_pb_list=map(_create_base_learner_report_proto,
-                                        materialized_base_learner_reports),
+        subnetwork_report_pb_list=map(_create_subnetwork_report_proto,
+                                      materialized_reports),
     )
     self._append_iteration_report_pb(iteration_report_pb)
     tf.logging.info("Wrote IterationReport for iteration %s to %s",
@@ -215,15 +214,16 @@ class _ReportAccessor(object):
   def read_iteration_reports(self):
     """Reads all iterations of the Report.
 
-    Each `MaterializedBaseLearnerReport` list is one AdaNet iteration. The first
-    list in the sequence is iteration 0, followed by iteration 1, and so on.
+    Each `adanet.subnetwork.MaterializedReport` list is one AdaNet iteration.
+    The first list in the sequence is iteration 0, followed by iteration 1, and
+    so on.
 
     Returns:
-      Iterable of lists of `MaterializedBaseLearnerReport`s.
+      Iterable of lists of `adanet.subnetwork.MaterializedReport`s.
     """
 
     iteration_pb_seq = self._read_iteration_report_pb_list()
-    return map(_iteration_report_pb_to_base_learner_reports, iteration_pb_seq)
+    return map(_iteration_report_pb_to_subnetwork_reports, iteration_pb_seq)
 
   def _read_iteration_report_pb_list(self):
     """Returns an Iterable of adanet.IterationReport protos."""

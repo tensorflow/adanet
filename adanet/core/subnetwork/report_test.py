@@ -1,4 +1,4 @@
-"""Test AdaNet single graph base learner implementation.
+"""Test AdaNet single graph subnetwork implementation.
 
 Copyright 2018 The AdaNet Authors. All Rights Reserved.
 
@@ -20,11 +20,11 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.core.base_learner_report import BaseLearnerReport
+from adanet.core.subnetwork.report import Report
 import tensorflow as tf
 
 
-class BaseLearnerReportTest(parameterized.TestCase, tf.test.TestCase):
+class ReportTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.named_parameters({
       "testcase_name": "empty",
@@ -56,8 +56,7 @@ class BaseLearnerReportTest(parameterized.TestCase, tf.test.TestCase):
   })
   def test_new(self, hparams, attributes, metrics):
     with self.test_session():
-      blr = BaseLearnerReport(
-          hparams=hparams, attributes=attributes, metrics=metrics)
+      blr = Report(hparams=hparams, attributes=attributes, metrics=metrics)
       self.assertEqual(hparams, blr.hparams)
       self.assertEqual(attributes, blr.attributes)
       self.assertEqual(metrics, blr.metrics)
@@ -101,8 +100,7 @@ class BaseLearnerReportTest(parameterized.TestCase, tf.test.TestCase):
   def test_new_errors(self, hparams, attributes, metrics):
     with self.test_session():
       with self.assertRaises(ValueError):
-        BaseLearnerReport(
-            hparams=hparams, attributes=attributes, metrics=metrics)
+        Report(hparams=hparams, attributes=attributes, metrics=metrics)
 
 
 if __name__ == "__main__":

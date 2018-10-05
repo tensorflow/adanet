@@ -1,7 +1,5 @@
 # Description:
-# AdaNet is a TensorFlow framework for adaptively learn neural networks as a
-# dynamic ensemble of subnetworks.
-# This is a reference implementation of AdaNet as a TensorFlow library.
+# Core AdaNet logic.
 
 licenses(["notice"])  # Apache 2.0
 
@@ -16,8 +14,6 @@ py_library(
     srcs = ["__init__.py"],
     visibility = whitelist,
     deps = [
-        ":base_learner",
-        ":base_learner_report",
         ":ensemble",
         ":estimator",
         ":evaluator",
@@ -49,29 +45,12 @@ py_test(
     shard_count = 20,
     srcs_version = "PY2AND3",
     deps = [
-        ":base_learner",
-        ":base_learner_report",
         ":ensemble",
         ":estimator",
         ":evaluator",
         ":report_materializer",
         ":testing_utils",
-        "@absl_py//absl/testing:parameterized",
-    ],
-)
-
-py_library(
-    name = "base_learner",
-    srcs = ["base_learner.py"],
-)
-
-py_test(
-    name = "base_learner_test",
-    srcs = ["base_learner_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":base_learner",
-        ":testing_utils",
+        "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -98,8 +77,8 @@ py_library(
     name = "iteration",
     srcs = ["iteration.py"],
     deps = [
-        ":base_learner_report",
         ":summary",
+        "//adanet/core/subnetwork",
         "@six_archive//:six",
     ],
 )
@@ -109,12 +88,11 @@ py_test(
     srcs = ["iteration_test.py"],
     srcs_version = "PY2AND3",
     deps = [
-        ":base_learner",
-        ":base_learner_report",
         ":candidate",
         ":ensemble",
         ":iteration",
         ":testing_utils",
+        "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -150,9 +128,9 @@ py_test(
     srcs = ["ensemble_test.py"],
     srcs_version = "PY2AND3",
     deps = [
-        ":base_learner",
         ":ensemble",
         ":testing_utils",
+        "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -161,8 +139,8 @@ py_library(
     name = "freezer",
     srcs = ["freezer.py"],
     deps = [
-        ":base_learner",
         ":ensemble",
+        "//adanet/core/subnetwork",
     ],
 )
 
@@ -171,10 +149,10 @@ py_test(
     srcs = ["freezer_test.py"],
     srcs_version = "PY2AND3",
     deps = [
-        ":base_learner",
         ":ensemble",
         ":freezer",
         ":testing_utils",
+        "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -233,26 +211,8 @@ py_library(
     testonly = 1,
     srcs = ["testing_utils.py"],
     deps = [
-        ":base_learner",
         ":ensemble",
-    ],
-)
-
-py_library(
-    name = "base_learner_report",
-    srcs = ["base_learner_report.py"],
-    deps = [
-        "@six_archive//:six",
-    ],
-)
-
-py_test(
-    name = "base_learner_report_test",
-    srcs = ["base_learner_report_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":base_learner_report",
-        "@absl_py//absl/testing:parameterized",
+        "//adanet/core/subnetwork",
     ],
 )
 
@@ -277,8 +237,8 @@ py_library(
     name = "report_accessor",
     srcs = ["report_accessor.py"],
     deps = [
-        ":base_learner_report",
         ":report_pb2",
+        "//adanet/core/subnetwork",
         "@six_archive//:six",
     ],
 )
@@ -288,8 +248,8 @@ py_test(
     srcs = ["report_accessor_test.py"],
     srcs_version = "PY2AND3",
     deps = [
-        ":base_learner_report",
         ":report_accessor",
+        "//adanet/core/subnetwork",
     ],
 )
 
@@ -297,7 +257,7 @@ py_library(
     name = "report_materializer",
     srcs = ["report_materializer.py"],
     deps = [
-        ":base_learner_report",
+        "//adanet/core/subnetwork",
     ],
 )
 
@@ -306,9 +266,9 @@ py_test(
     srcs = ["report_materializer_test.py"],
     srcs_version = "PY2AND3",
     deps = [
-        ":base_learner_report",
         ":report_materializer",
         ":testing_utils",
+        "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )

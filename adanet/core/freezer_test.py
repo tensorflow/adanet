@@ -23,9 +23,9 @@ import os
 import shutil
 
 from absl.testing import parameterized
-from adanet.core.base_learner import BaseLearner
-from adanet.core.ensemble import WeightedBaseLearner
+from adanet.core.ensemble import WeightedSubnetwork
 from adanet.core.freezer import _EnsembleFreezer
+from adanet.core.subnetwork import Subnetwork
 import adanet.core.testing_utils as tu
 import tensorflow as tf
 
@@ -44,10 +44,10 @@ def _extract_feature(features):
   return feature
 
 
-def _simple_base_learner_fn(feature_columns,
-                            keep_persisted_tensors=False,
-                            seed=42):
-  """A simple base learner."""
+def _simple_subnetwork_fn(feature_columns,
+                          keep_persisted_tensors=False,
+                          seed=42):
+  """A simple subnetwork."""
 
   def _simple(features):
     inputs = tf.feature_column.input_layer(
@@ -66,22 +66,22 @@ def _simple_base_learner_fn(feature_columns,
             "some_persisted_tensor_constant": some_persisted_tensor_constant,
         }
       complexity = tf.constant(3, name="complexity")
-      base_learner = BaseLearner(
+      subnetwork = Subnetwork(
           last_layer=predictions,
           logits=predictions,
           complexity=complexity,
           persisted_tensors=persisted_tensors)
-      return WeightedBaseLearner(
+      return WeightedSubnetwork(
           name=tf.constant("simple", name="name"),
           logits=predictions,
           weight=w,
-          base_learner=base_learner)
+          subnetwork=subnetwork)
 
   return _simple
 
 
-def _linear_base_learner_fn(keep_persisted_tensors=False, seed=42):
-  """A linear base learner."""
+def _linear_subnetwork_fn(keep_persisted_tensors=False, seed=42):
+  """A linear subnetwork."""
 
   def _linear(features):
     inputs = _extract_feature(features)
@@ -108,22 +108,22 @@ def _linear_base_learner_fn(keep_persisted_tensors=False, seed=42):
             }
         }
       complexity = tf.constant(3, name="complexity")
-      base_learner = BaseLearner(
+      subnetwork = Subnetwork(
           last_layer=inputs,
           logits=predictions,
           complexity=complexity,
           persisted_tensors=persisted_tensors)
-      return WeightedBaseLearner(
+      return WeightedSubnetwork(
           name=tf.constant("linear", name="name"),
           logits=predictions,
           weight=w,
-          base_learner=base_learner)
+          subnetwork=subnetwork)
 
   return _linear
 
 
-def _dnn_base_learner_fn(keep_persisted_tensors=False, seed=42):
-  """A single layer neural network base learner."""
+def _dnn_subnetwork_fn(keep_persisted_tensors=False, seed=42):
+  """A single layer neural network subnetwork."""
 
   def _dnn(features):
     inputs = _extract_feature(features)
@@ -148,16 +148,16 @@ def _dnn_base_learner_fn(keep_persisted_tensors=False, seed=42):
             "some_persisted_tensor_constant": some_persisted_tensor_constant,
         }
       complexity = tf.constant(6, name="complexity")
-      base_learner = BaseLearner(
+      subnetwork = Subnetwork(
           last_layer=hidden_layer,
           logits=predictions,
           complexity=complexity,
           persisted_tensors=persisted_tensors)
-      return WeightedBaseLearner(
+      return WeightedSubnetwork(
           name=tf.constant("dnn", name="name"),
           logits=predictions,
           weight=w,
-          base_learner=base_learner)
+          subnetwork=subnetwork)
 
   return _dnn
 
@@ -223,7 +223,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
   @parameterized.named_parameters({
       "testcase_name":
           "dnn_no_persisted_tensors",
-      "base_learner_fns": [_dnn_base_learner_fn()],
+      "subnetwork_fns": [_dnn_subnetwork_fn()],
       "features": {
           "feature": [[4., 3.]]
       },
@@ -258,7 +258,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name":
           "dnn_unused_feature",
-      "base_learner_fns": [_dnn_base_learner_fn()],
+      "subnetwork_fns": [_dnn_subnetwork_fn()],
       "features": {
           "feature": [[4., 3.]],
           "unused": [[1., 2.]]
@@ -296,7 +296,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name":
           "dnn_with_persisted_tensors",
-      "base_learner_fns": [_dnn_base_learner_fn(keep_persisted_tensors=True)],
+      "subnetwork_fns": [_dnn_subnetwork_fn(keep_persisted_tensors=True)],
       "features": {
           "feature": [[4., 3.]]
       },
@@ -333,10 +333,8 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name":
           "linear_and_linear",
-      "base_learner_fns": [
-          _linear_base_learner_fn(),
-          _linear_base_learner_fn()
-      ],
+      "subnetwork_fns": [_linear_subnetwork_fn(),
+                         _linear_subnetwork_fn()],
       "features": {
           "feature": [[4., 3.]]
       },
@@ -375,8 +373,8 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name":
           "simple_with_feature_column",
-      "base_learner_fns": [
-          _simple_base_learner_fn(
+      "subnetwork_fns": [
+          _simple_subnetwork_fn(
               tf.feature_column.indicator_column(
                   categorical_column=(
                       tf.feature_column.categorical_column_with_vocabulary_list(
@@ -468,8 +466,8 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name":
           "linear_and_dnn",
-      "base_learner_fns": [_dnn_base_learner_fn(),
-                           _linear_base_learner_fn()],
+      "subnetwork_fns": [_dnn_subnetwork_fn(),
+                         _linear_subnetwork_fn()],
       "features": {
           "feature": [[4., 3.]]
       },
@@ -516,9 +514,9 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name":
           "linear_and_dnn_with_persisted_tensors",
-      "base_learner_fns": [
-          _dnn_base_learner_fn(keep_persisted_tensors=True),
-          _linear_base_learner_fn(keep_persisted_tensors=True)
+      "subnetwork_fns": [
+          _dnn_subnetwork_fn(keep_persisted_tensors=True),
+          _linear_subnetwork_fn(keep_persisted_tensors=True)
       ],
       "features": {
           "feature": [[4., 3.]]
@@ -571,7 +569,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       ],
   })
   def test_freeze_ensemble(self,
-                           base_learner_fns,
+                           subnetwork_fns,
                            features,
                            want_nodes,
                            want_consts,
@@ -582,13 +580,13 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       features = {
           k: tf.constant(features[k], name=k) for k in sorted(features.keys())
       }
-      weighted_base_learners = [fn(features) for fn in base_learner_fns]
+      weighted_subnetworks = [fn(features) for fn in subnetwork_fns]
       bias = tf.constant(bias, name="bias")
       sess.run(tf.global_variables_initializer())
       freezer.freeze_ensemble(
           sess=sess,
           filename=filename,
-          weighted_base_learners=weighted_base_learners,
+          weighted_subnetworks=weighted_subnetworks,
           bias=bias,
           features=features)
       with tf.gfile.FastGFile(filename, "rb") as f:
@@ -605,32 +603,32 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.named_parameters({
       "testcase_name": "persisted_tensor_with separator",
-      "base_learner_fns": [_dnn_base_learner_fn(keep_persisted_tensors=True)],
+      "subnetwork_fns": [_dnn_subnetwork_fn(keep_persisted_tensors=True)],
       "bad_persisted_tensors": {
           "foo|bar": .1
       },
   })
-  def test_freeze_ensemble_error(self, base_learner_fns, bad_persisted_tensors):
+  def test_freeze_ensemble_error(self, subnetwork_fns, bad_persisted_tensors):
     with tf.Graph().as_default() as g, self.test_session(graph=g) as sess:
       freezer = _EnsembleFreezer()
       filename = os.path.join(self.test_subdirectory, "frozen.pbtxt")
       features = {"x": tf.constant([[-1., 1.]], name="features")}
-      weighted_base_learners = [fn(features) for fn in base_learner_fns]
-      for wwl in weighted_base_learners:
-        wwl.base_learner.persisted_tensors.update(bad_persisted_tensors)
+      weighted_subnetworks = [fn(features) for fn in subnetwork_fns]
+      for wwl in weighted_subnetworks:
+        wwl.subnetwork.persisted_tensors.update(bad_persisted_tensors)
       bias = tf.constant(0, name="bias")
       with self.assertRaises(ValueError):
         sess.run(tf.global_variables_initializer())
         freezer.freeze_ensemble(
             sess=sess,
             filename=filename,
-            weighted_base_learners=weighted_base_learners,
+            weighted_subnetworks=weighted_subnetworks,
             bias=bias,
             features=features)
 
   @parameterized.named_parameters({
       "testcase_name": "linear_no_persisted_tensors",
-      "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
+      "subnetwork_fns": [_linear_subnetwork_fn("linear_subnetwork")],
       "features_to_freeze": {
           "x": [[-1., 1.]]
       },
@@ -640,7 +638,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[-.137752]],
   }, {
       "testcase_name": "linear_bias",
-      "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
+      "subnetwork_fns": [_linear_subnetwork_fn("linear_subnetwork")],
       "bias": 3.,
       "features_to_freeze": {
           "x": [[-1., 1.]]
@@ -651,7 +649,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[-.137752]],
   }, {
       "testcase_name": "linear_unused_feature",
-      "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
+      "subnetwork_fns": [_linear_subnetwork_fn("linear_subnetwork")],
       "features_to_freeze": {
           "x": [[-1., 1.]],
           "unused": [[0., 2.]]
@@ -663,7 +661,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[-.137752]],
   }, {
       "testcase_name": "linear_sparse_feature",
-      "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
+      "subnetwork_fns": [_linear_subnetwork_fn("linear_subnetwork")],
       "features_to_freeze": {
           "x":
               tu.FakeSparseTensor(
@@ -681,7 +679,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[-.137752]],
   }, {
       "testcase_name": "linear_unused_sparse_feature",
-      "base_learner_fns": [_linear_base_learner_fn("linear_learner")],
+      "subnetwork_fns": [_linear_subnetwork_fn("linear_subnetwork")],
       "features_to_freeze": {
           "x":
               tu.FakeSparseTensor(
@@ -709,7 +707,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[-.137752]],
   }, {
       "testcase_name": "dnn_no_persisted_tensors",
-      "base_learner_fns": [_dnn_base_learner_fn()],
+      "subnetwork_fns": [_dnn_subnetwork_fn()],
       "features_to_freeze": {
           "x": [[-1., 1.]]
       },
@@ -719,7 +717,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[-2.857512]],
   }, {
       "testcase_name": "dnn_with_persisted_tensors",
-      "base_learner_fns": [_dnn_base_learner_fn()],
+      "subnetwork_fns": [_dnn_subnetwork_fn()],
       "features_to_freeze": {
           "x": [[-1., 1.]]
       },
@@ -730,9 +728,9 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name":
           "linear_and_linear",
-      "base_learner_fns": [
-          _linear_base_learner_fn(keep_persisted_tensors=True),
-          _linear_base_learner_fn(keep_persisted_tensors=True, seed=99),
+      "subnetwork_fns": [
+          _linear_subnetwork_fn(keep_persisted_tensors=True),
+          _linear_subnetwork_fn(keep_persisted_tensors=True, seed=99),
       ],
       "features_to_freeze": {
           "x": [[-1., 1.]]
@@ -744,9 +742,9 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name":
           "linear_and_dnn",
-      "base_learner_fns": [
-          _dnn_base_learner_fn(keep_persisted_tensors=True),
-          _linear_base_learner_fn(keep_persisted_tensors=True)
+      "subnetwork_fns": [
+          _dnn_subnetwork_fn(keep_persisted_tensors=True),
+          _linear_subnetwork_fn(keep_persisted_tensors=True)
       ],
       "features_to_freeze": {
           "x": [[-1., 1.]]
@@ -757,7 +755,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[-.137752]],
   }, {
       "testcase_name": "dnn_with_different_inputs",
-      "base_learner_fns": [_dnn_base_learner_fn()],
+      "subnetwork_fns": [_dnn_subnetwork_fn()],
       "features_to_freeze": {
           "x": [[-1., 1.]]
       },
@@ -768,9 +766,9 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name":
           "linear_and_dnn_with_different_inputs",
-      "base_learner_fns": [
-          _dnn_base_learner_fn(keep_persisted_tensors=True),
-          _linear_base_learner_fn(keep_persisted_tensors=True)
+      "subnetwork_fns": [
+          _dnn_subnetwork_fn(keep_persisted_tensors=True),
+          _linear_subnetwork_fn(keep_persisted_tensors=True)
       ],
       "features_to_freeze": {
           "x": [[-1., 1.]]
@@ -782,9 +780,9 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name":
           "linear_and_dnn_with_placeholder",
-      "base_learner_fns": [
-          _dnn_base_learner_fn(keep_persisted_tensors=True),
-          _linear_base_learner_fn(keep_persisted_tensors=True)
+      "subnetwork_fns": [
+          _dnn_subnetwork_fn(keep_persisted_tensors=True),
+          _linear_subnetwork_fn(keep_persisted_tensors=True)
       ],
       "features_placeholder": {
           "x": [None, 2]
@@ -797,7 +795,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[-1.255581], [-.715115]],
   })
   def test_load_frozen_ensemble(self,
-                                base_learner_fns,
+                                subnetwork_fns,
                                 features_to_freeze,
                                 features_to_load,
                                 want_logits,
@@ -819,16 +817,14 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
             for k, shape in features_placeholder.items()
         }
       features_to_freeze = freezer.wrapped_features(features_to_freeze)
-      weighted_base_learners = [
-          fn(features_to_freeze) for fn in base_learner_fns
-      ]
+      weighted_subnetworks = [fn(features_to_freeze) for fn in subnetwork_fns]
       init = tf.group(tf.global_variables_initializer(),
                       tf.local_variables_initializer())
       sess.run(init)
       freezer.freeze_ensemble(
           sess=sess,
           filename=filename,
-          weighted_base_learners=weighted_base_learners,
+          weighted_subnetworks=weighted_subnetworks,
           bias=bias,
           features=features_to_freeze)
 
@@ -840,7 +836,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       frozen_ensemble, frozen_bias = freezer.load_frozen_ensemble(
           filename=filename, features=features_to_load)
 
-      want_ensemble = [fn(features_to_load) for fn in base_learner_fns]
+      want_ensemble = [fn(features_to_load) for fn in subnetwork_fns]
       init = tf.group(tf.global_variables_initializer(),
                       tf.local_variables_initializer())
       sess.run(init)
@@ -849,8 +845,8 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       self.assertEqual([w.name for w in want_ensemble],
                        [w.name for w in frozen_ensemble])
       self.assertAllClose(
-          [(w.logits, w.weight, w.base_learner) for w in want_ensemble],
-          [(w.logits, w.weight, w.base_learner) for w in frozen_ensemble])
+          [(w.logits, w.weight, w.subnetwork) for w in want_ensemble],
+          [(w.logits, w.weight, w.subnetwork) for w in frozen_ensemble])
       self.assertAllEqual(bias_value, sess.run(frozen_bias))
 
   @parameterized.named_parameters({
@@ -898,14 +894,14 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
             feature = tf.identity(feature, name="colocated")
         features_to_freeze[k] = feature
 
-      weighted_base_learners = [_dnn_base_learner_fn()(features_to_freeze)]
+      weighted_subnetworks = [_dnn_subnetwork_fn()(features_to_freeze)]
       init = tf.group(tf.global_variables_initializer(),
                       tf.local_variables_initializer())
       sess.run(init)
       freezer.freeze_ensemble(
           sess=sess,
           filename=filename,
-          weighted_base_learners=weighted_base_learners,
+          weighted_subnetworks=weighted_subnetworks,
           bias=tf.constant(0, name="bias"),
           features=features_to_freeze)
 
@@ -923,7 +919,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
         freezer.freeze_ensemble(
             sess=sess,
             filename=filename,
-            weighted_base_learners=frozen_ensemble,
+            weighted_subnetworks=frozen_ensemble,
             bias=frozen_bias,
             features=features_to_freeze)
 

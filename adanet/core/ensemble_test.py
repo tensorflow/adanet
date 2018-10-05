@@ -20,22 +20,22 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.core.base_learner import BaseLearner
-from adanet.core.base_learner import BaseLearnerBuilder
 from adanet.core.ensemble import _EnsembleBuilder
 from adanet.core.ensemble import MixtureWeightType
+from adanet.core.subnetwork import Builder
+from adanet.core.subnetwork import Subnetwork
 import adanet.core.testing_utils as tu
 import tensorflow as tf
 
 
-class _BaseLearnerBuilder(BaseLearnerBuilder):
+class _Builder(Builder):
 
   def __init__(self,
-               base_learner_train_op_fn,
+               subnetwork_train_op_fn,
                mixture_weights_train_op_fn,
                use_logits_last_layer,
                seed=42):
-    self._base_learner_train_op_fn = base_learner_train_op_fn
+    self._subnetwork_train_op_fn = subnetwork_train_op_fn
     self._mixture_weights_train_op_fn = mixture_weights_train_op_fn
     self._use_logits_last_layer = use_logits_last_layer
     self._seed = seed
@@ -44,13 +44,13 @@ class _BaseLearnerBuilder(BaseLearnerBuilder):
   def name(self):
     return "test"
 
-  def build_base_learner(self,
-                         features,
-                         logits_dimension,
-                         training,
-                         iteration_step,
-                         summary,
-                         previous_ensemble=None):
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
     assert features is not None
     assert training is not None
     assert iteration_step is not None
@@ -60,17 +60,17 @@ class _BaseLearnerBuilder(BaseLearnerBuilder):
         last_layer,
         units=logits_dimension,
         kernel_initializer=tf.glorot_uniform_initializer(seed=self._seed))
-    return BaseLearner(
+    return Subnetwork(
         last_layer=logits if self._use_logits_last_layer else last_layer,
         logits=logits,
         complexity=2,
         persisted_tensors={})
 
-  def build_base_learner_train_op(self, base_learner, loss, var_list, labels,
-                                  iteration_step, summary, previous_ensemble):
+  def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
+                                iteration_step, summary, previous_ensemble):
     assert iteration_step is not None
     assert summary is not None
-    return self._base_learner_train_op_fn(loss, var_list)
+    return self._subnetwork_train_op_fn(loss, var_list)
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
                                      iteration_step, summary):
@@ -198,7 +198,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_complexity_regularization": .016,
       "want_mixture_weight_vars": 2,
   })
-  def test_append_new_base_learner(
+  def test_append_new_subnetwork(
       self,
       want_logits,
       want_complexity_regularization,
@@ -228,7 +228,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
     features = {"x": tf.constant([[1.], [2.]])}
     labels = tf.constant([0, 1])
 
-    def _base_learner_train_op_fn(loss, var_list):
+    def _subnetwork_train_op_fn(loss, var_list):
       self.assertEqual(2, len(var_list))
       optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
       return optimizer.minimize(loss, var_list=var_list)
@@ -238,11 +238,11 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
       return optimizer.minimize(loss, var_list=var_list)
 
-    ensemble = builder.append_new_base_learner(
+    ensemble = builder.append_new_subnetwork(
         ensemble=ensemble_fn(),
-        base_learner_builder=_BaseLearnerBuilder(_base_learner_train_op_fn,
-                                                 _mixture_weights_train_op_fn,
-                                                 use_logits_last_layer, seed),
+        subnetwork_builder=_Builder(_subnetwork_train_op_fn,
+                                    _mixture_weights_train_op_fn,
+                                    use_logits_last_layer, seed),
         summary=tf.summary,
         features=features,
         iteration_step=tf.train.get_or_create_global_step(),

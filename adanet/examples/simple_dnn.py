@@ -28,8 +28,8 @@ import tensorflow as tf
 _NUM_LAYERS_KEY = "num_layers"
 
 
-class _SimpleDNNBuilder(adanet.BaseLearnerBuilder):
-  """Builds a DNN base learner for AdaNet."""
+class _SimpleDNNBuilder(adanet.subnetwork.Builder):
+  """Builds a DNN subnetwork for AdaNet."""
 
   def __init__(self, feature_columns, optimizer, layer_size, num_layers,
                learn_mixture_weights, dropout, seed):
@@ -39,13 +39,13 @@ class _SimpleDNNBuilder(adanet.BaseLearnerBuilder):
       feature_columns: An iterable containing all the feature columns used by
         the model. All items in the set should be instances of classes derived
         from `FeatureColumn`.
-      optimizer: An `Optimizer` instance for training both the base learner and
+      optimizer: An `Optimizer` instance for training both the subnetwork and
         the mixture weights.
       layer_size: The number of nodes to output at each hidden layer.
       num_layers: The number of hidden layers.
       learn_mixture_weights: Whether to solve a learning problem to find the
         best mixture weights, or use their default value according to the
-        mixture weight type. When `False`, the base learners will return a no_op
+        mixture weight type. When `False`, the subnetworks will return a no_op
         for the mixture weight train op.
       dropout: The dropout rate, between 0 and 1. E.g. "rate=0.1" would drop out
         10% of input units.
@@ -63,14 +63,14 @@ class _SimpleDNNBuilder(adanet.BaseLearnerBuilder):
     self._dropout = dropout
     self._seed = seed
 
-  def build_base_learner(self,
-                         features,
-                         logits_dimension,
-                         training,
-                         iteration_step,
-                         summary,
-                         previous_ensemble=None):
-    """See `adanet.BaseLearnerBuilder`."""
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
+    """See `adanet.subnetwork.Builder`."""
 
     input_layer = tf.feature_column.input_layer(
         features=features, feature_columns=self._feature_columns)
@@ -88,7 +88,7 @@ class _SimpleDNNBuilder(adanet.BaseLearnerBuilder):
         units=logits_dimension,
         kernel_initializer=tf.glorot_uniform_initializer(seed=self._seed))
 
-    # Approximate the Rademacher complexity of this base learner as the square-
+    # Approximate the Rademacher complexity of this subnetwork as the square-
     # root of its depth.
     complexity = tf.sqrt(tf.to_float(self._num_layers))
 
@@ -97,15 +97,15 @@ class _SimpleDNNBuilder(adanet.BaseLearnerBuilder):
       summary.scalar("num_layers", self._num_layers)
 
     persisted_tensors = {_NUM_LAYERS_KEY: tf.constant(self._num_layers)}
-    return adanet.BaseLearner(
+    return adanet.Subnetwork(
         last_layer=last_layer,
         logits=logits,
         complexity=complexity,
         persisted_tensors=persisted_tensors)
 
-  def build_base_learner_train_op(self, base_learner, loss, var_list, labels,
-                                  iteration_step, summary, previous_ensemble):
-    """See `adanet.BaseLearnerBuilder`."""
+  def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
+                                iteration_step, summary, previous_ensemble):
+    """See `adanet.subnetwork.Builder`."""
 
     # NOTE: The `adanet.Estimator` increments the global step.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -114,7 +114,7 @@ class _SimpleDNNBuilder(adanet.BaseLearnerBuilder):
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
                                      iteration_step, summary):
-    """See `adanet.BaseLearnerBuilder`."""
+    """See `adanet.subnetwork.Builder`."""
 
     if not self._learn_mixture_weights:
       return tf.no_op("mixture_weights_train_op")
@@ -124,7 +124,7 @@ class _SimpleDNNBuilder(adanet.BaseLearnerBuilder):
 
   @property
   def name(self):
-    """See `adanet.BaseLearnerBuilder`."""
+    """See `adanet.subnetwork.Builder`."""
 
     if self._num_layers == 0:
       # A DNN with no hidden layers is a linear model.
@@ -132,10 +132,10 @@ class _SimpleDNNBuilder(adanet.BaseLearnerBuilder):
     return "{}_layer_dnn".format(self._num_layers)
 
 
-class Generator(adanet.BaseLearnerBuilderGenerator):
-  """Generates a two DNN base learners at each iteration.
+class Generator(adanet.subnetwork.Generator):
+  """Generates a two DNN subnetworks at each iteration.
 
-  The first DNN has an identical shape to the most recently added base learner
+  The first DNN has an identical shape to the most recently added subnetwork
   in `previous_ensemble`. The second has the same shape plus one more dense
   layer on top. This is similar to the adaptive network presented in Figure 2 of
   [Cortes et al. ICML 2017](https://arxiv.org/abs/1607.01097), without the
@@ -156,17 +156,17 @@ class Generator(adanet.BaseLearnerBuilderGenerator):
       feature_columns: An iterable containing all the feature columns used by
         DNN models. All items in the set should be instances of classes derived
         from `FeatureColumn`.
-      optimizer: An `Optimizer` instance for training both the base learner and
+      optimizer: An `Optimizer` instance for training both the subnetwork and
         the mixture weights.
-      layer_size: Number of nodes in each hidden layer of the base learner
+      layer_size: Number of nodes in each hidden layer of the subnetwork
         candidates. Note that this parameter is ignored in a DNN with no hidden
         layers.
-      initial_num_layers: Minimum number of layers for each DNN base learner. At
-        iteration 0, the base learners will be `initial_num_layers` deep. base
-        learners at subsequent iterations will be at least as deep.
+      initial_num_layers: Minimum number of layers for each DNN subnetwork. At
+        iteration 0, the subnetworks will be `initial_num_layers` deep.
+        Subnetworks at subsequent iterations will be at least as deep.
       learn_mixture_weights: Whether to solve a learning problem to find the
         best mixture weights, or use their default value according to the
-        mixture weight type. When `False`, the base learners will return a no_op
+        mixture weight type. When `False`, the subnetworks will return a no_op
         for the mixture weight train op.
       dropout: The dropout rate, between 0 and 1. E.g. "rate=0.1" would drop out
         10% of input units.
@@ -202,13 +202,13 @@ class Generator(adanet.BaseLearnerBuilderGenerator):
 
   def generate_candidates(self, previous_ensemble, iteration_number,
                           previous_ensemble_reports, all_reports):
-    """See `adanet.BaseLearnerBuilderGenerator`."""
+    """See `adanet.subnetwork.Generator`."""
 
     num_layers = self._initial_num_layers
     if previous_ensemble:
       num_layers = tf.contrib.util.constant_value(
-          previous_ensemble.weighted_base_learners[
-              -1].base_learner.persisted_tensors[_NUM_LAYERS_KEY])
+          previous_ensemble.weighted_subnetworks[-1].subnetwork
+          .persisted_tensors[_NUM_LAYERS_KEY])
     return [
         self._dnn_builder_fn(num_layers=num_layers),
         self._dnn_builder_fn(num_layers=num_layers + 1),

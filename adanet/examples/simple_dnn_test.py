@@ -26,16 +26,16 @@ import tensorflow as tf
 
 
 class _FakeEnsemble(object):
-  """A fake ensemble of one base learner."""
+  """A fake ensemble of one subnetwork."""
 
   def __init__(self, num_layers):
     persisted_tensors = {"num_layers": tf.constant(num_layers)}
-    self._weighted_base_learners = [
-        adanet.WeightedBaseLearner(
+    self._weighted_subnetworks = [
+        adanet.WeightedSubnetwork(
             name=None,
             weight=None,
             logits=None,
-            base_learner=adanet.BaseLearner(
+            subnetwork=adanet.Subnetwork(
                 last_layer=[1],
                 logits=[1],
                 complexity=1,
@@ -43,8 +43,8 @@ class _FakeEnsemble(object):
     ]
 
   @property
-  def weighted_base_learners(self):
-    return self._weighted_base_learners
+  def weighted_subnetworks(self):
+    return self._weighted_subnetworks
 
 
 class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
@@ -52,34 +52,34 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
   @parameterized.named_parameters({
       "testcase_name": "defaults",
       "want_names": ["linear", "1_layer_dnn"],
-      "want_base_learner_losses": [.871, .932],
+      "want_subnetwork_losses": [.871, .932],
       "want_mixture_weight_losses": [.871, .932],
       "want_complexities": [0., 1.],
   }, {
       "testcase_name": "learn_mixture_weights",
       "learn_mixture_weights": True,
       "want_names": ["linear", "1_layer_dnn"],
-      "want_base_learner_losses": [.871, .932],
+      "want_subnetwork_losses": [.871, .932],
       "want_mixture_weight_losses": [.842, .892],
       "want_complexities": [0., 1.],
   }, {
       "testcase_name": "one_initial_num_layers",
       "initial_num_layers": 1,
       "want_names": ["1_layer_dnn", "2_layer_dnn"],
-      "want_base_learner_losses": [.932, .660],
+      "want_subnetwork_losses": [.932, .660],
       "want_mixture_weight_losses": [.932, .660],
       "want_complexities": [1., 1.414],
   }, {
       "testcase_name": "previous_ensemble",
       "previous_ensemble": _FakeEnsemble(1),
       "want_names": ["1_layer_dnn", "2_layer_dnn"],
-      "want_base_learner_losses": [.932, .660],
+      "want_subnetwork_losses": [.932, .660],
       "want_mixture_weight_losses": [.932, .660],
       "want_complexities": [1., 1.414],
   })
   def test_generate_candidates(self,
                                want_names,
-                               want_base_learner_losses,
+                               want_subnetwork_losses,
                                want_mixture_weight_losses,
                                want_complexities,
                                learn_mixture_weights=False,
@@ -98,20 +98,20 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
       features = {"x": [[1.], [2.]]}
       labels = tf.constant([[0.], [1.]])
       names = []
-      base_learner_losses = []
+      subnetwork_losses = []
       mixture_weight_losses = []
       complexities = []
       for builder in generator.generate_candidates(
           previous_ensemble,
           # The following arguments are not used by
-          # simple_dnn.BaseLearnerBuilderGenerator's generate_candidates.
+          # simple_dnn.BuilderGenerator's generate_candidates.
           iteration_number=0,
           previous_ensemble_reports=[],
           all_reports=[]):
         names.append(builder.name)
 
-        # 1. Build base learner graph.
-        base_learner = builder.build_base_learner(
+        # 1. Build subnetwork graph.
+        subnetwork = builder.build_subnetwork(
             features,
             logits_dimension=1,
             training=True,
@@ -119,13 +119,13 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
             summary=tf.summary,
             previous_ensemble=previous_ensemble)
 
-        # 2. Build base learner train ops.
-        base_learner_loss = tf.reduce_mean(
+        # 2. Build subnetwork train ops.
+        subnetwork_loss = tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=base_learner.logits, labels=labels))
-        base_learner_train_op = builder.build_base_learner_train_op(
-            base_learner,
-            base_learner_loss,
+                logits=subnetwork.logits, labels=labels))
+        subnetwork_train_op = builder.build_subnetwork_train_op(
+            subnetwork,
+            subnetwork_loss,
             var_list=None,
             labels=labels,
             iteration_step=iteration_step,
@@ -136,11 +136,11 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
 
         # Stop gradients since mixture weights should have not propagate
         # beyond top layer.
-        base_learner_logits = tf.stop_gradient(base_learner.logits)
+        subnetwork_logits = tf.stop_gradient(subnetwork.logits)
 
         # Mixture weight will initialize to a one-valued scalar.
         mixture_weight_logits = tf.layers.dense(
-            base_learner_logits,
+            subnetwork_logits,
             units=1,
             use_bias=False,
             kernel_initializer=tf.ones_initializer())
@@ -157,15 +157,14 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
 
         with self.test_session(graph=g) as sess:
           sess.run(tf.global_variables_initializer())
-          sess.run(base_learner_train_op)
+          sess.run(subnetwork_train_op)
           sess.run(mixture_weight_train_op)
-          base_learner_losses.append(sess.run(base_learner_loss))
+          subnetwork_losses.append(sess.run(subnetwork_loss))
           mixture_weight_losses.append(sess.run(mixture_weight_loss))
-          complexities.append(sess.run(base_learner.complexity))
+          complexities.append(sess.run(subnetwork.complexity))
 
     self.assertEqual(want_names, names)
-    self.assertAllClose(
-        want_base_learner_losses, base_learner_losses, atol=1e-3)
+    self.assertAllClose(want_subnetwork_losses, subnetwork_losses, atol=1e-3)
     self.assertAllClose(
         want_mixture_weight_losses, mixture_weight_losses, atol=1e-3)
     self.assertAllClose(want_complexities, complexities, atol=1e-3)

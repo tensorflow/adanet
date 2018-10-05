@@ -21,7 +21,7 @@ from __future__ import print_function
 
 import collections
 
-from adanet.core.base_learner_report import BaseLearnerReport
+from adanet.core import subnetwork
 from adanet.core.summary import _ScopedSummary
 
 import numpy as np
@@ -32,7 +32,7 @@ import tensorflow as tf
 class _Iteration(
     collections.namedtuple("_Iteration", [
         "number", "candidates", "estimator_spec", "best_candidate_index",
-        "summaries", "is_over", "base_learner_reports", "step"
+        "summaries", "is_over", "subnetwork_reports", "step"
     ])):
   """An AdaNet iteration.
 
@@ -44,7 +44,7 @@ class _Iteration(
   """
 
   def __new__(cls, number, candidates, estimator_spec, best_candidate_index,
-              summaries, is_over, base_learner_reports, step):
+              summaries, is_over, subnetwork_reports, step):
     """Creates a validated `_Iteration` instance.
 
     Args:
@@ -59,8 +59,8 @@ class _Iteration(
       best_candidate_index: Int `Tensor` indicating the best candidate's index.
       summaries: List of `_ScopedSummary` instances for each candidate.
       is_over: Boolean `Tensor` indicating if iteration is over.
-      base_learner_reports: Dict mapping string names to `BaseLearnerReport`s,
-        one per candidate.
+      subnetwork_reports: Dict mapping string names to `subnetwork.Report`s, one
+        per candidate.
       step: Integer `Tensor` representing the step since the beginning of the
         current iteration, as opposed to the global step.
 
@@ -78,8 +78,8 @@ class _Iteration(
       raise ValueError("estimator_spec is required")
     if best_candidate_index is None:
       raise ValueError("best_candidate_index is required")
-    if not isinstance(base_learner_reports, dict):
-      raise ValueError("base_learner_reports must be a dict")
+    if not isinstance(subnetwork_reports, dict):
+      raise ValueError("subnetwork_reports must be a dict")
     if step is None:
       raise ValueError("step is required")
     return super(_Iteration, cls).__new__(
@@ -90,7 +90,7 @@ class _Iteration(
         best_candidate_index=best_candidate_index,
         summaries=summaries,
         is_over=is_over,
-        base_learner_reports=base_learner_reports,
+        subnetwork_reports=subnetwork_reports,
         step=step)
 
 
@@ -114,7 +114,7 @@ class _IterationBuilder(object):
 
   def build_iteration(self,
                       iteration_number,
-                      base_learner_builders,
+                      subnetwork_builders,
                       features,
                       mode,
                       labels=None,
@@ -122,17 +122,16 @@ class _IterationBuilder(object):
                       previous_ensemble=None):
     """Builds and returns AdaNet iteration t.
 
-    This method generates the base learning algorithm's candidate base learners
-    given the ensemble at iteration t-1 and creates graph operations to train
-    them. The returned `_Iteration` tracks the training of all candidates to
-    know when the iteration is over, and tracks the best candidate's predictions
-    and loss, as defined by lowest complexity-regularized loss on the train set.
+    This method uses the generated the candidate subnetworks given the ensemble
+    at iteration t-1 and creates graph operations to train them. The returned
+    `_Iteration` tracks the training of all candidates to know when the
+    iteration is over, and tracks the best candidate's predictions and loss, as
+    defined by lowest complexity-regularized loss on the train set.
 
     Args:
       iteration_number: The iteration number.
-      base_learner_builders: A list of `BaseLearnerBuilders` for adding `
-        BaseLearners` to the graph. Each base learner is then wrapped in a
-        `_Candidate` to train.
+      subnetwork_builders: A list of `Builders` for adding ` Subnetworks` to the
+        graph. Each subnetwork is then wrapped in a `_Candidate` to train.
       features: Dictionary of `Tensor` objects keyed by feature name.
       mode: Defines whether this is training, evaluation or prediction. See
         `ModeKeys`.
@@ -144,13 +143,12 @@ class _IterationBuilder(object):
       An _Iteration instance.
 
     Raises:
-      ValueError: If base_learner_builders is empty.
-      ValueError: If two `BaseLearnerBuilder` instances share the same name.
+      ValueError: If subnetwork_builders is empty.
+      ValueError: If two `Builder` instances share the same name.
     """
 
-    if not base_learner_builders:
-      raise ValueError(
-          "Each iteration must have at least one BaseLearnerBuilder.")
+    if not subnetwork_builders:
+      raise ValueError("Each iteration must have at least one Builder.")
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
@@ -169,12 +167,12 @@ class _IterationBuilder(object):
       seen_builder_names = {}
       candidates = []
       summaries = []
-      base_learner_reports = {}
+      subnetwork_reports = {}
 
-      # TODO: Consolidate building base learner into
+      # TODO: Consolidate building subnetwork into
       # candidate_builder.
       if previous_ensemble:
-        # Include previous best base learner as a candidate so that its
+        # Include previous best subnetwork as a candidate so that its
         # predictions are returned until a new candidate outperforms.
         seen_builder_names = {previous_ensemble.name: True}
         previous_best_candidate = self._candidate_builder.build_candidate(
@@ -186,29 +184,29 @@ class _IterationBuilder(object):
         candidates.append(previous_best_candidate)
         summaries.append(previous_ensemble_summary)
 
-        # Generate base learner reports.
+        # Generate subnetwork reports.
         if mode != tf.estimator.ModeKeys.PREDICT:
-          base_learner_report = BaseLearnerReport(
+          subnetwork_report = subnetwork.Report(
               hparams={},
               attributes={},
               metrics=(previous_ensemble.eval_metric_ops.copy() if
                        previous_ensemble.eval_metric_ops is not None else {}),
           )
-          base_learner_report.metrics["adanet_loss"] = tf.metrics.mean(
+          subnetwork_report.metrics["adanet_loss"] = tf.metrics.mean(
               previous_ensemble.adanet_loss)
-          base_learner_reports["previous_ensemble"] = base_learner_report
+          subnetwork_reports["previous_ensemble"] = subnetwork_report
 
-      for base_learner_builder in base_learner_builders:
-        if base_learner_builder.name in seen_builder_names:
+      for subnetwork_builder in subnetwork_builders:
+        if subnetwork_builder.name in seen_builder_names:
           raise ValueError("Two ensembles have the same name '{}'".format(
-              base_learner_builder.name))
-        seen_builder_names[base_learner_builder.name] = True
+              subnetwork_builder.name))
+        seen_builder_names[subnetwork_builder.name] = True
         summary = _ScopedSummary(
-            base_learner_builder.name, skip_summary=skip_summaries)
+            subnetwork_builder.name, skip_summary=skip_summaries)
         summaries.append(summary)
-        ensemble = self._ensemble_builder.append_new_base_learner(
+        ensemble = self._ensemble_builder.append_new_subnetwork(
             ensemble=previous_ensemble,
-            base_learner_builder=base_learner_builder,
+            subnetwork_builder=subnetwork_builder,
             summary=summary,
             features=features,
             mode=mode,
@@ -222,18 +220,18 @@ class _IterationBuilder(object):
             summary=summary)
         candidates.append(candidate)
 
-        # Generate base learner reports.
+        # Generate subnetwork reports.
         if mode != tf.estimator.ModeKeys.PREDICT:
-          base_learner_report = base_learner_builder.build_base_learner_report()
-          if not base_learner_report:
-            base_learner_report = BaseLearnerReport(
+          subnetwork_report = subnetwork_builder.build_subnetwork_report()
+          if not subnetwork_report:
+            subnetwork_report = subnetwork.Report(
                 hparams={}, attributes={}, metrics={})
           if ensemble.eval_metric_ops is not None:
             for metric_name, metric in ensemble.eval_metric_ops.items():
-              base_learner_report.metrics[metric_name] = metric
-          base_learner_report.metrics["adanet_loss"] = tf.metrics.mean(
+              subnetwork_report.metrics[metric_name] = metric
+          subnetwork_report.metrics["adanet_loss"] = tf.metrics.mean(
               ensemble.adanet_loss)
-          base_learner_reports[base_learner_builder.name] = base_learner_report
+          subnetwork_reports[subnetwork_builder.name] = subnetwork_report
 
       best_candidate_index = 0
       best_predictions = candidates[0].ensemble.predictions
@@ -265,7 +263,7 @@ class _IterationBuilder(object):
           best_candidate_index=best_candidate_index,
           summaries=summaries,
           is_over=self._is_over(candidates),
-          base_learner_reports=base_learner_reports,
+          subnetwork_reports=subnetwork_reports,
           step=iteration_step_tensor)
 
   def _is_over(self, candidates):
@@ -318,7 +316,7 @@ class _IterationBuilder(object):
   def _best_eval_metric_ops(self, candidates, best_candidate_index):
     """Returns the eval metric ops of the best candidate.
 
-    Specifically, it separates the metric ops by the base learner's names. All
+    Specifically, it separates the metric ops by the subnetwork's names. All
     candidates are not required to have the same metrics. When they all share
     a given metric, an additional metric is added which represents that of the
     best candidate.
@@ -391,7 +389,7 @@ class _IterationBuilder(object):
 
     Returns:
       A `Tensor` or dictionary of `Tensor`s representing the best candidate's
-      predictions (depending on what the base learners return).
+      predictions (depending on what the subnetworks return).
     """
 
     assert len(candidates) >= 1
@@ -453,8 +451,7 @@ class _IterationBuilder(object):
       mode: Defines whether this is training, evaluation or inference. Export
         outputs are always None during training and evaluation. See `ModeKeys`.
       best_predictions: A `Tensor` or dictionary of `Tensor`s representing the
-        best candidate's predictions (depending on what the base learners
-        return).
+        best candidate's predictions (depending on what the subnetworks return).
 
     Returns:
       A `Tensor` dictionary representing the best candidate's export outputs.

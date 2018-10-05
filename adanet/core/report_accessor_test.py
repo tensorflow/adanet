@@ -19,7 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.core.base_learner_report import MaterializedBaseLearnerReport
+from adanet.core import subnetwork
 from adanet.core.report_accessor import _ReportAccessor
 import tensorflow as tf
 
@@ -32,8 +32,8 @@ class ReportAccessorTest(tf.test.TestCase):
 
   def test_add_to_empty_file(self):
     report_accessor = _ReportAccessor(self.get_temp_dir())
-    materialized_base_learner_reports = [
-        MaterializedBaseLearnerReport(
+    materialized_reports = [
+        subnetwork.MaterializedReport(
             iteration_number=0,
             name="foo",
             hparams={
@@ -57,18 +57,17 @@ class ReportAccessorTest(tf.test.TestCase):
 
     report_accessor.write_iteration_report(
         iteration_number=0,
-        materialized_base_learner_reports=materialized_base_learner_reports,
+        materialized_reports=materialized_reports,
     )
     actual_iteration_reports = list(report_accessor.read_iteration_reports())
 
     self.assertEqual(1, len(actual_iteration_reports))
-    self.assertEqual(materialized_base_learner_reports,
-                     actual_iteration_reports[0])
+    self.assertEqual(materialized_reports, actual_iteration_reports[0])
 
   def test_add_to_existing_file(self):
-    materialized_base_learner_reports = [
+    materialized_reports = [
         [
-            MaterializedBaseLearnerReport(
+            subnetwork.MaterializedReport(
                 iteration_number=0,
                 name="foo1",
                 hparams={
@@ -88,7 +87,7 @@ class ReportAccessorTest(tf.test.TestCase):
                 },
                 included_in_final_ensemble=False,
             ),
-            MaterializedBaseLearnerReport(
+            subnetwork.MaterializedReport(
                 iteration_number=0,
                 name="foo2",
                 hparams={
@@ -110,7 +109,7 @@ class ReportAccessorTest(tf.test.TestCase):
             ),
         ],
         [
-            MaterializedBaseLearnerReport(
+            subnetwork.MaterializedReport(
                 iteration_number=1,
                 name="foo1",
                 hparams={
@@ -130,7 +129,7 @@ class ReportAccessorTest(tf.test.TestCase):
                 },
                 included_in_final_ensemble=True,
             ),
-            MaterializedBaseLearnerReport(
+            subnetwork.MaterializedReport(
                 iteration_number=1,
                 name="foo2",
                 hparams={
@@ -152,7 +151,7 @@ class ReportAccessorTest(tf.test.TestCase):
             ),
         ],
         [
-            MaterializedBaseLearnerReport(
+            subnetwork.MaterializedReport(
                 iteration_number=2,
                 name="foo1",
                 hparams={
@@ -172,7 +171,7 @@ class ReportAccessorTest(tf.test.TestCase):
                 },
                 included_in_final_ensemble=False,
             ),
-            MaterializedBaseLearnerReport(
+            subnetwork.MaterializedReport(
                 iteration_number=2,
                 name="foo2",
                 hparams={
@@ -197,14 +196,11 @@ class ReportAccessorTest(tf.test.TestCase):
 
     report_accessor = _ReportAccessor(self.get_temp_dir())
 
-    report_accessor.write_iteration_report(0,
-                                           materialized_base_learner_reports[0])
-    report_accessor.write_iteration_report(1,
-                                           materialized_base_learner_reports[1])
-    report_accessor.write_iteration_report(2,
-                                           materialized_base_learner_reports[2])
+    report_accessor.write_iteration_report(0, materialized_reports[0])
+    report_accessor.write_iteration_report(1, materialized_reports[1])
+    report_accessor.write_iteration_report(2, materialized_reports[2])
     actual_reports = list(report_accessor.read_iteration_reports())
-    self.assertEqual(materialized_base_learner_reports, actual_reports)
+    self.assertEqual(materialized_reports, actual_reports)
 
 
 if __name__ == "__main__":

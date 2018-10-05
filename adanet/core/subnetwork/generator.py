@@ -1,4 +1,4 @@
-"""An AdaNet base learner definition in Tensorflow using a single graph.
+"""An AdaNet subnetwork definition in Tensorflow using a single graph.
 
 Copyright 2018 The AdaNet Authors. All Rights Reserved.
 
@@ -34,49 +34,48 @@ def _validate_nested_persisted_tensors(persisted_tensors):
     _validate_nested_persisted_tensors(entry)
 
 
-class BaseLearner(
+class Subnetwork(
     collections.namedtuple(
-        "BaseLearner",
+        "Subnetwork",
         ["last_layer", "logits", "complexity", "persisted_tensors"])):
-  """An AdaNet base learner.
+  """An AdaNet subnetwork.
 
-  In the AdaNet paper, a `adanet.BaseLearner` is are called a 'subnetwork',
-  and indicated by 'h'. A collection of weighted base learners form an AdaNet
+  In the AdaNet paper, an `adanet.Subnetwork` is are called a 'subnetwork',
+  and indicated by 'h'. A collection of weighted subnetworks form an AdaNet
   ensemble.
   """
 
   def __new__(cls, last_layer, logits, complexity, persisted_tensors):
-    """Creates a validated `BaseLearner` instance.
+    """Creates a validated `Subnetwork` instance.
 
     Args:
-      last_layer: A `Tensor` output of the last layer of the base learner, i.e
-        the layer before the logits layer. When the mixture weight type is
-        `MATRIX`, the AdaNet algorithm takes care of computing ensemble mixture
-        weights matrices (one per base learner) that multiply the various last
-        layers of the ensemble's base learners, and regularize them using their
-        base learner's complexity. This field is represented by 'h' in the
-        AdaNet paper.
-      logits: logits `Tensor` for training the base learner. NOTE: These logits
+      last_layer: A `Tensor` output of the last layer of the subnetwork, i.e the
+        layer before the logits layer. When the mixture weight type is `MATRIX`,
+        the AdaNet algorithm takes care of computing ensemble mixture weights
+        matrices (one per subnetwork) that multiply the various last layers of
+        the ensemble's subnetworks, and regularize them using their subnetwork's
+        complexity. This field is represented by 'h' in the AdaNet paper.
+      logits: logits `Tensor` for training the subnetwork. NOTE: These logits
         are not used in the ensemble's outputs if the mixture weight type is
         `MATRIX`, instead AdaNet learns its own logits (mixture weights) from
-        the base learner's `last_layers` with complexity regularization. The
+        the subnetwork's `last_layers` with complexity regularization. The
         logits are used in the ensemble only when the mixture weights type is
         `SCALAR` or `VECTOR`. Even though the logits are not used in the
         ensemble in some cases, they should always be supplied as adanet uses
-        the logits to train the base learners.
-      complexity: A scalar representing the complexity of the base learner's
-        architecture. It is used for choosing the best base learner at each
+        the logits to train the subnetworks.
+      complexity: A scalar representing the complexity of the subnetwork's
+        architecture. It is used for choosing the best subnetwork at each
         iteration, and for regularizing the weighted outputs of more complex
-        base learners.
+        subnetworks.
       persisted_tensors: Nested dictionary of string to `Tensor` to persist
         across iterations. At the end of an iteration, the `Tensors` will be
-        available to base learners in the next iterations, whereas others that
-        are not part of the `BaseLearner` will be pruned. This allows later
-        `BaseLearners` to dynamically build upon arbitrary `Tensors` from
-        previous `BaseLearners`.
+        available to subnetworks in the next iterations, whereas others that are
+        not part of the `Subnetwork` will be pruned. This allows later
+        `Subnetworks` to dynamically build upon arbitrary `Tensors` from
+        previous `Subnetworks`.
 
     Returns:
-      A validated `BaseLearner` object.
+      A validated `Subnetwork` object.
 
     Raises:
       ValueError: If last_layer is None.
@@ -95,7 +94,7 @@ class BaseLearner(
     if not isinstance(persisted_tensors, dict):
       raise ValueError("persisted_tensors must be a dict")
     _validate_nested_persisted_tensors(persisted_tensors)
-    return super(BaseLearner, cls).__new__(
+    return super(Subnetwork, cls).__new__(
         cls,
         last_layer=last_layer,
         logits=logits,
@@ -103,11 +102,11 @@ class BaseLearner(
         persisted_tensors=persisted_tensors)
 
 
-class BaseLearnerBuilder(object):
-  """Interface for a base learner builder.
+class Builder(object):
+  """Interface for a subnetwork builder.
 
-  Given features, labels, and the best ensemble of base learners at iteration
-  t-1, a `BaseLearnerBuilder` creates a `BaseLearner` to add to a candidate
+  Given features, labels, and the best ensemble of subnetworks at iteration
+  t-1, a `Builder` creates a `Subnetwork` to add to a candidate
   ensemble at iteration t. These candidate ensembles are evaluated against one
   another at the end of the iteration, and the best one is selected based on its
   complexity-regularized loss.
@@ -117,21 +116,21 @@ class BaseLearnerBuilder(object):
 
   @abc.abstractproperty
   def name(self):
-    """Returns the unique name of the ensemble to contain this base learner."""
+    """Returns the unique name of the ensemble to contain this subnetwork."""
 
   @abc.abstractmethod
-  def build_base_learner(self,
-                         features,
-                         logits_dimension,
-                         training,
-                         iteration_step,
-                         summary,
-                         previous_ensemble=None):
-    """Returns the candidate `BaseLearner` to add to the ensemble.
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
+    """Returns the candidate `Subnetwork` to add to the ensemble.
 
-    This method will be called only once, before `build_base_learner_train_op`
+    This method will be called only once, before `build_subnetwork_train_op`
     and `build_mixture_weights_train_op` are called. This method should
-    construct the candidate base learner's graph operations and variables.
+    construct the candidate subnetwork's graph operations and variables.
 
     Args:
       features: Input `dict` of `Tensor` objects.
@@ -141,38 +140,38 @@ class BaseLearnerBuilder(object):
         mode or prediction mode.
       iteration_step: Integer `Tensor` representing the step since the beginning
         of the current iteration, as opposed to the global step.
-      summary: An `adanet.Summary` for scoping summaries to individual base
-        learners in Tensorboard.
+      summary: An `adanet.Summary` for scoping summaries to individual
+        subnetworks in Tensorboard.
       previous_ensemble: The best `Ensemble` from iteration t-1. The created
-        base learner will extend the previous ensemble to form the `Ensemble` at
+        subnetwork will extend the previous ensemble to form the `Ensemble` at
         iteration t.
 
     Returns:
-      A `BaseLearner` instance.
+      A `Subnetwork` instance.
     """
 
   @abc.abstractmethod
-  def build_base_learner_train_op(self, base_learner, loss, var_list, labels,
-                                  iteration_step, summary, previous_ensemble):
-    """Returns an op for training a new base learner.
+  def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
+                                iteration_step, summary, previous_ensemble):
+    """Returns an op for training a new subnetwork.
 
-    This method will be called once after `build_base_learner`.
+    This method will be called once after `build_subnetwork`.
 
     NOTE: This method should _not_ increment the global step tensor.
 
     Args:
-      base_learner: Newest base learner, that is not part of the
+      subnetwork: Newest subnetwork, that is not part of the
         `previous_ensemble`.
-      loss: A `Tensor` containing the base learner's loss to minimize.
-      var_list: List of base learner `tf.Variable` parameters to update as part
-        of the training operation.
+      loss: A `Tensor` containing the subnetwork's loss to minimize.
+      var_list: List of subnetwork `tf.Variable` parameters to update as part of
+        the training operation.
       labels: Labels `Tensor`.
       iteration_step: Integer `Tensor` representing the step since the beginning
         of the current iteration, as opposed to the global step.
-      summary: An `adanet.Summary` for scoping summaries to individual base
-        learners in Tensorboard.
+      summary: An `adanet.Summary` for scoping summaries to individual
+        subnetworks in Tensorboard.
       previous_ensemble: The best `Ensemble` from iteration t-1. The created
-        base learner will extend the previous ensemble to form the `Ensemble` at
+        subnetwork will extend the previous ensemble to form the `Ensemble` at
         iteration t. Is None for iteration 0.
 
     Returns:
@@ -184,10 +183,10 @@ class BaseLearnerBuilder(object):
                                      iteration_step, summary):
     """Returns an op for training the ensemble's mixture weights.
 
-    Allows AdaNet to learn the mixture weights of each base learner
+    Allows AdaNet to learn the mixture weights of each subnetwork
     according to Equation (6).
 
-    This method will be called once after `build_base_learner`.
+    This method will be called once after `build_subnetwork`.
 
     NOTE: This method should _not_ increment the global step tensor.
 
@@ -196,24 +195,24 @@ class BaseLearnerBuilder(object):
       var_list: List of ensemble mixture weight `tf.Variables` to update as
         become part of the training operation.
       logits: The ensemble's logits `Tensor` from applying the mixture weights
-        and bias to the ensemble's base learners.
+        and bias to the ensemble's subnetworks.
       labels: Labels `Tensor`.
       iteration_step: Integer `Tensor` representing the step since the beginning
         of the current iteration, as opposed to the global step.
-      summary: An `adanet.Summary` for scoping summaries to individual base
-        learners in Tensorboard.
+      summary: An `adanet.Summary` for scoping summaries to individual
+        subnetworks in Tensorboard.
 
     Returns:
       A train op.
     """
 
-  def build_base_learner_report(self):
-    """Returns a `BaseLearnerReport` to materialize and record.
+  def build_subnetwork_report(self):
+    """Returns a `subnetwork.Report` to materialize and record.
 
-    This method will be called once after `build_base_learner`.
-    Do NOT depend on variables created in `build_base_learner_train_op` or
+    This method will be called once after `build_subnetwork`.
+    Do NOT depend on variables created in `build_subnetwork_train_op` or
     `build_mixture_weights_train_op`, because they are not called before
-    `build_base_learner_report` is called.
+    `build_subnetwork_report` is called.
 
     If it returns None, AdaNet records the name and standard eval metrics.
     """
@@ -221,11 +220,11 @@ class BaseLearnerBuilder(object):
     return None
 
 
-class BaseLearnerBuilderGenerator(object):
-  """Interface for a base learner builder generator.
+class Generator(object):
+  """Interface for a subnetwork builder generator.
 
-  Given the ensemble of base learners at iteration t-1, this object is
-  responsible for generating the set of base learners for iteration t that
+  Given the ensemble of subnetworks at iteration t-1, this object is
+  responsible for generating the set of subnetworks for iteration t that
   minimize Equation (6) in the paper.
   """
 
@@ -234,52 +233,52 @@ class BaseLearnerBuilderGenerator(object):
   @abc.abstractmethod
   def generate_candidates(self, previous_ensemble, iteration_number,
                           previous_ensemble_reports, all_reports):
-    """Generates `adanet.BaseLearnerBuilders` to train at iteration t.
+    """Generates `adanet.Builders` to train at iteration t.
 
     Args:
       previous_ensemble: The best `adanet.Ensemble` from iteration t-1.
         DEPRECATED. We are transitioning away from the use of previous_ensemble
-        in generate_candidates. New BaseLearnerBuilderGenerators should *not*
-        use previous_ensemble in their implementation of generate_candidates --
+        in generate_candidates. New Generators should *not* use
+        previous_ensemble in their implementation of generate_candidates --
         please only use iteration_number, previous_ensemble_reports and
         all_reports.
       iteration_number: Python integer AdaNet iteration t, starting from 0.
-      previous_ensemble_reports: List of `MaterializedBaseLearnerReport`s
-        corresponding to the BaseLearnerBuilders composing `adanet.Ensemble`
-        from iteration t-1. The first element in the list corresponds to the
-        BaseLearnerBuilder added in the first iteration. If `ReportMaterializer`
-        is not supplied to the estimator, previous_ensemble_report is `None`.
-      all_reports: List of `MaterializedBaseLearnerReport`s. If
+      previous_ensemble_reports: List of `adanet.subnetwork.MaterializedReport`s
+        corresponding to the Builders composing `adanet.Ensemble` from iteration
+        t-1. The first element in the list corresponds to the Builder added in
+        the first iteration. If `ReportMaterializer` is not supplied to the
+        estimator, previous_ensemble_report is `None`.
+      all_reports: List of `adanet.subnetwork.MaterializedReport`s. If
         `ReportMaterializer` is not supplied to the estimator, all_reports is
         `None`. If `ReportMaterializer` is supplied to the estimator and t=0,
         all_reports is an empty List. Otherwise, all_reports is a sequence of
         Lists. Each element of the sequence is a List containing all the
-        `MaterializedBaseLearnerReport`s in an AdaNet iteration, starting from
-        iteration 0, and ending at iteration t-1.
+        `adanet.subnetwork.MaterializedReport`s in an AdaNet iteration, starting
+        from iteration 0, and ending at iteration t-1.
 
     Returns:
-      A list of `adanet.BaseLearnerBuilders`.
+      A list of `adanet.Builders`.
     """
 
 
-class SimpleBaseLearnerBuilderGenerator(BaseLearnerBuilderGenerator):
-  """A generator that always returns the same `adanet.BaseLearnerBuilders`."""
+class SimpleGenerator(Generator):
+  """A generator that always returns the same `adanet.Builders`."""
 
-  def __init__(self, base_learner_builders):
-    """Creates a `adanet.BaseLearner` instance.
+  def __init__(self, subnetwork_builders):
+    """Creates a `adanet.Subnetwork` instance.
 
     Args:
-      base_learner_builders: List of `adanet.BaseLearnerBuilders` to return at
-        each iteration when `generate_candidates` is called.
+      subnetwork_builders: List of `adanet.Builders` to return at each iteration
+        when `generate_candidates` is called.
 
     Returns:
-      A `SimpleBaseLearnerBuilderGenerator` instance.
+      A `SimpleGenerator` instance.
     """
 
-    self._base_learner_builders = base_learner_builders
+    self._subnetwork_builders = subnetwork_builders
 
   def generate_candidates(self, previous_ensemble, iteration_number,
                           previous_ensemble_reports, all_reports):
-    """Returns the predefined set of `adanet.BaseLearnerBuilders`."""
+    """Returns the predefined set of `adanet.Builders`."""
 
-    return self._base_learner_builders
+    return self._subnetwork_builders
