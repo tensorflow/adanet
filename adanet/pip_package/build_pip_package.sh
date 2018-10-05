@@ -30,7 +30,7 @@ function main() {
   fi
 
   DEST=$1
-  TMPDIR=$(mktemp -d -t _adanet_pip_pkg)
+  TMPDIR=$(mktemp -d -t XXXXXXXXXXXXXXXXXXXXXXX_adanet_pip_pkg)
   RUNFILES="bazel-bin/adanet/pip_package/build_pip_package.runfiles/org_adanet"
 
   echo $(date) : "=== Using tmpdir: ${TMPDIR}"

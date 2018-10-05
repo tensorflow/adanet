@@ -40,7 +40,7 @@ And activate it:
 ### Clone the adanet repository.
 
 ```shell
-(adanet_env)~/$ git clone https://github.com/tensorflow/adanet && cd adanet
+(adanet_env)~$ git clone https://github.com/tensorflow/adanet && cd adanet
 ```
 
 ### Build adanet pip packaging script
@@ -48,22 +48,28 @@ And activate it:
 To build a pip package for adanet:
 
 ```shell
-(adanet_env)~/$ bazel build //adanet/pip_package:build_pip_package
+(adanet_env)~/adanet$ bazel build //adanet/pip_package:build_pip_package
 ```
 
 ### Create the adanet pip package
 
 ```shell
-(adanet_env)~/$ bazel-bin/adanet/pip_package/build_pip_package /tmp/adanet_pkg
+(adanet_env)~/adanet$ bazel-bin/adanet/pip_package/build_pip_package /tmp/adanet_pkg
 ```
 
 ### Install and test the pip package (optional)
 
-Run the following commands to install the pip package and test adanet.
+Run the following command to install the pip package:
 
 ```shell
-(adanet_env)~/$ pip install /tmp/adanet_pkg/*.whl
-(adanet_env)~/$ python -c "import adanet"
+(adanet_env)~/adanet$ pip install /tmp/adanet_pkg/*.whl
+```
+
+Finally try importing `adanet` in Python outside the cloned directory:
+
+```shell
+(adanet_env)~/adanet$ cd ~
+(adanet_env)~$ python -c "import adanet"
 ```
 
 ### De-activate the virtualenv
