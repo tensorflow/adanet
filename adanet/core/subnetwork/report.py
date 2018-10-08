@@ -66,8 +66,7 @@ class Report(
 
     # Validate hparams
     for key, value in hparams.items():
-      if not (isinstance(value, bool) or isinstance(value, int) or
-              isinstance(value, float) or isinstance(value, six.string_types)):
+      if not isinstance(value, (bool, int, float, six.string_types)):
         raise ValueError(
             "hparam '{}' refers to invalid value {}, type {}. type must be "
             "python primitive int, float, bool, or string.".format(

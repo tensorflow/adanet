@@ -132,7 +132,7 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
     summary_proto = tf.summary.Summary()
     for key in eval_dict:
       value = eval_dict[key]
-      if isinstance(value, np.float32) or isinstance(value, float):
+      if isinstance(value, (np.float32, float)):
         summary_proto.value.add(tag=key, simple_value=float(value))
       elif isinstance(value, six.binary_type):
         summ = tf.summary.Summary.FromString(value)

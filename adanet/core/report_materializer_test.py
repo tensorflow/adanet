@@ -30,7 +30,7 @@ import tensorflow as tf
 def decode(param):
   """Decodes the given param when it is bytes."""
 
-  if isinstance(param, float) or isinstance(param, int):
+  if isinstance(param, (float, int)):
     return param
   return param.decode("utf-8")
 

@@ -68,7 +68,7 @@ class _Iteration(
       ValueError: If validation fails.
     """
 
-    if not isinstance(number, int) and not isinstance(number, np.integer):
+    if not isinstance(number, (int, np.integer)):
       raise ValueError("number must be an integer")
     if number < 0:
       raise ValueError("number must be greater than 0 got %d" % (number))

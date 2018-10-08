@@ -109,8 +109,7 @@ def _create_subnetwork_report_proto(materialized_subnetwork_report):
       field = getattr(proto, field_name)
       if isinstance(value, bool):
         field[key].bool_value = value
-      elif isinstance(value, six.string_types) or isinstance(
-          value, six.binary_type):
+      elif isinstance(value, (six.string_types, six.binary_type)):
         # Proto requires unicode strings.
         field[key].string_value = six.u(value)
       elif isinstance(value, int):
