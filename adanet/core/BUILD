@@ -101,7 +101,6 @@ py_library(
     name = "evaluator",
     srcs = ["evaluator.py"],
     deps = [
-        "@six_archive//:six",
     ],
 )
 

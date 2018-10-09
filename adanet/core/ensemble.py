@@ -57,10 +57,46 @@ class WeightedSubnetwork(
 
 class Ensemble(
     collections.namedtuple("Ensemble", [
-        "name",
         "weighted_subnetworks",
         "bias",
         "logits",
+    ])):
+  """An AdaNet ensemble.
+
+  An ensemble is a collection of subnetworks which forms a neural network
+  through the weighted sum of their outputs. It is represented by 'f' throughout
+  the AdaNet paper. Its component subnetworks' weights are complexity
+  regularized (Gamma) as defined in Equation (4).
+  """
+
+  def __new__(cls, weighted_subnetworks, bias, logits):
+    """Creates an `Ensemble` instance.
+
+    Args:
+      weighted_subnetworks: List of `WeightedSubnetwork` instances that form
+        this ensemble. Ordered from first to most recent.
+      bias: `Tensor` bias vector for the ensemble logits.
+      logits: Logits `Tensor`. The result of the function 'f' as defined in
+        Section 5.1 which is the sum of the logits of all `WeightedSubnetwork`
+        instances in ensemble.
+
+    Returns:
+      An `Ensemble` object.
+    """
+
+    # TODO: Make weighted_subnetworks property a tuple so that
+    # `Ensemble` is immutable.
+    return super(Ensemble, cls).__new__(
+        cls,
+        weighted_subnetworks=weighted_subnetworks,
+        bias=bias,
+        logits=logits)
+
+
+class _EnsembleSpec(
+    collections.namedtuple("_EnsembleSpec", [
+        "name",
+        "ensemble",
         "predictions",
         "loss",
         "adanet_loss",
@@ -70,21 +106,11 @@ class Ensemble(
         "eval_metric_ops",
         "export_outputs",
     ])):
-  """An AdaNet ensemble.
-
-  An ensemble is a collection of subnetworks which forms a neural network
-  through the weighted sum of their outputs. It is represented by 'f' throughout
-  the AdaNet paper. Its component subnetworks' weights are complexity
-  regularized (Gamma) as defined in Equation (4).
-
-  # TODO: Remove fields related to training and evaluation.
-  """
+  """A collections of a ensemble training and evaluation `Tensors`."""
 
   def __new__(cls,
               name,
-              weighted_subnetworks,
-              bias,
-              logits,
+              ensemble,
               predictions,
               loss=None,
               adanet_loss=None,
@@ -93,16 +119,11 @@ class Ensemble(
               complexity_regularization=None,
               eval_metric_ops=None,
               export_outputs=None):
-    """Creates an `Ensemble` instance.
+    """Creates an `EnsembleSpec` instance.
 
     Args:
       name: String name of this ensemble. Should be unique in the graph.
-      weighted_subnetworks: List of `WeightedSubnetwork` instances that form
-        this ensemble. Ordered from first to most recent.
-      bias: `Tensor` bias vector for the ensemble logits.
-      logits: Logits `Tensor`. The result of the function 'f' as defined in
-        Section 5.1 which is the sum of the logits of all `WeightedSubnetwork`
-        instances in ensemble.
+      ensemble: The `Ensemble` of interest.
       predictions: Predictions `Tensor` or dict of `Tensor`.
       loss: Loss `Tensor` as defined by the surrogate loss function Phi in
         Equations (4), (5), and (6). Must be either scalar, or with shape `[1]`.
@@ -125,17 +146,15 @@ class Ensemble(
         `SavedModel` and used during serving. See `tf.estimator.EstimatorSpec`.
 
     Returns:
-      An `Ensemble` object.
+      An `EnsembleSpec` object.
     """
 
     # TODO: Make weighted_subnetworks property a tuple so that
     # `Ensemble` is immutable.
-    return super(Ensemble, cls).__new__(
+    return super(_EnsembleSpec, cls).__new__(
         cls,
         name=name,
-        weighted_subnetworks=weighted_subnetworks,
-        bias=bias,
-        logits=logits,
+        ensemble=ensemble,
         predictions=predictions,
         loss=loss,
         adanet_loss=adanet_loss,
@@ -222,14 +241,14 @@ class _EnsembleBuilder(object):
     self._use_bias = use_bias
 
   def append_new_subnetwork(self,
-                            ensemble,
+                            ensemble_spec,
                             subnetwork_builder,
                             iteration_step,
                             summary,
                             features,
                             mode,
                             labels=None):
-    """Adds a `Subnetwork` to an `Ensemble` from iteration t-1 for iteration t.
+    """Adds a `Subnetwork` to an `_EnsembleSpec`.
 
     For iteration t > 0, the ensemble is built given the `Ensemble` for t-1 and
     the new subnetwork to train as part of the ensemble. The `Ensemble` at
@@ -240,7 +259,7 @@ class _EnsembleBuilder(object):
     complexity L1-regularizes this weight.
 
     Args:
-      ensemble: The recipient `Ensemble` for the `Subnetwork`.
+      ensemble_spec: The recipient `_EnsembleSpec` for the `Subnetwork`.
       subnetwork_builder: A `adanet.Builder` instance which defines how to train
         the subnetwork and ensemble mixture weights.
       iteration_step: Integer `Tensor` representing the step since the beginning
@@ -251,16 +270,18 @@ class _EnsembleBuilder(object):
       labels: Labels `Tensor`, or `dict` of same. Can be None during inference.
 
     Returns:
-      An new `Ensemble` instance with the `Subnetwork` appended.
+      An new `EnsembleSpec` instance with the `Subnetwork` appended.
     """
 
     with tf.variable_scope("ensemble_{}".format(subnetwork_builder.name)):
       weighted_subnetworks = []
       iteration = 0
       num_subnetworks = 1
-      if ensemble:
-        num_subnetworks += len(ensemble.weighted_subnetworks)
-        for weighted_subnetwork in ensemble.weighted_subnetworks:
+      ensemble = None
+      if ensemble_spec:
+        ensemble = ensemble_spec.ensemble
+        num_subnetworks += len(ensemble_spec.ensemble.weighted_subnetworks)
+        for weighted_subnetwork in ensemble_spec.ensemble.weighted_subnetworks:
           weight_initializer = None
           if self._warm_start_mixture_weights:
             weight_initializer = weighted_subnetwork.weight
@@ -274,7 +295,7 @@ class _EnsembleBuilder(object):
                     weight_initializer=weight_initializer))
           iteration += 1
         bias = self._create_bias(
-            self._head.logits_dimension, prior=ensemble.bias)
+            self._head.logits_dimension, prior=ensemble_spec.ensemble.bias)
       else:
         bias = self._create_bias(self._head.logits_dimension)
 
@@ -296,7 +317,7 @@ class _EnsembleBuilder(object):
                 tf.constant(subnetwork_builder.name, name="name"), subnetwork,
                 self._head.logits_dimension, num_subnetworks))
 
-      return self.build_ensemble(
+      return self.build_ensemble_spec(
           name=subnetwork_builder.name,
           weighted_subnetworks=weighted_subnetworks,
           summary=summary,
@@ -307,21 +328,21 @@ class _EnsembleBuilder(object):
           labels=labels,
           subnetwork_builder=subnetwork_builder,
           var_list=var_list,
-          previous_ensemble=ensemble)
+          previous_ensemble_spec=ensemble_spec)
 
-  def build_ensemble(self,
-                     name,
-                     weighted_subnetworks,
-                     summary,
-                     bias,
-                     features,
-                     mode,
-                     iteration_step,
-                     labels=None,
-                     subnetwork_builder=None,
-                     var_list=None,
-                     previous_ensemble=None):
-    """Builds an `Ensemble` with the given `WeightedSubnetwork`s.
+  def build_ensemble_spec(self,
+                          name,
+                          weighted_subnetworks,
+                          summary,
+                          bias,
+                          features,
+                          mode,
+                          iteration_step,
+                          labels=None,
+                          subnetwork_builder=None,
+                          var_list=None,
+                          previous_ensemble_spec=None):
+    """Builds an `_EnsembleSpec` with the given `WeightedSubnetwork`s.
 
     Args:
       name: The string name of the ensemble. Typically the name of the builder
@@ -339,11 +360,11 @@ class _EnsembleBuilder(object):
         the subnetwork and ensemble mixture weights.
       var_list: Optional list or tuple of `Variable` objects to update to
         minimize `loss`.
-      previous_ensemble: Link the rest of the `Ensemble` from iteration t-1.
-        Used for creating the subnetwork train_op.
+      previous_ensemble_spec: Link the rest of the `_EnsembleSpec` from
+        iteration t-1. Used for creating the subnetwork train_op.
 
     Returns:
-      An `Ensemble` instance.
+      An `_EnsembleSpec` instance.
     """
 
     subnetwork_logits = []
@@ -433,12 +454,12 @@ class _EnsembleBuilder(object):
         summary.scalar("loss/adanet/uniform_average_ensemble",
                        uniform_average_ensemble_spec.loss)
 
-    # TODO: Merge AdaNet loss and complexity_regularized_loss.
-    complexity_regularized_loss = adanet_loss
-
     train_op = None
     if mode == tf.estimator.ModeKeys.TRAIN and subnetwork_builder:
       with tf.variable_scope("train_subnetwork"):
+        previous_ensemble = None
+        if previous_ensemble_spec:
+          previous_ensemble = previous_ensemble_spec.ensemble
         subnetwork_train_op = (
             subnetwork_builder.build_subnetwork_train_op(
                 subnetwork=new_subnetwork,
@@ -464,15 +485,16 @@ class _EnsembleBuilder(object):
             summary=summary)
       train_op = tf.group(subnetwork_train_op, ensemble_train_op)
 
-    return Ensemble(
+    return _EnsembleSpec(
         name=name,
-        weighted_subnetworks=weighted_subnetworks,
-        bias=bias,
-        logits=ensemble_logits,
+        ensemble=Ensemble(
+            weighted_subnetworks=weighted_subnetworks,
+            bias=bias,
+            logits=ensemble_logits,
+        ),
         predictions=adanet_weighted_ensemble_spec.predictions,
         loss=ensemble_loss,
         adanet_loss=adanet_loss,
-        complexity_regularized_loss=complexity_regularized_loss,
         train_op=train_op,
         complexity_regularization=ensemble_complexity_regularization,
         eval_metric_ops=eval_metric_ops,

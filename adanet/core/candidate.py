@@ -29,18 +29,22 @@ from tensorflow.python.training import moving_averages
 class _Candidate(
     collections.namedtuple(
         "_Candidate",
-        ["ensemble", "adanet_loss", "is_training", "is_previous_best"])):
+        ["ensemble_spec", "adanet_loss", "is_training", "is_previous_best"])):
   """An AdaNet candidate.
 
   A `_Candidate` tracks the progress of a candidate subnetwork's training
   within an ensemble, as well as their AdaNet loss over time.
   """
 
-  def __new__(cls, ensemble, adanet_loss, is_training, is_previous_best=False):
+  def __new__(cls,
+              ensemble_spec,
+              adanet_loss,
+              is_training,
+              is_previous_best=False):
     """Creates a validated `_Candidate` instance.
 
     Args:
-      ensemble: The `Ensemble` instance to track.
+      ensemble_spec: The `_EnsembleSpec` instance to track.
       adanet_loss: float `Tensor` representing the ensemble's AdaNet loss on the
         training set as defined in Equation (4) of the paper.
       is_training: bool `Tensor` indicating if training is ongoing.
@@ -54,15 +58,15 @@ class _Candidate(
       ValueError: If validation fails.
     """
 
-    if ensemble is None:
-      raise ValueError("ensemble is required")
+    if ensemble_spec is None:
+      raise ValueError("ensemble_spec is required")
     if adanet_loss is None:
       raise ValueError("adanet_loss is required")
     if is_training is None:
       raise ValueError("is_training is required")
     return super(_Candidate, cls).__new__(
         cls,
-        ensemble=ensemble,
+        ensemble_spec=ensemble_spec,
         adanet_loss=adanet_loss,
         is_training=is_training,
         is_previous_best=is_previous_best)
@@ -94,7 +98,7 @@ class _CandidateBuilder(object):
     super(_CandidateBuilder, self).__init__()
 
   def build_candidate(self,
-                      ensemble,
+                      ensemble_spec,
                       training,
                       iteration_step,
                       summary,
@@ -102,7 +106,7 @@ class _CandidateBuilder(object):
     """Builds and returns an AdaNet candidate.
 
     Args:
-      ensemble: `Ensemble` instance to track.
+      ensemble_spec: `_EnsembleSpec` instance to track.
       training: A python boolean indicating whether the graph is in training
         mode or prediction mode.
       iteration_step: Integer `Tensor` representing the step since the beginning
@@ -116,7 +120,7 @@ class _CandidateBuilder(object):
       A _Candidate instance.
     """
 
-    candidate_scope = "candidate_{}".format(ensemble.name)
+    candidate_scope = "candidate_{}".format(ensemble_spec.name)
 
     with tf.variable_scope(candidate_scope):
       adanet_loss = tf.get_variable(
@@ -136,18 +140,20 @@ class _CandidateBuilder(object):
 
       if training:
         update_adanet_loss_op = moving_averages.assign_moving_average(
-            adanet_loss, ensemble.adanet_loss, decay=self._adanet_loss_decay)
+            adanet_loss,
+            ensemble_spec.adanet_loss,
+            decay=self._adanet_loss_decay)
         with tf.control_dependencies([update_adanet_loss_op]):
           adanet_loss = adanet_loss.read_value()
 
       with tf.name_scope(""):
         summary.scalar(
             "complexity_regularization/adanet/adanet_weighted_ensemble",
-            ensemble.complexity_regularization)
+            ensemble_spec.complexity_regularization)
         summary.scalar("adanet_loss/adanet/adanet_weighted_ensemble",
                        adanet_loss)
       return _Candidate(
-          ensemble=ensemble,
+          ensemble_spec=ensemble_spec,
           adanet_loss=adanet_loss,
           is_training=is_training,
           is_previous_best=is_previous_best)

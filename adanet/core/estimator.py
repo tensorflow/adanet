@@ -658,11 +658,12 @@ class Estimator(tf.estimator.Estimator):
       saver.restore(sess, latest_checkpoint)
       best_candidate_index = self._best_ensemble_index
       best_candidate = current_iteration.candidates[best_candidate_index]
+      best_ensemble = best_candidate.ensemble_spec.ensemble
       return self._freezer.freeze_ensemble(
           sess=sess,
           filename=filename,
-          weighted_subnetworks=best_candidate.ensemble.weighted_subnetworks,
-          bias=best_candidate.ensemble.bias,
+          weighted_subnetworks=best_ensemble.weighted_subnetworks,
+          bias=best_candidate.ensemble_spec.ensemble.bias,
           features=features)
 
   def _get_best_ensemble_index(self, current_iteration):
@@ -681,7 +682,7 @@ class Estimator(tf.estimator.Estimator):
     if len(current_iteration.candidates) == 1:
       tf.logging.info(
           "As the only candidate, '%s' is moving onto the next iteration.",
-          current_iteration.candidates[0].ensemble.name)
+          current_iteration.candidates[0].ensemble_spec.name)
       return 0
 
     latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
@@ -696,15 +697,26 @@ class Estimator(tf.estimator.Estimator):
       coord = tf.train.Coordinator()
       tf.train.start_queue_runners(sess=sess, coord=coord)
       if self._evaluator:
-        candidates = [c.ensemble for c in current_iteration.candidates]
-        index = self._evaluator.best_ensemble_index(sess, candidates)
+        adanet_losses = [
+            c.ensemble_spec.adanet_loss for c in current_iteration.candidates
+        ]
+        adanet_losses = self._evaluator.evaluate_adanet_losses(
+            sess, adanet_losses)
+        values = []
+        for i in range(len(current_iteration.candidates)):
+          metric_name = "adanet_loss"
+          ensemble_name = current_iteration.candidates[i].ensemble_spec.name
+          values.append("{}/{} = {:.6f}".format(metric_name, ensemble_name,
+                                                adanet_losses[i]))
+        tf.logging.info("Computed ensemble metrics: %s", ", ".join(values))
+        index = np.argmin(adanet_losses)
       else:
         index = sess.run(current_iteration.best_candidate_index)
     best_candidate = current_iteration.candidates[index]
     tf.logging.info("Finished ensemble evaluation for iteration %s",
                     current_iteration.number)
     tf.logging.info("'%s' at index %s is moving onto the next iteration",
-                    best_candidate.ensemble.name, index)
+                    best_candidate.ensemble_spec.name, index)
     return index
 
   def _materialize_report(self, current_iteration):
@@ -722,10 +734,8 @@ class Estimator(tf.estimator.Estimator):
     tf.logging.info("Starting metric logging for iteration %s",
                     current_iteration.number)
 
-    included_subnetwork_names = [
-        # best ensemble name
-        current_iteration.candidates[self._best_ensemble_index].ensemble.name
-    ]
+    best_candidate = current_iteration.candidates[self._best_ensemble_index]
+    included_subnetwork_names = [best_candidate.ensemble_spec.name]
     with tf.Session() as sess:
       init = tf.group(tf.global_variables_initializer(),
                       tf.local_variables_initializer(), tf.tables_initializer())
@@ -792,10 +802,10 @@ class Estimator(tf.estimator.Estimator):
       if self._evaluation_name:
         eval_subdir = "eval_{}".format(self._evaluation_name)
       eval_metric_hook = _EvalMetricSaverHook(
-          name=candidate.ensemble.name,
-          eval_metric_ops=candidate.ensemble.eval_metric_ops,
+          name=candidate.ensemble_spec.name,
+          eval_metric_ops=candidate.ensemble_spec.eval_metric_ops,
           output_dir=os.path.join(self.model_dir, "candidate",
-                                  candidate.ensemble.name, eval_subdir))
+                                  candidate.ensemble_spec.name, eval_subdir))
       evaluation_hooks.append(eval_metric_hook)
     return evaluation_hooks
 
@@ -1006,10 +1016,10 @@ class Estimator(tf.estimator.Estimator):
 
     with tf.variable_scope("adanet"):
       previous_weighted_subnetworks, bias = ensemble
-      previous_ensemble = None
+      previous_ensemble_spec = None
       if previous_weighted_subnetworks:
         with tf.variable_scope(self._Keys.FROZEN_ENSEMBLE_NAME):
-          previous_ensemble = self._ensemble_builder.build_ensemble(
+          previous_ensemble_spec = self._ensemble_builder.build_ensemble_spec(
               name=self._Keys.FROZEN_ENSEMBLE_NAME,
               weighted_subnetworks=previous_weighted_subnetworks,
               summary=previous_ensemble_summary,
@@ -1018,6 +1028,9 @@ class Estimator(tf.estimator.Estimator):
               iteration_step=None,
               mode=mode,
               labels=labels)
+      previous_ensemble = None
+      if previous_ensemble_spec:
+        previous_ensemble = previous_ensemble_spec.ensemble
       subnetwork_builders = builder_generator.generate_candidates(
           previous_ensemble=previous_ensemble,
           iteration_number=iteration_number,
@@ -1030,7 +1043,7 @@ class Estimator(tf.estimator.Estimator):
           labels=labels,
           mode=mode,
           previous_ensemble_summary=previous_ensemble_summary,
-          previous_ensemble=previous_ensemble)
+          previous_ensemble_spec=previous_ensemble_spec)
 
     # Variable which allows us to read the current iteration from a checkpoint.
     iteration_number_tensor = tf.get_variable(

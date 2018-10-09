@@ -19,6 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from adanet.core.ensemble import _EnsembleSpec
 from adanet.core.ensemble import Ensemble
 from adanet.core.ensemble import WeightedSubnetwork
 from adanet.core.subnetwork import Subnetwork
@@ -43,21 +44,21 @@ class ExportOutputKeys(object):
   INVALID = "invalid"
 
 
-def dummy_ensemble(name,
-                   random_seed=42,
-                   num_subnetworks=1,
-                   bias=0.,
-                   loss=None,
-                   adanet_loss=None,
-                   complexity_regularized_loss=None,
-                   eval_metric_ops=None,
-                   dict_predictions=False,
-                   export_output_key=None,
-                   train_op=None):
-  """Creates a dummy `Ensemble` instance.
+def dummy_ensemble_spec(name,
+                        random_seed=42,
+                        num_subnetworks=1,
+                        bias=0.,
+                        loss=None,
+                        adanet_loss=None,
+                        complexity_regularized_loss=None,
+                        eval_metric_ops=None,
+                        dict_predictions=False,
+                        export_output_key=None,
+                        train_op=None):
+  """Creates a dummy `_EnsembleSpec` instance.
 
   Args:
-    name: Ensemble's name.
+    name: _EnsembleSpec's name.
     random_seed: A scalar random seed.
     num_subnetworks: The number of fake subnetworks in this ensemble.
     bias: Bias value.
@@ -74,7 +75,7 @@ def dummy_ensemble(name,
     train_op: A train op.
 
   Returns:
-    A dummy `Ensemble` instance.
+    A dummy `_EnsembleSpec` instance.
   """
 
   if loss is None:
@@ -114,11 +115,13 @@ def dummy_ensemble(name,
 
   export_outputs = _dummy_export_outputs(export_output_key, logits, predictions)
   bias = tf.constant(bias)
-  return Ensemble(
+  return _EnsembleSpec(
       name=name,
-      weighted_subnetworks=weighted_subnetworks * num_subnetworks,
-      bias=bias,
-      logits=logits,
+      ensemble=Ensemble(
+          weighted_subnetworks=weighted_subnetworks * num_subnetworks,
+          bias=bias,
+          logits=logits,
+      ),
       predictions=predictions,
       loss=loss,
       adanet_loss=adanet_loss,

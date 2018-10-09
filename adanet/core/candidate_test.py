@@ -30,37 +30,37 @@ class CandidateTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.named_parameters({
       "testcase_name": "valid",
-      "ensemble": tu.dummy_ensemble("foo"),
+      "ensemble_spec": tu.dummy_ensemble_spec("foo"),
       "adanet_loss": [.1],
       "is_training": True,
   })
-  def test_new(self, ensemble, adanet_loss, is_training):
+  def test_new(self, ensemble_spec, adanet_loss, is_training):
     with self.test_session():
-      got = _Candidate(ensemble, adanet_loss, is_training)
-      self.assertEqual(got.ensemble, ensemble)
+      got = _Candidate(ensemble_spec, adanet_loss, is_training)
+      self.assertEqual(got.ensemble_spec, ensemble_spec)
       self.assertEqual(got.adanet_loss, adanet_loss)
       self.assertEqual(got.is_training, is_training)
 
   @parameterized.named_parameters({
-      "testcase_name": "none_ensemble",
-      "ensemble": None,
+      "testcase_name": "none_ensemble_spec",
+      "ensemble_spec": None,
       "adanet_loss": [.1],
       "is_training": True,
   }, {
       "testcase_name": "none_adanet_loss",
-      "ensemble": tu.dummy_ensemble("foo"),
+      "ensemble_spec": tu.dummy_ensemble_spec("foo"),
       "adanet_loss": None,
       "is_training": True,
   }, {
       "testcase_name": "none_is_training",
-      "ensemble": tu.dummy_ensemble("foo"),
+      "ensemble_spec": tu.dummy_ensemble_spec("foo"),
       "adanet_loss": [.1],
       "is_training": None,
   })
-  def test_new_errors(self, ensemble, adanet_loss, is_training):
+  def test_new_errors(self, ensemble_spec, adanet_loss, is_training):
     with self.test_session():
       with self.assertRaises(ValueError):
-        _Candidate(ensemble, adanet_loss, is_training)
+        _Candidate(ensemble_spec, adanet_loss, is_training)
 
 
 class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
@@ -136,13 +136,13 @@ class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
     # A fake adanet_loss that halves at each train step: 1.0, 0.5, 0.25, ...
     fake_adanet_loss = tf.Variable(1.)
     fake_train_op = tf.assign(fake_adanet_loss, fake_adanet_loss / 2)
-    fake_ensemble = tu.dummy_ensemble(
+    fake_ensemble_spec = tu.dummy_ensemble_spec(
         "new", adanet_loss=fake_adanet_loss, train_op=fake_train_op)
 
     iteration_step = tf.Variable(0)
     builder = _CandidateBuilder(max_steps=max_steps)
     candidate = builder.build_candidate(
-        ensemble=fake_ensemble,
+        ensemble_spec=fake_ensemble_spec,
         training=training,
         iteration_step=iteration_step,
         summary=tf.summary,

@@ -21,7 +21,7 @@ from __future__ import print_function
 
 from absl.testing import parameterized
 from adanet.core.candidate import _Candidate
-from adanet.core.ensemble import Ensemble
+from adanet.core.ensemble import _EnsembleSpec
 from adanet.core.iteration import _Iteration
 from adanet.core.iteration import _IterationBuilder
 from adanet.core.subnetwork import Builder as SubnetworkBuilder
@@ -35,7 +35,9 @@ def _dummy_candidate():
   """Returns a dummy `_Candidate` instance."""
 
   return _Candidate(
-      ensemble=tu.dummy_ensemble("foo"), adanet_loss=1., is_training=True)
+      ensemble_spec=tu.dummy_ensemble_spec("foo"),
+      adanet_loss=1.,
+      is_training=True)
 
 
 class IterationTest(parameterized.TestCase, tf.test.TestCase):
@@ -298,8 +300,8 @@ class _FakeEnsembleBuilder(object):
     if eval_metric_ops_fn:
       self._eval_metric_ops_fn = eval_metric_ops_fn
 
-  def append_new_subnetwork(self, ensemble, subnetwork_builder, iteration_step,
-                            summary, features, mode, labels):
+  def append_new_subnetwork(self, ensemble_spec, subnetwork_builder,
+                            iteration_step, summary, features, mode, labels):
     del summary
     del mode
     del features
@@ -307,10 +309,10 @@ class _FakeEnsembleBuilder(object):
     del iteration_step
 
     num_subnetworks = 0
-    if ensemble:
+    if ensemble_spec:
       num_subnetworks += 1
 
-    return tu.dummy_ensemble(
+    return tu.dummy_ensemble_spec(
         name=subnetwork_builder.name,
         num_subnetworks=num_subnetworks,
         random_seed=subnetwork_builder.seed,
@@ -322,20 +324,20 @@ class _FakeEnsembleBuilder(object):
 class _FakeCandidateBuilder(object):
 
   def build_candidate(self,
-                      ensemble,
+                      ensemble_spec,
                       training,
                       iteration_step,
                       summary,
-                      previous_ensemble=None,
+                      previous_ensemble_spec=None,
                       is_previous_best=False):
     del training  # Unused
     del iteration_step  # Unused
     del summary  # Unused
-    del previous_ensemble  # Unused
+    del previous_ensemble_spec  # Unused
     return _Candidate(
-        ensemble=ensemble,
-        adanet_loss=ensemble.adanet_loss,
-        is_training="training" in ensemble.name,
+        ensemble_spec=ensemble_spec,
+        adanet_loss=ensemble_spec.adanet_loss,
+        is_training="training" in ensemble_spec.name,
         is_previous_best=is_previous_best)
 
 
@@ -439,7 +441,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           "subnetwork_builders": [_FakeBuilder("training")],
           "features": lambda: [[1., -1., 0.]],
           "labels": lambda: [1],
-          "previous_ensemble": lambda: tu.dummy_ensemble("old"),
+          "previous_ensemble_spec": lambda: tu.dummy_ensemble_spec("old"),
           "want_loss": 1.403943,
           "want_predictions": 2.129,
           "want_best_candidate_index": 1,
@@ -453,8 +455,8 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               lambda: [[1., -1., 0.]],
           "labels":
               lambda: [1],
-          "previous_ensemble":
-              lambda: tu.dummy_ensemble("old", random_seed=12),
+          "previous_ensemble_spec":
+              lambda: tu.dummy_ensemble_spec("old", random_seed=12),
           "want_loss":
               -.437,
           "want_predictions":
@@ -463,7 +465,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               0,
       }, {
           "testcase_name":
-              "previous_ensemble_and_eval_metrics",
+              "previous_ensemble_spec_and_eval_metrics",
           "ensemble_builder":
               _FakeEnsembleBuilder(eval_metric_ops_fn=lambda: {
                   "a": (tf.constant(1), tf.constant(2))
@@ -473,8 +475,8 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               lambda: [[1., -1., 0.]],
           "labels":
               lambda: [1],
-          "previous_ensemble":
-              lambda: tu.dummy_ensemble("old", eval_metric_ops={
+          "previous_ensemble_spec":
+              lambda: tu.dummy_ensemble_spec("old", eval_metric_ops={
                   "a": (tf.constant(1), tf.constant(2))
               }),
           "want_loss":
@@ -711,7 +713,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                            want_best_candidate_index,
                            want_eval_metric_ops=(),
                            want_is_over=False,
-                           previous_ensemble=lambda: None,
+                           previous_ensemble_spec=lambda: None,
                            want_loss=None,
                            want_export_outputs=None,
                            mode=tf.estimator.ModeKeys.TRAIN):
@@ -723,7 +725,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
         features=features(),
         labels=labels(),
         mode=mode,
-        previous_ensemble=previous_ensemble())
+        previous_ensemble_spec=previous_ensemble_spec())
     with self.test_session() as sess:
       init = tf.group(tf.global_variables_initializer(),
                       tf.local_variables_initializer())
@@ -773,9 +775,9 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_raises":
           ValueError,
   }, {
-      "testcase_name": "same_name_as_previous_ensemble",
+      "testcase_name": "same_name_as_previous_ensemble_spec",
       "ensemble_builder": _FakeEnsembleBuilder(),
-      "previous_ensemble_fn": lambda: tu.dummy_ensemble("same_name"),
+      "previous_ensemble_spec_fn": lambda: tu.dummy_ensemble_spec("same_name"),
       "subnetwork_builders": [_FakeBuilder("same_name"),],
       "want_raises": ValueError,
   }, {
@@ -798,7 +800,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                                  ensemble_builder,
                                  subnetwork_builders,
                                  want_raises,
-                                 previous_ensemble_fn=lambda: None,
+                                 previous_ensemble_spec_fn=lambda: None,
                                  mode=tf.estimator.ModeKeys.TRAIN):
     builder = _IterationBuilder(_FakeCandidateBuilder(), ensemble_builder)
     features = [[1., -1., 0.]]
@@ -811,7 +813,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
             features=features,
             labels=labels,
             mode=mode,
-            previous_ensemble=previous_ensemble_fn())
+            previous_ensemble_spec=previous_ensemble_spec_fn())
 
 
 class _HeadEnsembleBuilder(object):
@@ -819,9 +821,9 @@ class _HeadEnsembleBuilder(object):
   def __init__(self, head):
     self._head = head
 
-  def append_new_subnetwork(self, ensemble, subnetwork_builder, iteration_step,
-                            summary, features, mode, labels):
-    del ensemble
+  def append_new_subnetwork(self, ensemble_spec, subnetwork_builder,
+                            iteration_step, summary, features, mode, labels):
+    del ensemble_spec
     del subnetwork_builder
     del iteration_step
     del summary
@@ -830,11 +832,9 @@ class _HeadEnsembleBuilder(object):
 
     estimator_spec = self._head.create_estimator_spec(
         features=features, mode=mode, labels=labels, logits=logits)
-    return Ensemble(
+    return _EnsembleSpec(
         name="test",
-        weighted_subnetworks=None,
-        bias=None,
-        logits=None,
+        ensemble=None,
         predictions=estimator_spec.predictions,
         loss=None,
         adanet_loss=.1,
@@ -895,8 +895,8 @@ class ExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
             # Verify string Tensor outputs separately.
             self.assertAllEqual(
                 sess.run(spec.export_outputs[key].outputs["classes"]),
-                sess.run(iteration.estimator_spec.export_outputs[key].outputs[
-                    "classes"]))
+                sess.run(iteration.estimator_spec.export_outputs[key]
+                         .outputs["classes"]))
             del spec.export_outputs[key].outputs["classes"]
             del iteration.estimator_spec.export_outputs[key].outputs["classes"]
           self.assertAllClose(

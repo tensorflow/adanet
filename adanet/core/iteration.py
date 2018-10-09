@@ -119,7 +119,7 @@ class _IterationBuilder(object):
                       mode,
                       labels=None,
                       previous_ensemble_summary=None,
-                      previous_ensemble=None):
+                      previous_ensemble_spec=None):
     """Builds and returns AdaNet iteration t.
 
     This method uses the generated the candidate subnetworks given the ensemble
@@ -137,7 +137,7 @@ class _IterationBuilder(object):
         `ModeKeys`.
       labels: `Tensor` of labels. Can be `None`.
       previous_ensemble_summary: The `_ScopedSummary` for the previous ensemble.
-      previous_ensemble: Optional `Ensemble` for iteration t-1.
+      previous_ensemble_spec: Optional `_EnsembleSpec` for iteration t-1.
 
     Returns:
       An _Iteration instance.
@@ -171,12 +171,12 @@ class _IterationBuilder(object):
 
       # TODO: Consolidate building subnetwork into
       # candidate_builder.
-      if previous_ensemble:
+      if previous_ensemble_spec:
         # Include previous best subnetwork as a candidate so that its
         # predictions are returned until a new candidate outperforms.
-        seen_builder_names = {previous_ensemble.name: True}
+        seen_builder_names = {previous_ensemble_spec.name: True}
         previous_best_candidate = self._candidate_builder.build_candidate(
-            ensemble=previous_ensemble,
+            ensemble_spec=previous_ensemble_spec,
             training=training,
             iteration_step=iteration_step_tensor,
             summary=previous_ensemble_summary,
@@ -189,11 +189,12 @@ class _IterationBuilder(object):
           subnetwork_report = subnetwork.Report(
               hparams={},
               attributes={},
-              metrics=(previous_ensemble.eval_metric_ops.copy() if
-                       previous_ensemble.eval_metric_ops is not None else {}),
+              metrics=(previous_ensemble_spec.eval_metric_ops.copy()
+                       if previous_ensemble_spec.eval_metric_ops is not None
+                       else {}),
           )
           subnetwork_report.metrics["adanet_loss"] = tf.metrics.mean(
-              previous_ensemble.adanet_loss)
+              previous_ensemble_spec.adanet_loss)
           subnetwork_reports["previous_ensemble"] = subnetwork_report
 
       for subnetwork_builder in subnetwork_builders:
@@ -204,17 +205,16 @@ class _IterationBuilder(object):
         summary = _ScopedSummary(
             subnetwork_builder.name, skip_summary=skip_summaries)
         summaries.append(summary)
-        ensemble = self._ensemble_builder.append_new_subnetwork(
-            ensemble=previous_ensemble,
+        ensemble_spec = self._ensemble_builder.append_new_subnetwork(
+            ensemble_spec=previous_ensemble_spec,
             subnetwork_builder=subnetwork_builder,
             summary=summary,
             features=features,
             mode=mode,
             iteration_step=iteration_step_tensor,
-            labels=labels,
-        )
+            labels=labels)
         candidate = self._candidate_builder.build_candidate(
-            ensemble=ensemble,
+            ensemble_spec=ensemble_spec,
             training=training,
             iteration_step=iteration_step_tensor,
             summary=summary)
@@ -226,18 +226,18 @@ class _IterationBuilder(object):
           if not subnetwork_report:
             subnetwork_report = subnetwork.Report(
                 hparams={}, attributes={}, metrics={})
-          if ensemble.eval_metric_ops is not None:
-            for metric_name, metric in ensemble.eval_metric_ops.items():
+          if ensemble_spec.eval_metric_ops is not None:
+            for metric_name, metric in ensemble_spec.eval_metric_ops.items():
               subnetwork_report.metrics[metric_name] = metric
           subnetwork_report.metrics["adanet_loss"] = tf.metrics.mean(
-              ensemble.adanet_loss)
+              ensemble_spec.adanet_loss)
           subnetwork_reports[subnetwork_builder.name] = subnetwork_report
 
       best_candidate_index = 0
-      best_predictions = candidates[0].ensemble.predictions
-      best_loss = candidates[0].ensemble.loss
-      best_eval_metric_ops = candidates[0].ensemble.eval_metric_ops
-      best_export_outputs = candidates[0].ensemble.export_outputs
+      best_predictions = candidates[0].ensemble_spec.predictions
+      best_loss = candidates[0].ensemble_spec.loss
+      best_eval_metric_ops = candidates[0].ensemble_spec.eval_metric_ops
+      best_export_outputs = candidates[0].ensemble_spec.export_outputs
       if len(candidates) >= 1:
         # Dynamically select the outputs of best candidate.
         best_candidate_index = self._best_candidate_index(candidates)
@@ -301,9 +301,9 @@ class _IterationBuilder(object):
     with tf.variable_scope("train_op"):
       train_ops = []
       for candidate in candidates:
-        if candidate.ensemble.train_op is not None:
+        if candidate.ensemble_spec.train_op is not None:
           # The train op of a previous ensemble is None even during `TRAIN`.
-          train_ops.append(candidate.ensemble.train_op)
+          train_ops.append(candidate.ensemble_spec.train_op)
       with tf.control_dependencies(train_ops):
         # AdaNet is responsible for incrementing the global step, not the
         # candidates it trains. Incrementing the global step and iteration step
@@ -334,10 +334,10 @@ class _IterationBuilder(object):
       eval_metric_ops = {}
       all_metrics = {}
       for candidate in candidates:
-        ensemble = candidate.ensemble
-        if not ensemble.eval_metric_ops:
+        ensemble_spec = candidate.ensemble_spec
+        if not ensemble_spec.eval_metric_ops:
           continue
-        for metric_name, metric_op in ensemble.eval_metric_ops.items():
+        for metric_name, metric_op in ensemble_spec.eval_metric_ops.items():
           if metric_name not in all_metrics:
             all_metrics[metric_name] = []
           all_metrics[metric_name].append(metric_op)
@@ -396,11 +396,11 @@ class _IterationBuilder(object):
     with tf.variable_scope("best_predictions"):
       predictions = None
       for candidate in candidates:
-        ensemble = candidate.ensemble
-        if isinstance(ensemble.predictions, dict):
+        ensemble_spec = candidate.ensemble_spec
+        if isinstance(ensemble_spec.predictions, dict):
           if not predictions:
             predictions = {}
-          for key, tensor in ensemble.predictions.items():
+          for key, tensor in ensemble_spec.predictions.items():
             if key in predictions:
               predictions[key].append(tensor)
             else:
@@ -408,7 +408,7 @@ class _IterationBuilder(object):
         else:
           if not predictions:
             predictions = []
-          predictions.append(ensemble.predictions)
+          predictions.append(ensemble_spec.predictions)
 
       if isinstance(predictions, dict):
         best_predictions = {}
@@ -435,7 +435,7 @@ class _IterationBuilder(object):
     if mode == tf.estimator.ModeKeys.PREDICT:
       return None
     with tf.variable_scope("best_loss"):
-      losses = [c.ensemble.loss for c in candidates]
+      losses = [c.ensemble_spec.loss for c in candidates]
       return tf.stack(losses)[best_candidate_index]
 
   def _best_export_outputs(self, candidates, best_candidate_index, mode,
@@ -467,8 +467,8 @@ class _IterationBuilder(object):
       # Group tensors by export output key and ExportOutput type.
       export_outputs = {}
       for candidate in candidates:
-        ensemble = candidate.ensemble
-        for key, export_output in ensemble.export_outputs.items():
+        ensemble_spec = candidate.ensemble_spec
+        for key, export_output in ensemble_spec.export_outputs.items():
           if isinstance(export_output,
                         tf.estimator.export.ClassificationOutput):
             if key not in export_outputs:
@@ -493,7 +493,8 @@ class _IterationBuilder(object):
       # Stack tensor lists into correct ExportOutput type, outputting the
       # correct values based on the best candidate index.
       best_export_outputs = {}
-      for key, export_output in candidates[0].ensemble.export_outputs.items():
+      export_types = candidates[0].ensemble_spec.export_outputs.items()
+      for key, export_output in export_types:
         if isinstance(export_output, tf.estimator.export.ClassificationOutput):
           scores, classes = None, None
           if export_outputs[key][0]:

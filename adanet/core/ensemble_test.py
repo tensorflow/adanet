@@ -166,37 +166,63 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_complexity_regularization": .013,
       "want_mixture_weight_vars": 1,
   }, {
-      "testcase_name": "previous_ensemble",
-      "ensemble_fn": lambda: tu.dummy_ensemble("test", random_seed=1),
-      "adanet_lambda": .01,
-      "adanet_beta": .1,
+      "testcase_name":
+          "previous_ensemble",
+      "ensemble_spec_fn":
+          lambda: tu.dummy_ensemble_spec("test", random_seed=1),
+      "adanet_lambda":
+          .01,
+      "adanet_beta":
+          .1,
       "want_logits": [[.089], [.159]],
-      "want_loss": 1.355,
-      "want_adanet_loss": 1.398,
-      "want_complexity_regularization": .043,
-      "want_mixture_weight_vars": 2,
+      "want_loss":
+          1.355,
+      "want_adanet_loss":
+          1.398,
+      "want_complexity_regularization":
+          .043,
+      "want_mixture_weight_vars":
+          2,
   }, {
-      "testcase_name": "previous_ensemble_use_bias",
-      "use_bias": True,
-      "ensemble_fn": lambda: tu.dummy_ensemble("test", random_seed=1),
-      "adanet_lambda": .01,
-      "adanet_beta": .1,
+      "testcase_name":
+          "previous_ensemble_use_bias",
+      "use_bias":
+          True,
+      "ensemble_spec_fn":
+          lambda: tu.dummy_ensemble_spec("test", random_seed=1),
+      "adanet_lambda":
+          .01,
+      "adanet_beta":
+          .1,
       "want_logits": [[.075], [.146]],
-      "want_loss": 1.354,
-      "want_adanet_loss": 1.397,
-      "want_complexity_regularization": .043,
-      "want_mixture_weight_vars": 3,
+      "want_loss":
+          1.354,
+      "want_adanet_loss":
+          1.397,
+      "want_complexity_regularization":
+          .043,
+      "want_mixture_weight_vars":
+          3,
   }, {
-      "testcase_name": "previous_ensemble_no_warm_start",
-      "ensemble_fn": lambda: tu.dummy_ensemble("test", random_seed=1),
-      "warm_start_mixture_weights": False,
-      "adanet_lambda": .01,
-      "adanet_beta": .1,
+      "testcase_name":
+          "previous_ensemble_no_warm_start",
+      "ensemble_spec_fn":
+          lambda: tu.dummy_ensemble_spec("test", random_seed=1),
+      "warm_start_mixture_weights":
+          False,
+      "adanet_lambda":
+          .01,
+      "adanet_beta":
+          .1,
       "want_logits": [[.007], [.079]],
-      "want_loss": 1.351,
-      "want_adanet_loss": 1.367,
-      "want_complexity_regularization": .016,
-      "want_mixture_weight_vars": 2,
+      "want_loss":
+          1.351,
+      "want_adanet_loss":
+          1.367,
+      "want_complexity_regularization":
+          .016,
+      "want_mixture_weight_vars":
+          2,
   })
   def test_append_new_subnetwork(
       self,
@@ -207,7 +233,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       want_mixture_weight_vars=None,
       adanet_lambda=0.,
       adanet_beta=0.,
-      ensemble_fn=lambda: None,
+      ensemble_spec_fn=lambda: None,
       use_bias=False,
       use_logits_last_layer=False,
       mixture_weight_type=MixtureWeightType.MATRIX,
@@ -238,8 +264,8 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
       return optimizer.minimize(loss, var_list=var_list)
 
-    ensemble = builder.append_new_subnetwork(
-        ensemble=ensemble_fn(),
+    ensemble_spec = builder.append_new_subnetwork(
+        ensemble_spec=ensemble_spec_fn(),
         subnetwork_builder=_Builder(_subnetwork_train_op_fn,
                                     _mixture_weights_train_op_fn,
                                     use_logits_last_layer, seed),
@@ -253,40 +279,37 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       sess.run(tf.global_variables_initializer())
 
       if mode == tf.estimator.ModeKeys.PREDICT:
-        self.assertAllClose(want_logits, sess.run(ensemble.logits), atol=1e-3)
-        self.assertIsNone(ensemble.loss)
-        self.assertIsNone(ensemble.adanet_loss)
-        self.assertIsNone(ensemble.complexity_regularized_loss)
-        self.assertIsNone(ensemble.train_op)
-        self.assertIsNotNone(ensemble.export_outputs)
+        self.assertAllClose(
+            want_logits, sess.run(ensemble_spec.ensemble.logits), atol=1e-3)
+        self.assertIsNone(ensemble_spec.loss)
+        self.assertIsNone(ensemble_spec.adanet_loss)
+        self.assertIsNone(ensemble_spec.train_op)
+        self.assertIsNotNone(ensemble_spec.export_outputs)
         return
 
       # Verify that train_op works, previous loss should be greater than loss
       # after a train op.
-      loss = sess.run(ensemble.loss)
+      loss = sess.run(ensemble_spec.loss)
       for _ in range(3):
-        sess.run(ensemble.train_op)
-      self.assertGreater(loss, sess.run(ensemble.loss))
+        sess.run(ensemble_spec.train_op)
+      self.assertGreater(loss, sess.run(ensemble_spec.loss))
 
-      self.assertAllClose(want_logits, sess.run(ensemble.logits), atol=1e-3)
+      self.assertAllClose(
+          want_logits, sess.run(ensemble_spec.ensemble.logits), atol=1e-3)
 
       # Bias should learn a non-zero value when used.
       if use_bias:
-        self.assertNotEqual(0., sess.run(ensemble.bias))
+        self.assertNotEqual(0., sess.run(ensemble_spec.ensemble.bias))
       else:
-        self.assertAlmostEqual(0., sess.run(ensemble.bias))
+        self.assertAlmostEqual(0., sess.run(ensemble_spec.ensemble.bias))
 
       self.assertAlmostEqual(
           want_complexity_regularization,
-          sess.run(ensemble.complexity_regularization),
+          sess.run(ensemble_spec.complexity_regularization),
           places=3)
-      self.assertAlmostEqual(want_loss, sess.run(ensemble.loss), places=3)
+      self.assertAlmostEqual(want_loss, sess.run(ensemble_spec.loss), places=3)
       self.assertAlmostEqual(
-          want_adanet_loss, sess.run(ensemble.adanet_loss), places=3)
-      self.assertAlmostEqual(
-          want_adanet_loss,
-          sess.run(ensemble.complexity_regularized_loss),
-          places=3)
+          want_adanet_loss, sess.run(ensemble_spec.adanet_loss), places=3)
 
 
 if __name__ == "__main__":

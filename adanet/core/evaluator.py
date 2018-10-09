@@ -21,12 +21,11 @@ from __future__ import print_function
 
 import math
 
-from six.moves import range
 import tensorflow as tf
 
 
 class Evaluator(object):
-  """An Evaluator selects best trained ensembles."""
+  """An Evaluator evaluates candidates."""
 
   def __init__(self, input_fn, steps=None):
     """Initializes an `Evaluator` instance.
@@ -56,22 +55,19 @@ class Evaluator(object):
     """Return the number of evaluation steps."""
     return self._steps
 
-  # TODO: Rename to "best_candidate_index" and take a
-  # list of "adanet_loss" tensors instead of a list of ensembles as an
-  # argument
-  def best_ensemble_index(self, sess, ensembles):
-    """Returns the index of the ensemble with the lowest AdaNet loss.
+  def evaluate_adanet_losses(self, sess, adanet_losses):
+    """Evaluates the given AdaNet objectives on the data from `input_fn`.
 
-    The ensembles are each fed the same batches of features and labels as
+    The candidates are fed the same batches of features and labels as
     provided by `input_fn`, and their losses are computed and summed over
     `steps` batches.
 
     Args:
       sess: `Session` instance with most recent variable values loaded.
-      ensembles: List of trained `Ensemble` objects to compare.
+      adanet_losses: List of AdaNet loss `Tensors`.
 
     Returns:
-      Index of the candidate with the lowest AdaNet loss.
+      List of evaluated AdaNet losses.
     """
 
     evals_completed = 0
@@ -83,7 +79,7 @@ class Evaluator(object):
       logging_frequency = math.floor(self.steps / 10.)
 
     adanet_losses = [
-        tf.metrics.mean(ensemble.adanet_loss) for ensemble in ensembles
+        tf.metrics.mean(adanet_loss) for adanet_loss in adanet_losses
     ]
     sess.run(tf.local_variables_initializer())
     while True:
@@ -103,12 +99,4 @@ class Evaluator(object):
 
     # Losses are metric op tuples. Evaluating the first element is idempotent.
     adanet_losses = [loss[0] for loss in adanet_losses]
-    evaluated_adanet_losses, best_ensemble_index = sess.run(
-        (adanet_losses, tf.argmin(adanet_losses)))
-    values = []
-    for i in range(len(ensembles)):
-      metric_name = "adanet_loss"
-      values.append("{}/{} = {:.6f}".format(metric_name, ensembles[i].name,
-                                            evaluated_adanet_losses[i]))
-    tf.logging.info("Computed ensemble metrics: %s", ", ".join(values))
-    return best_ensemble_index
+    return sess.run(adanet_losses)
