@@ -14,9 +14,7 @@ py_library(
         "version.py",
     ],
     srcs_version = "PY2AND3",
-    visibility = [
-        "//visibility:public",
-    ],
+    visibility = ["//visibility:public"],
     deps = [
         "//adanet/core",
     ],
