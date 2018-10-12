@@ -2,9 +2,9 @@
 
 ![adanet logo](./images/adanet_tangram_logo.png)
 
-**AdaNet** is a lightweight and scalable TensorFlow AutoML framework for training and deploying adaptive neural networks using the *AdaNet* algorithm [[Cortes et al. ICML 2017](https://arxiv.org/abs/1607.01097)].
+**AdaNet** is a lightweight and scalable TensorFlow AutoML framework for training and deploying adaptive neural networks using the *AdaNet* algorithm [[Cortes et al. ICML 2017](https://arxiv.org/abs/1607.01097)]. *AdaNet* combines several learned subnetworks in order to mitigate the complexity inherent in designing effective neural networks.
 
-*AdaNet* is a machine learning technique that combines several learned networks in order to mitigate the complexity inherent in designing effective neural networks.
+![adanet animated_gif](./images/adanet_animation.gif)
 
 This is not an official Google product.
 
