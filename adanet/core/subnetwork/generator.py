@@ -219,6 +219,20 @@ class Builder(object):
 
     return None
 
+  def prune_previous_ensemble(self, previous_ensemble):
+    """Specifies which subnetworks to include in the candidate ensemble.
+
+    The current default implementation does not prune any subnetworks from
+    the ensemble.
+
+    Args:
+      previous_ensemble: `Ensemble` object.
+
+    Returns:
+      List of integer indices of weighted_subnetworks to keep.
+    """
+    return range(len(previous_ensemble.weighted_subnetworks))
+
 
 class Generator(object):
   """Interface for a subnetwork builder generator.

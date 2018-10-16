@@ -275,17 +275,22 @@ class _EnsembleBuilder(object):
 
     with tf.variable_scope("ensemble_{}".format(subnetwork_builder.name)):
       weighted_subnetworks = []
-      iteration = 0
+      subnetwork_index = 0
       num_subnetworks = 1
       ensemble = None
       if ensemble_spec:
         ensemble = ensemble_spec.ensemble
-        num_subnetworks += len(ensemble_spec.ensemble.weighted_subnetworks)
-        for weighted_subnetwork in ensemble_spec.ensemble.weighted_subnetworks:
+        previous_subnetworks = [
+            ensemble.weighted_subnetworks[index]
+            for index in subnetwork_builder.prune_previous_ensemble(ensemble)
+        ]
+        num_subnetworks += len(previous_subnetworks)
+        for weighted_subnetwork in previous_subnetworks:
           weight_initializer = None
           if self._warm_start_mixture_weights:
             weight_initializer = weighted_subnetwork.weight
-          with tf.variable_scope("weighted_subnetwork_{}".format(iteration)):
+          with tf.variable_scope(
+              "weighted_subnetwork_{}".format(subnetwork_index)):
             weighted_subnetworks.append(
                 self._build_weighted_subnetwork(
                     weighted_subnetwork.name,
@@ -293,13 +298,20 @@ class _EnsembleBuilder(object):
                     self._head.logits_dimension,
                     num_subnetworks,
                     weight_initializer=weight_initializer))
-          iteration += 1
-        bias = self._create_bias(
-            self._head.logits_dimension, prior=ensemble_spec.ensemble.bias)
+          subnetwork_index += 1
+        if len(previous_subnetworks) == len(ensemble.weighted_subnetworks):
+          bias = self._create_bias(
+              self._head.logits_dimension, prior=ensemble.bias)
+        else:
+          bias = self._create_bias(self._head.logits_dimension)
+          tf.logging.info("Builder '%s' is using a subset of the subnetworks "
+                          "from the previous ensemble, so its ensemble's bias "
+                          "term will not be warm started with the previous "
+                          "ensemble's bias.", subnetwork_builder.name)
       else:
         bias = self._create_bias(self._head.logits_dimension)
 
-      with tf.variable_scope("weighted_subnetwork_{}".format(iteration)):
+      with tf.variable_scope("weighted_subnetwork_{}".format(subnetwork_index)):
         with tf.variable_scope("subnetwork"):
           trainable_vars_before = tf.trainable_variables()
           subnetwork = subnetwork_builder.build_subnetwork(

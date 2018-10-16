@@ -19,7 +19,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
+
 from absl.testing import parameterized
+from adanet.core.subnetwork.generator import Builder
 from adanet.core.subnetwork.generator import Subnetwork
 import tensorflow as tf
 
@@ -30,6 +33,31 @@ def dummy_tensor(shape=(), random_seed=42):
   return tf.Variable(
       tf.random_normal(shape=shape, seed=random_seed),
       trainable=False).read_value()
+
+
+class FakeSubnetwork(Builder):
+  """Fake subnetwork builder."""
+
+  @property
+  def name(self):
+    return "fake_subnetwork"
+
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
+    return
+
+  def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
+                                iteration_step, summary, previous_ensemble):
+    return
+
+  def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
+                                     iteration_step, summary):
+    return
 
 
 class SubnetworkTest(parameterized.TestCase, tf.test.TestCase):
@@ -136,6 +164,35 @@ class SubnetworkTest(parameterized.TestCase, tf.test.TestCase):
     with self.test_session():
       with self.assertRaises(ValueError):
         Subnetwork(last_layer, logits, complexity, persisted_tensors)
+
+  @parameterized.named_parameters({
+      "testcase_name": "empty_previous",
+      "previous_ensemble_size": 0,
+      "expected_ensemble_size": 0,
+      "expected_chosen_indices": []
+  }, {
+      "testcase_name": "one_subnetwork",
+      "previous_ensemble_size": 1,
+      "expected_ensemble_size": 1,
+      "expected_chosen_indices": range(0, 1)
+  }, {
+      "testcase_name": "three_subnetwork",
+      "previous_ensemble_size": 3,
+      "expected_ensemble_size": 3,
+      "expected_chosen_indices": range(0, 3)
+  })
+  def test_prune_previous_ensemble(self, previous_ensemble_size,
+                                   expected_ensemble_size,
+                                   expected_chosen_indices):
+    builder = FakeSubnetwork()
+    fake_ensemble = collections.namedtuple("ensemble", ["weighted_subnetworks"])
+    previous_ensemble = fake_ensemble(
+        weighted_subnetworks=[1] * previous_ensemble_size)
+    self.assertEqual(expected_ensemble_size,
+                     len(builder.prune_previous_ensemble(previous_ensemble)))
+    if expected_chosen_indices:
+      self.assertEqual(expected_chosen_indices,
+                       builder.prune_previous_ensemble(previous_ensemble))
 
 
 if __name__ == "__main__":

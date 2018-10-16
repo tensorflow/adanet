@@ -79,6 +79,22 @@ class _Builder(Builder):
     return self._mixture_weights_train_op_fn(loss, var_list)
 
 
+class _BuilderPrunerAll(_Builder):
+  """Removed previous ensemble completely"""
+
+  def prune_previous_ensemble(self, previous_ensemble):
+    return []
+
+
+class _BuilderPrunerLeaveOne(_Builder):
+  """Removed previous ensemble completely"""
+
+  def prune_previous_ensemble(self, previous_ensemble):
+    if previous_ensemble:
+      return [0]
+    return []
+
+
 class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.named_parameters({
@@ -88,6 +104,22 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_adanet_loss": 1.338,
       "want_complexity_regularization": 0.,
       "want_mixture_weight_vars": 1,
+  }, {
+      "testcase_name": "no_previous_ensemble_prune_all",
+      "want_logits": [[.016], [.117]],
+      "want_loss": 1.338,
+      "want_adanet_loss": 1.338,
+      "want_complexity_regularization": 0.,
+      "want_mixture_weight_vars": 1,
+      "subnetwork_builder_class": _BuilderPrunerAll
+  }, {
+      "testcase_name": "no_previous_ensemble_prune_leave_one",
+      "want_logits": [[.016], [.117]],
+      "want_loss": 1.338,
+      "want_adanet_loss": 1.338,
+      "want_complexity_regularization": 0.,
+      "want_mixture_weight_vars": 1,
+      "subnetwork_builder_class": _BuilderPrunerLeaveOne
   }, {
       "testcase_name": "default_mixture_weight_initializer_scalar",
       "mixture_weight_initializer": None,
@@ -185,6 +217,46 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
           2,
   }, {
       "testcase_name":
+          "previous_ensemble_prune_all",
+      "ensemble_spec_fn":
+          lambda: tu.dummy_ensemble_spec("test", random_seed=1),
+      "adanet_lambda":
+          .01,
+      "adanet_beta":
+          .1,
+      "want_logits": [[0.003569], [0.07557]],
+      "want_loss":
+          1.3510095,
+      "want_adanet_loss":
+          1.3644928,
+      "want_complexity_regularization":
+          0.013483323,
+      "want_mixture_weight_vars":
+          1,
+      "subnetwork_builder_class":
+          _BuilderPrunerAll
+  }, {
+      "testcase_name":
+          "previous_ensemble_leave_one",
+      "ensemble_spec_fn":
+          lambda: tu.dummy_ensemble_spec("test", random_seed=1),
+      "adanet_lambda":
+          .01,
+      "adanet_beta":
+          .1,
+      "want_logits": [[.089], [.159]],
+      "want_loss":
+          1.355,
+      "want_adanet_loss":
+          1.398,
+      "want_complexity_regularization":
+          .043,
+      "want_mixture_weight_vars":
+          2,
+      "subnetwork_builder_class":
+          _BuilderPrunerLeaveOne
+  }, {
+      "testcase_name":
           "previous_ensemble_use_bias",
       "use_bias":
           True,
@@ -239,6 +311,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       mixture_weight_type=MixtureWeightType.MATRIX,
       mixture_weight_initializer=tf.zeros_initializer(),
       warm_start_mixture_weights=True,
+      subnetwork_builder_class=_Builder,
       mode=tf.estimator.ModeKeys.TRAIN):
     seed = 64
     builder = _EnsembleBuilder(
@@ -266,9 +339,9 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
     ensemble_spec = builder.append_new_subnetwork(
         ensemble_spec=ensemble_spec_fn(),
-        subnetwork_builder=_Builder(_subnetwork_train_op_fn,
-                                    _mixture_weights_train_op_fn,
-                                    use_logits_last_layer, seed),
+        subnetwork_builder=subnetwork_builder_class(
+            _subnetwork_train_op_fn, _mixture_weights_train_op_fn,
+            use_logits_last_layer, seed),
         summary=tf.summary,
         features=features,
         iteration_step=tf.train.get_or_create_global_step(),
