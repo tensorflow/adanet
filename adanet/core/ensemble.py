@@ -200,6 +200,7 @@ class _EnsembleBuilder(object):
                mixture_weight_type,
                mixture_weight_initializer=None,
                warm_start_mixture_weights=False,
+               checkpoint_dir=None,
                adanet_lambda=0.,
                adanet_beta=0.,
                use_bias=True):
@@ -220,6 +221,9 @@ class _EnsembleBuilder(object):
         ensemble to their learned value at the previous iteration, as opposed to
         retraining them from scratch. Takes precedence over the value for
         `mixture_weight_initializer` for subnetworks from previous iterations.
+      checkpoint_dir: The checkpoint_dir to use for warm-starting mixture
+        weights and bias at the logit layer. Ignored if
+        warm_start_mixture_weights is False.
       adanet_lambda: Float multiplier 'lambda' for applying L1 regularization to
         subnetworks' mixture weights 'w' in the ensemble proportional to their
         complexity. See Equation (4) in the AdaNet paper.
@@ -230,12 +234,22 @@ class _EnsembleBuilder(object):
 
     Returns:
       An `_EnsembleBuilder` instance.
+
+    Raises:
+      ValueError: if warm_start_mixture_weights is True but checkpoint_dir is
+      None.
     """
+
+    if warm_start_mixture_weights:
+      if checkpoint_dir is None:
+        raise ValueError("checkpoint_dir cannot be None when "
+                         "warm_start_mixture_weights is True.")
 
     self._head = head
     self._mixture_weight_type = mixture_weight_type
     self._mixture_weight_initializer = mixture_weight_initializer
     self._warm_start_mixture_weights = warm_start_mixture_weights
+    self._checkpoint_dir = checkpoint_dir
     self._adanet_lambda = adanet_lambda
     self._adanet_beta = adanet_beta
     self._use_bias = use_bias
@@ -288,7 +302,8 @@ class _EnsembleBuilder(object):
         for weighted_subnetwork in previous_subnetworks:
           weight_initializer = None
           if self._warm_start_mixture_weights:
-            weight_initializer = weighted_subnetwork.weight
+            weight_initializer = tf.contrib.framework.load_variable(
+                self._checkpoint_dir, weighted_subnetwork.weight.op.name)
           with tf.variable_scope(
               "weighted_subnetwork_{}".format(subnetwork_index)):
             weighted_subnetworks.append(
@@ -301,7 +316,9 @@ class _EnsembleBuilder(object):
           subnetwork_index += 1
         if len(previous_subnetworks) == len(ensemble.weighted_subnetworks):
           bias = self._create_bias(
-              self._head.logits_dimension, prior=ensemble.bias)
+              self._head.logits_dimension,
+              prior=tf.contrib.framework.load_variable(self._checkpoint_dir,
+                                                       ensemble.bias.op.name))
         else:
           bias = self._create_bias(self._head.logits_dimension)
           tf.logging.info("Builder '%s' is using a subset of the subnetworks "
@@ -623,12 +640,9 @@ class _EnsembleBuilder(object):
       A bias term `Tensor`.
     """
 
-    if not self._use_bias:
-      if prior is not None:
-        return prior
-      return tf.constant(0., name="zero_bias")
     shape = None
     if prior is None:
       prior = tf.zeros_initializer()
       shape = logits_dimension
-    return tf.get_variable(name="bias", shape=shape, initializer=prior)
+    return tf.get_variable(
+        name="bias", shape=shape, initializer=prior, trainable=self._use_bias)

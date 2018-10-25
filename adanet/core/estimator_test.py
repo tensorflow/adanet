@@ -241,8 +241,8 @@ class _FakeGenerator(Generator):
       spy_fn: (iteration_number, previous_ensemble_reports, all_reports) -> ().
         Spies on the arguments passed to generate_candidates whenever it is
         called.
-      subnetwork_builders: List of `Builder`s to return in every call
-        to generate_candidates.
+      subnetwork_builders: List of `Builder`s to return in every call to
+        generate_candidates.
     """
 
     self._spy_fn = spy_fn
@@ -255,6 +255,41 @@ class _FakeGenerator(Generator):
     del previous_ensemble  # unused
     self._spy_fn(iteration_number, previous_ensemble_reports, all_reports)
     return self._subnetwork_builders
+
+
+class _WidthLimitingGenerator(Generator):
+  """Limits the width of the previous_ensemble."""
+
+  def __init__(self, subnetwork_builders):
+    """Checks the arguments passed to generate_candidates.
+
+    Args:
+      subnetwork_builders: List of `Builder`s to return in every call to
+        generate_candidates.
+    """
+
+    self._subnetwork_builders = subnetwork_builders
+
+  def generate_candidates(self, previous_ensemble, iteration_number,
+                          previous_ensemble_reports, all_reports):
+    """Returns a fixed list of candidates."""
+
+    del previous_ensemble  # unused
+    return self._subnetwork_builders
+
+  def prune_previous_ensemble(self, previous_ensemble):
+    """Specifies to Adanet which subnetwork indices to include in the ensemble.
+
+    Args:
+      previous_ensemble: `Ensemble` object.
+
+    Returns:
+      A list of integers (weighted subnetwork indices).
+    """
+
+    width_limit = 2
+    indices = range(len(previous_ensemble.weighted_subnetworks))
+    return indices[-width_limit + 1:]
 
 
 class _ModifierSessionRunHook(tf.train.SessionRunHook):
@@ -344,8 +379,7 @@ class EstimatorTest(EstimatorTestCase):
       "testcase_name":
           "single_builder_scalar_mixture_weight",
       "subnetwork_generator":
-          SimpleGenerator(
-              [_DNNBuilder("dnn", return_penultimate_layer=False)]),
+          SimpleGenerator([_DNNBuilder("dnn", return_penultimate_layer=False)]),
       "max_iteration_steps":
           200,
       "mixture_weight_type":
@@ -358,8 +392,7 @@ class EstimatorTest(EstimatorTestCase):
       "testcase_name":
           "single_builder_vector_mixture_weight",
       "subnetwork_generator":
-          SimpleGenerator(
-              [_DNNBuilder("dnn", return_penultimate_layer=False)]),
+          SimpleGenerator([_DNNBuilder("dnn", return_penultimate_layer=False)]),
       "max_iteration_steps":
           200,
       "mixture_weight_type":
@@ -393,9 +426,8 @@ class EstimatorTest(EstimatorTestCase):
       "testcase_name":
           "two_builders",
       "subnetwork_generator":
-          SimpleGenerator(
-              [_DNNBuilder("dnn"),
-               _DNNBuilder("dnn2", seed=99)]),
+          SimpleGenerator([_DNNBuilder("dnn"),
+                           _DNNBuilder("dnn2", seed=99)]),
       "max_iteration_steps":
           200,
       "want_accuracy":
@@ -415,6 +447,19 @@ class EstimatorTest(EstimatorTestCase):
           1.,
       "want_loss":
           .00176,
+  }, {
+      "testcase_name":
+          "two_builders_different_layer_sizes_three_iterations",
+      "subnetwork_generator":
+          SimpleGenerator(
+              [_DNNBuilder("dnn"),
+               _DNNBuilder("dnn2", layer_size=3)]),
+      "max_iteration_steps":
+          100,
+      "want_accuracy":
+          1.,
+      "want_loss":
+          .00160,
   }, {
       "testcase_name":
           "evaluator_good_input",
@@ -461,6 +506,19 @@ class EstimatorTest(EstimatorTestCase):
           1.,
       "want_loss":
           .00176,
+  }, {
+      "testcase_name":
+          "width_limiting_generator",
+      "subnetwork_generator":
+          _WidthLimitingGenerator(
+              [_DNNBuilder("dnn"),
+               _DNNBuilder("dnn2", layer_size=3)]),
+      "max_iteration_steps":
+          75,
+      "want_accuracy":
+          1.,
+      "want_loss":
+          .00154,
   })
   def test_lifecycle(self,
                      subnetwork_generator,

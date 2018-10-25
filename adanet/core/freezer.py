@@ -101,8 +101,7 @@ class _EnsembleFreezer(object):
 
     return "un" + wrapped_name
 
-  def freeze_ensemble(self, sess, filename, weighted_subnetworks, bias,
-                      features):
+  def freeze_ensemble(self, filename, weighted_subnetworks, bias, features):
     """Freezes an ensemble of subnetworks' weights and persists its subgraph.
 
     Specifically, this method prunes all nodes from the current graph definition
@@ -112,14 +111,12 @@ class _EnsembleFreezer(object):
 
     These tensors-to-keep are added to named graph collections, so that the
     `WeightedSubnetworks` can be easily restored with only the information
-    stored in the frozen graph. Next this method freezes the pruned subgraphs'
-    non-local variables by converting them to constants. The final pruned graph
-    is serialized and written to disk as a `MetaGraphDef` proto.
+    stored in the pruned graph and the checkpoint. This graph is serialized and
+    written to disk as a `MetaGraphDef` proto.
 
     This method should only be called up to once per graph.
 
     Args:
-      sess: `Session` instance with most recent variable values loaded.
       filename: String filename for the `MetaGraphDef` proto to be written.
       weighted_subnetworks: List of `WeightedSubnetwork` instances to freeze.
       bias: The ensemble's `Tensor` bias vector.
@@ -130,13 +127,40 @@ class _EnsembleFreezer(object):
       A `MetaGraphDef` proto of the frozen ensemble.
     """
 
+    names = [
+        # item() is needed to convert from ndarray,
+        # and decode() is needed to convert from b-string in python3.
+        tf.contrib.util.constant_value(w.name).item().decode()
+        for w in weighted_subnetworks
+    ]
     # A destination node is a node in the output DAG that will have only
     # incoming edges. Marking these nodes to keep will cause all upstream nodes
     # that are connected by some path of directed edges to the destination node
     # to be marked to keep.
     destination_nodes = set()
-    collection_set = set(
-        [tf.GraphKeys.LOCAL_VARIABLES, tf.GraphKeys.TABLE_INITIALIZERS])
+    collection_set = {
+        tf.GraphKeys.GLOBAL_VARIABLES, tf.GraphKeys.LOCAL_VARIABLES,
+        tf.GraphKeys.TABLE_INITIALIZERS
+    }
+
+    variables_to_save = []
+    for name in names:
+      variables_to_save += tf.get_collection(
+          tf.GraphKeys.GLOBAL_VARIABLES,
+          scope=r"adanet/iteration_\d+/ensemble_{}/".format(name))
+    variables_to_save += tf.get_collection(
+        tf.GraphKeys.GLOBAL_VARIABLES, scope=r"adanet/iteration_\d+/step")
+    variables = tf.get_collection_ref(tf.GraphKeys.GLOBAL_VARIABLES)
+    del variables[:]
+    for var in set(variables_to_save):
+      tf.add_to_collection(tf.GraphKeys.GLOBAL_VARIABLES, var)
+      destination_nodes.add(var.op.name)
+      if var.op.type == "VarHandleOp":
+        destination_nodes.add(var.op.name + "/Read/ReadVariableOp")
+      else:
+        destination_nodes.add(var.op.name + "/read")
+      destination_nodes.add(var.initializer.name)
+      destination_nodes.add(var.initial_value.op.name)
 
     for index, weighted_subnetwork in enumerate(weighted_subnetworks):
       self._freeze_weighted_subnetwork(
@@ -170,18 +194,12 @@ class _EnsembleFreezer(object):
     for table_init_op in tf.get_collection(tf.GraphKeys.TABLE_INITIALIZERS):
       destination_nodes.add(table_init_op.name)
 
-    # Convert all non-local variables to constants. Local variables are those
-    # are unrelated to training and do not need to be checkpointed, such as
-    # metric variables.
-    variables_blacklist = [v.op.name for v in tf.local_variables()]
-    frozen_graph_def = tf.graph_util.convert_variables_to_constants(
-        sess=sess,
+    pruned_graph_def = prune_graph(
         input_graph_def=tf.get_default_graph().as_graph_def(),
-        output_node_names=list(destination_nodes),
-        variable_names_blacklist=variables_blacklist)
+        output_node_names=list(destination_nodes))
     return tf.train.export_meta_graph(
         filename=filename,
-        graph_def=frozen_graph_def,
+        graph_def=pruned_graph_def,
         collection_list=list(collection_set),
         clear_devices=True,
         clear_extraneous_savers=True,
@@ -205,9 +223,8 @@ class _EnsembleFreezer(object):
                                   collection_set, destination_nodes):
     """Freezes a `WeightedSubnetwork`.
 
-    Converts a `WeightedSubnetwork`'s variables to constants and stores its
-    ops in collections so that they easily be restored into a
-    `WeightedSubnetwork` instance.
+    Stores a `WeightedSubnetwork`'s ops in collections so that they can be
+    easily restored into a `WeightedSubnetwork` instance.
 
     Args:
       index: Index of the `WeightedSubnetwork` in the `Ensemble`.
@@ -239,8 +256,8 @@ class _EnsembleFreezer(object):
                          destination_nodes):
     """Freezes a `Subnetwork`.
 
-    Converts a `Subnetwork`'s variables to constants and stores its ops in
-    collections so that they easily be restored into a `Subnetwork` instance.
+    Stores a `Subnetwork`'s ops in collections so that they can be easily
+    restored into a `Subnetwork` instance.
 
     Args:
       index: Index of the `Subnetwork` in the `Ensemble`.
@@ -286,10 +303,11 @@ class _EnsembleFreezer(object):
       destination_nodes: Set of string names of ops to keep.
       collection_key: String key of the collection to add tensor.
       tensor: `Tensor` to keep. Its name is added to the destination_nodes list
-        and it is added to the collection identitified by collection_key.
+        and it is added to the collection identified by collection_key.
     """
 
-    tensor = tf.convert_to_tensor(tensor)
+    if not isinstance(tensor, tf.Variable):
+      tensor = tf.convert_to_tensor(tensor)
     destination_nodes.add(tensor.op.name)
     tf.add_to_collection(collection_key, tensor)
     collection_set.add(collection_key)
@@ -344,8 +362,11 @@ class _EnsembleFreezer(object):
       features: Dictionary of wrapped `Tensor` objects keyed by feature name.
 
     Returns:
-      A two-tuple of a list of frozen `WeightedSubnetworks` instances and a
-        bias term `Tensor`.
+      A three-tuple consisting of:
+        - a list of frozen `WeightedSubnetworks` instances,
+        - a bias term `Tensor`,
+        - a `Saver` instance. This is used to restore the weights of the frozen
+          ensemble from the checkpoint file.
     """
 
     # Wrapped features need to be unwrapped so that the inner `Tensor` can be
@@ -363,7 +384,7 @@ class _EnsembleFreezer(object):
 
     # Import subnetwork's meta graph into default graph. Since there are no
     # variables to restore, import_meta_graph does not create a `Saver`.
-    tf.train.import_meta_graph(
+    saver = tf.train.import_meta_graph(
         meta_graph_or_file=filename, input_map=input_map, clear_devices=True)
 
     weighted_subnetworks = []
@@ -378,7 +399,7 @@ class _EnsembleFreezer(object):
     bias_collection = tf.get_collection(self.Keys.BIAS)
     assert len(bias_collection) == 1
     bias_tensor = bias_collection[-1]
-    return weighted_subnetworks, bias_tensor
+    return weighted_subnetworks, bias_tensor, saver
 
   def _reconstruct_weighted_subnetwork(self, index):
     """Reconstructs a `WeightedSubnetwork` from the graph's collections.
@@ -572,3 +593,32 @@ class _EnsembleFreezer(object):
     if not collection_key.startswith(prefix):
       return None
     return collection_key.replace(prefix, "")
+
+
+def prune_graph(input_graph_def, output_node_names):
+  """Extracts a subgraph, and removes some nodes.
+
+  Removes nodes with "global_step" and "current_iteration" in their names.
+
+  Args:
+    input_graph_def: GraphDef object holding the network.
+    output_node_names: List of name strings for the result nodes of the graph.
+
+  Returns:
+    GraphDef containing a simplified version of the original.
+  """
+
+  inference_graph = tf.graph_util.extract_sub_graph(input_graph_def,
+                                                    output_node_names)
+
+  output_graph_def = tf.GraphDef()
+  for input_node in inference_graph.node:
+    if ("global_step" in input_node.name or
+        "current_iteration" in input_node.name):
+      continue
+    output_node = tf.NodeDef()
+    output_node.CopyFrom(input_node)
+    output_graph_def.node.extend([output_node])
+
+  output_graph_def.library.CopyFrom(inference_graph.library)
+  return output_graph_def

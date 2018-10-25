@@ -19,6 +19,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
+import shutil
+
 from absl.testing import parameterized
 from adanet.core.ensemble import _EnsembleBuilder
 from adanet.core.ensemble import MixtureWeightType
@@ -96,6 +99,16 @@ class _BuilderPrunerLeaveOne(_Builder):
 
 
 class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
+
+  def setUp(self):
+    # Setup and cleanup test directory.
+    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
+    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
+    os.mkdir(self.test_subdirectory)
+
+  def tearDown(self):
+    tf.reset_default_graph()
+    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
 
   @parameterized.named_parameters({
       "testcase_name": "no_previous_ensemble",
@@ -197,104 +210,6 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_adanet_loss": 1.364,
       "want_complexity_regularization": .013,
       "want_mixture_weight_vars": 1,
-  }, {
-      "testcase_name":
-          "previous_ensemble",
-      "ensemble_spec_fn":
-          lambda: tu.dummy_ensemble_spec("test", random_seed=1),
-      "adanet_lambda":
-          .01,
-      "adanet_beta":
-          .1,
-      "want_logits": [[.089], [.159]],
-      "want_loss":
-          1.355,
-      "want_adanet_loss":
-          1.398,
-      "want_complexity_regularization":
-          .043,
-      "want_mixture_weight_vars":
-          2,
-  }, {
-      "testcase_name":
-          "previous_ensemble_prune_all",
-      "ensemble_spec_fn":
-          lambda: tu.dummy_ensemble_spec("test", random_seed=1),
-      "adanet_lambda":
-          .01,
-      "adanet_beta":
-          .1,
-      "want_logits": [[0.003569], [0.07557]],
-      "want_loss":
-          1.3510095,
-      "want_adanet_loss":
-          1.3644928,
-      "want_complexity_regularization":
-          0.013483323,
-      "want_mixture_weight_vars":
-          1,
-      "subnetwork_builder_class":
-          _BuilderPrunerAll
-  }, {
-      "testcase_name":
-          "previous_ensemble_leave_one",
-      "ensemble_spec_fn":
-          lambda: tu.dummy_ensemble_spec("test", random_seed=1),
-      "adanet_lambda":
-          .01,
-      "adanet_beta":
-          .1,
-      "want_logits": [[.089], [.159]],
-      "want_loss":
-          1.355,
-      "want_adanet_loss":
-          1.398,
-      "want_complexity_regularization":
-          .043,
-      "want_mixture_weight_vars":
-          2,
-      "subnetwork_builder_class":
-          _BuilderPrunerLeaveOne
-  }, {
-      "testcase_name":
-          "previous_ensemble_use_bias",
-      "use_bias":
-          True,
-      "ensemble_spec_fn":
-          lambda: tu.dummy_ensemble_spec("test", random_seed=1),
-      "adanet_lambda":
-          .01,
-      "adanet_beta":
-          .1,
-      "want_logits": [[.075], [.146]],
-      "want_loss":
-          1.354,
-      "want_adanet_loss":
-          1.397,
-      "want_complexity_regularization":
-          .043,
-      "want_mixture_weight_vars":
-          3,
-  }, {
-      "testcase_name":
-          "previous_ensemble_no_warm_start",
-      "ensemble_spec_fn":
-          lambda: tu.dummy_ensemble_spec("test", random_seed=1),
-      "warm_start_mixture_weights":
-          False,
-      "adanet_lambda":
-          .01,
-      "adanet_beta":
-          .1,
-      "want_logits": [[.007], [.079]],
-      "want_loss":
-          1.351,
-      "want_adanet_loss":
-          1.367,
-      "want_complexity_regularization":
-          .016,
-      "want_mixture_weight_vars":
-          2,
   })
   def test_append_new_subnetwork(
       self,
@@ -320,6 +235,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
         mixture_weight_type=mixture_weight_type,
         mixture_weight_initializer=mixture_weight_initializer,
         warm_start_mixture_weights=warm_start_mixture_weights,
+        checkpoint_dir=self.test_subdirectory,
         adanet_lambda=adanet_lambda,
         adanet_beta=adanet_beta,
         use_bias=use_bias)
@@ -338,6 +254,9 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       return optimizer.minimize(loss, var_list=var_list)
 
     ensemble_spec = builder.append_new_subnetwork(
+        # Note: when ensemble_spec is not None and warm_start_mixture_weights
+        # is True, we need to make sure that the bias and mixture weights are
+        # already saved to the checkpoint_dir.
         ensemble_spec=ensemble_spec_fn(),
         subnetwork_builder=subnetwork_builder_class(
             _subnetwork_train_op_fn, _mixture_weights_train_op_fn,
@@ -383,6 +302,19 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       self.assertAlmostEqual(want_loss, sess.run(ensemble_spec.loss), places=3)
       self.assertAlmostEqual(
           want_adanet_loss, sess.run(ensemble_spec.adanet_loss), places=3)
+
+  def test_init_error(self):
+    with self.assertRaises(ValueError):
+      _EnsembleBuilder(
+          head=tf.contrib.estimator.binary_classification_head(
+              loss_reduction=tf.losses.Reduction.SUM),
+          mixture_weight_type=MixtureWeightType.MATRIX,
+          mixture_weight_initializer=tf.zeros_initializer(),
+          warm_start_mixture_weights=True,
+          checkpoint_dir=None,
+          adanet_lambda=0.,
+          adanet_beta=0.,
+          use_bias=True)
 
 
 if __name__ == "__main__":

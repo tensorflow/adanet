@@ -340,19 +340,6 @@ class Estimator(tf.estimator.Estimator):
     tf.estimator.Estimator._assert_members_are_not_overridden = staticmethod(
         lambda _: None)
 
-    self._ensemble_builder = _EnsembleBuilder(
-        head=head,
-        mixture_weight_type=mixture_weight_type,
-        mixture_weight_initializer=mixture_weight_initializer,
-        warm_start_mixture_weights=warm_start_mixture_weights,
-        adanet_lambda=adanet_lambda,
-        adanet_beta=adanet_beta,
-        use_bias=use_bias)
-    candidate_builder = _CandidateBuilder(
-        max_steps=max_iteration_steps,
-        adanet_loss_decay=self._adanet_loss_decay)
-    self._iteration_builder = _IterationBuilder(candidate_builder,
-                                                self._ensemble_builder)
     self._freezer = _EnsembleFreezer()
     self._evaluation_checkpoint_path = None
     self._evaluator = evaluator
@@ -378,9 +365,23 @@ class Estimator(tf.estimator.Estimator):
         config=config,
         model_dir=model_dir)
 
-    # This is defined after base Estimator's init so that report_accessor can
+    # These are defined after base Estimator's init so that they can
     # use the same temporary model_dir as the underlying Estimator even if
     # model_dir is not provided.
+    self._ensemble_builder = _EnsembleBuilder(
+        head=head,
+        mixture_weight_type=mixture_weight_type,
+        mixture_weight_initializer=mixture_weight_initializer,
+        warm_start_mixture_weights=warm_start_mixture_weights,
+        checkpoint_dir=self._model_dir,
+        adanet_lambda=adanet_lambda,
+        adanet_beta=adanet_beta,
+        use_bias=use_bias)
+    candidate_builder = _CandidateBuilder(
+        max_steps=max_iteration_steps,
+        adanet_loss_decay=self._adanet_loss_decay)
+    self._iteration_builder = _IterationBuilder(candidate_builder,
+                                                self._ensemble_builder)
     report_dir = report_dir or os.path.join(self._model_dir, "report")
     self._report_accessor = _ReportAccessor(report_dir)
 
@@ -592,7 +593,8 @@ class Estimator(tf.estimator.Estimator):
     mode = "-train" if self._replicate_ensemble_in_training and training else ""
     return "{}-{}{}.meta".format(frozen_checkpoint, iteration_number, mode)
 
-  def _overwrite_checkpoint(self, iteration_number_tensor, iteration_number):
+  def _overwrite_checkpoint(self, iteration_number_tensor, iteration_number,
+                            saver):
     """Overwrites the latest checkpoint with the current graph.
 
     Before overwriting the checkpoint, it assigns the iteration number to the
@@ -602,6 +604,8 @@ class Estimator(tf.estimator.Estimator):
       iteration_number_tensor: Int variable `Tensor` storing the current
         iteration number.
       iteration_number: Int number of the current iteration.
+      saver: `Saver` instance to restore the weights of the frozen ensemble from
+        the checkpoint file.
     """
 
     checkpoint_state = tf.train.get_checkpoint_state(self.model_dir)
@@ -625,6 +629,8 @@ class Estimator(tf.estimator.Estimator):
                       tf.local_variables_initializer(), tf.tables_initializer())
       sess.run(init)
       coord = tf.train.Coordinator()
+      if saver:
+        saver.restore(sess, latest_checkpoint)
       tf.train.start_queue_runners(sess=sess, coord=coord)
       control_deps = [
           tf.assign(global_step_tensor, global_step),
@@ -660,7 +666,6 @@ class Estimator(tf.estimator.Estimator):
       best_candidate = current_iteration.candidates[best_candidate_index]
       best_ensemble = best_candidate.ensemble_spec.ensemble
       return self._freezer.freeze_ensemble(
-          sess=sess,
           filename=filename,
           weighted_subnetworks=best_ensemble.weighted_subnetworks,
           bias=best_candidate.ensemble_spec.ensemble.bias,
@@ -995,7 +1000,7 @@ class Estimator(tf.estimator.Estimator):
     if self._Keys.INCREMENT_ITERATION in params:
       iteration_number += 1
 
-    ensemble = (None, None)
+    ensemble = (None, None, None)
     frozen_graph_filename = self._frozen_graph_filename(iteration_number - 1,
                                                         training)
     if tf.gfile.Exists(frozen_graph_filename):
@@ -1018,7 +1023,7 @@ class Estimator(tf.estimator.Estimator):
           self._collate_subnetwork_reports(iteration_number))
 
     with tf.variable_scope("adanet"):
-      previous_weighted_subnetworks, bias = ensemble
+      previous_weighted_subnetworks, bias, saver = ensemble
       previous_ensemble_spec = None
       if previous_weighted_subnetworks:
         with tf.variable_scope(self._Keys.FROZEN_ENSEMBLE_NAME):
@@ -1054,8 +1059,7 @@ class Estimator(tf.estimator.Estimator):
         shape=[],
         dtype=tf.int64,
         initializer=tf.zeros_initializer(),
-        trainable=False,
-        collections=[tf.GraphKeys.GLOBAL_VARIABLES])
+        trainable=False)
 
     adanet_summary = _ScopedSummary("global", skip_summaries)
     adanet_summary.scalar("iteration/adanet/iteration", iteration_number_tensor)
@@ -1098,6 +1102,7 @@ class Estimator(tf.estimator.Estimator):
       tf.logging.info(
           "Overwriting checkpoint with new graph for iteration %s to %s",
           iteration_number, latest_checkpoint)
-      self._overwrite_checkpoint(iteration_number_tensor, iteration_number)
+      self._overwrite_checkpoint(iteration_number_tensor, iteration_number,
+                                 saver)
 
     return estimator_spec
