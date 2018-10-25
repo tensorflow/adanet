@@ -15,6 +15,7 @@ limitations under the License.
 
 # Current version (0.2.0-dev)
  * Under development.
+ * Estimator no longer creates eval metric ops in train mode.
 
 # Release 0.1.0
  * Initial AdaNet release.

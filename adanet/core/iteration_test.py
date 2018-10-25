@@ -381,6 +381,8 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                   "a": (tf.constant(1), tf.constant(2))
               }),
           "subnetwork_builders": [_FakeBuilder("training",),],
+          "mode":
+              tf.estimator.ModeKeys.EVAL,
           "features":
               lambda: [[1., -1., 0.]],
           "labels":
@@ -402,6 +404,8 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                   }
               ),
           "subnetwork_builders": [_FakeBuilder("training",),],
+          "mode":
+              tf.estimator.ModeKeys.EVAL,
           "features":
               lambda: [[1., -1., 0.]],
           "labels":
@@ -471,6 +475,8 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                   "a": (tf.constant(1), tf.constant(2))
               }),
           "subnetwork_builders": [_FakeBuilder("training")],
+          "mode":
+              tf.estimator.ModeKeys.EVAL,
           "features":
               lambda: [[1., -1., 0.]],
           "labels":

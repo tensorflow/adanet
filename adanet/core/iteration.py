@@ -233,21 +233,15 @@ class _IterationBuilder(object):
               ensemble_spec.adanet_loss)
           subnetwork_reports[subnetwork_builder.name] = subnetwork_report
 
-      best_candidate_index = 0
-      best_predictions = candidates[0].ensemble_spec.predictions
-      best_loss = candidates[0].ensemble_spec.loss
-      best_eval_metric_ops = candidates[0].ensemble_spec.eval_metric_ops
-      best_export_outputs = candidates[0].ensemble_spec.export_outputs
-      if len(candidates) >= 1:
-        # Dynamically select the outputs of best candidate.
-        best_candidate_index = self._best_candidate_index(candidates)
-        best_predictions = self._best_predictions(candidates,
-                                                  best_candidate_index)
-        best_loss = self._best_loss(candidates, best_candidate_index, mode)
-        best_eval_metric_ops = self._best_eval_metric_ops(
-            candidates, best_candidate_index)
-        best_export_outputs = self._best_export_outputs(
-            candidates, best_candidate_index, mode, best_predictions)
+      # Dynamically select the outputs of best candidate.
+      best_candidate_index = self._best_candidate_index(candidates)
+      best_predictions = self._best_predictions(candidates,
+                                                best_candidate_index)
+      best_loss = self._best_loss(candidates, best_candidate_index, mode)
+      best_eval_metric_ops = self._best_eval_metric_ops(
+          candidates, best_candidate_index, mode)
+      best_export_outputs = self._best_export_outputs(
+          candidates, best_candidate_index, mode, best_predictions)
       estimator_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           predictions=best_predictions,
@@ -313,7 +307,7 @@ class _IterationBuilder(object):
             tf.assign_add(step, 1),
         )
 
-  def _best_eval_metric_ops(self, candidates, best_candidate_index):
+  def _best_eval_metric_ops(self, candidates, best_candidate_index, mode):
     """Returns the eval metric ops of the best candidate.
 
     Specifically, it separates the metric ops by the subnetwork's names. All
@@ -324,11 +318,16 @@ class _IterationBuilder(object):
     Args:
       candidates: List of `_Candidate` instances to choose from.
       best_candidate_index: `Tensor` index of the best candidate in the list.
+      mode: Defines whether this is training, evaluation or inference. Eval
+        metrics are only defined during evaluation. See `ModeKeys`.
 
     Returns:
       Dict of metric results keyed by name. The values of the dict are the
       results of calling a metric function.
     """
+
+    if mode != tf.estimator.ModeKeys.EVAL:
+      return None
 
     with tf.variable_scope("best_eval_metric_ops"):
       eval_metric_ops = {}
@@ -375,8 +374,9 @@ class _IterationBuilder(object):
       An integer `Tensor` representing the index of the best candidate.
     """
 
-    assert len(candidates) >= 1
     with tf.variable_scope("best_candidate_index"):
+      if len(candidates) == 1:
+        return tf.constant(0)
       adanet_losses = [candidate.adanet_loss for candidate in candidates]
       return tf.argmin(adanet_losses, axis=0)
 
@@ -392,7 +392,9 @@ class _IterationBuilder(object):
       predictions (depending on what the subnetworks return).
     """
 
-    assert len(candidates) >= 1
+    if len(candidates) == 1:
+      return candidates[0].ensemble_spec.predictions
+
     with tf.variable_scope("best_predictions"):
       predictions = None
       for candidate in candidates:
@@ -431,9 +433,10 @@ class _IterationBuilder(object):
       Float `Tensor` of the best candidate's loss.
     """
 
-    assert len(candidates) >= 1
     if mode == tf.estimator.ModeKeys.PREDICT:
       return None
+    if len(candidates) == 1:
+      return candidates[0].ensemble_spec.loss
     with tf.variable_scope("best_loss"):
       losses = [c.ensemble_spec.loss for c in candidates]
       return tf.stack(losses)[best_candidate_index]
@@ -460,9 +463,10 @@ class _IterationBuilder(object):
       TypeError: If the `ExportOutput` type is not supported.
     """
 
-    assert len(candidates) >= 1
     if mode != tf.estimator.ModeKeys.PREDICT:
       return None
+    if len(candidates) == 1:
+      return candidates[0].ensemble_spec.export_outputs
     with tf.variable_scope("best_export_outputs"):
       # Group tensors by export output key and ExportOutput type.
       export_outputs = {}

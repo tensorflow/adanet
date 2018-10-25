@@ -158,7 +158,7 @@ class Estimator(tf.estimator.Estimator):
   the best candidate is chosen based on its ensemble's complexity-regularized
   train loss. New subnetworks are allowed to use any subnetwork weights within
   the previous iteration's ensemble in order to improve upon them. If the
-  complexity- regularized loss of the new ensemble, as defined in Equation (4),
+  complexity-regularized loss of the new ensemble, as defined in Equation (4),
   is less than that of the previous iteration's ensemble, the AdaNet algorithm
   continues onto the next iteration.
 
@@ -786,16 +786,19 @@ class Estimator(tf.estimator.Estimator):
       training_hooks.append(summary_saver_hook)
     return training_hooks
 
-  def _evaluation_hooks(self, current_iteration):
+  def _evaluation_hooks(self, current_iteration, training):
     """Returns evaluation hooks for this iteration.
 
     Args:
       current_iteration: Current `_Iteration`.
+      training: Whether in training mode.
 
     Returns:
       A list of `tf.train.SessionRunHook` instances.
     """
 
+    if training:
+      return []
     evaluation_hooks = []
     for candidate in current_iteration.candidates:
       eval_subdir = "eval"
@@ -1071,7 +1074,7 @@ class Estimator(tf.estimator.Estimator):
         train_op=iteration_estimator_spec.train_op,
         eval_metric_ops=iteration_estimator_spec.eval_metric_ops,
         training_hooks=self._training_hooks(current_iteration, training),
-        evaluation_hooks=self._evaluation_hooks(current_iteration),
+        evaluation_hooks=self._evaluation_hooks(current_iteration, training),
         scaffold=tf.train.Scaffold(summary_op=adanet_summary.merge_all()),
         export_outputs=iteration_estimator_spec.export_outputs)
 

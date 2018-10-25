@@ -503,6 +503,7 @@ class EstimatorTest(EstimatorTestCase):
     # Evaluate.
     eval_results = estimator.evaluate(
         input_fn=train_input_fn, steps=10, hooks=hooks)
+    tf.logging.info("%s", eval_results)
     self.assertAlmostEqual(want_accuracy, eval_results["accuracy"], places=3)
     self.assertAlmostEqual(want_loss, eval_results["loss"], places=5)
     self.assertEqual(max_steps or steps, eval_results["global_step"])
