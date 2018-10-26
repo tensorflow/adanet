@@ -257,39 +257,32 @@ class _FakeGenerator(Generator):
     return self._subnetwork_builders
 
 
-class _WidthLimitingGenerator(Generator):
+class _WidthLimitingDNNBuilder(_DNNBuilder):
   """Limits the width of the previous_ensemble."""
 
-  def __init__(self, subnetwork_builders):
-    """Checks the arguments passed to generate_candidates.
+  def __init__(self,
+               name,
+               learning_rate=3.,
+               mixture_weight_learning_rate=3.,
+               return_penultimate_layer=True,
+               layer_size=1,
+               width_limit=None,
+               seed=13):
+    if width_limit is not None and width_limit == 0:
+      raise ValueError("width_limit must be at least 1 or None.")
 
-    Args:
-      subnetwork_builders: List of `Builder`s to return in every call to
-        generate_candidates.
-    """
-
-    self._subnetwork_builders = subnetwork_builders
-
-  def generate_candidates(self, previous_ensemble, iteration_number,
-                          previous_ensemble_reports, all_reports):
-    """Returns a fixed list of candidates."""
-
-    del previous_ensemble  # unused
-    return self._subnetwork_builders
+    super(_WidthLimitingDNNBuilder, self).__init__(
+        name, learning_rate, mixture_weight_learning_rate,
+        return_penultimate_layer, layer_size, seed)
+    self._width_limit = width_limit
 
   def prune_previous_ensemble(self, previous_ensemble):
-    """Specifies to Adanet which subnetwork indices to include in the ensemble.
-
-    Args:
-      previous_ensemble: `Ensemble` object.
-
-    Returns:
-      A list of integers (weighted subnetwork indices).
-    """
-
-    width_limit = 2
     indices = range(len(previous_ensemble.weighted_subnetworks))
-    return indices[-width_limit + 1:]
+    if self._width_limit is None:
+      return indices
+    if self._width_limit == 1:
+      return []
+    return indices[-self._width_limit + 1:]  # pylint: disable=invalid-unary-operand-type
 
 
 class _ModifierSessionRunHook(tf.train.SessionRunHook):
@@ -462,6 +455,56 @@ class EstimatorTest(EstimatorTestCase):
           .00160,
   }, {
       "testcase_name":
+          "width_limiting_builder_no_pruning",
+      "subnetwork_generator":
+          SimpleGenerator([_WidthLimitingDNNBuilder("no_pruning")]),
+      "max_iteration_steps":
+          75,
+      "want_accuracy":
+          1.,
+      "want_loss":
+          .00330,
+  }, {
+      "testcase_name":
+          "width_limiting_builder_some_pruning",
+      "subnetwork_generator":
+          SimpleGenerator(
+              [_WidthLimitingDNNBuilder("some_pruning", width_limit=2)]),
+      "max_iteration_steps":
+          75,
+      "want_accuracy":
+          1.,
+      "want_loss":
+          .01078,
+  }, {
+      "testcase_name":
+          "width_limiting_builder_prune_all",
+      "subnetwork_generator":
+          SimpleGenerator(
+              [_WidthLimitingDNNBuilder("prune_all", width_limit=1)]),
+      "max_iteration_steps":
+          75,
+      "want_accuracy":
+          1.,
+      "want_loss":
+          .01816,
+  }, {
+      "testcase_name":
+          "width_limiting_builder_mixed",
+      "subnetwork_generator":
+          SimpleGenerator([
+              _WidthLimitingDNNBuilder("no_pruning"),
+              _WidthLimitingDNNBuilder("some_pruning", width_limit=2),
+              _WidthLimitingDNNBuilder("prune_all", width_limit=1)
+          ]),
+      "max_iteration_steps":
+          75,
+      "want_accuracy":
+          1.,
+      "want_loss":
+          .00330,
+  }, {
+      "testcase_name":
           "evaluator_good_input",
       "subnetwork_generator":
           SimpleGenerator(
@@ -506,19 +549,6 @@ class EstimatorTest(EstimatorTestCase):
           1.,
       "want_loss":
           .00176,
-  }, {
-      "testcase_name":
-          "width_limiting_generator",
-      "subnetwork_generator":
-          _WidthLimitingGenerator(
-              [_DNNBuilder("dnn"),
-               _DNNBuilder("dnn2", layer_size=3)]),
-      "max_iteration_steps":
-          75,
-      "want_accuracy":
-          1.,
-      "want_loss":
-          .00154,
   })
   def test_lifecycle(self,
                      subnetwork_generator,
