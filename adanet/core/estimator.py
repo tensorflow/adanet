@@ -270,10 +270,14 @@ class Estimator(tf.estimator.Estimator):
       adanet_beta: Float L1 regularization multiplier 'beta' to apply equally to
         all subnetworks' weights 'w' in the ensemble regardless of their
         complexity. See Equation (4) in the AdaNet paper.
-      evaluator: An `Evaluator` for comparing `Ensemble` instances in evaluation
-        mode using the training set, or a holdout set. When `None`, they are
-        compared using a moving average of their `Ensemble`'s AdaNet loss during
-        training.
+      evaluator: An `Evaluator` for candidate selection after all subnetworks
+        are done training. When `None`, candidate selection uses a moving
+        average of their `Ensemble`'s AdaNet loss during training instead. In
+        order to use the *AdaNet algorithm* as described in [Cortes et al.,
+        '17], the given `Evaluator` must be created with the same dataset
+        partition used during training. Otherwise, this framework will perform
+        *AdaNet.HoldOut* which uses a holdout set for candidate selection, but
+        does not benefit from learning guarantees.
       report_materializer: A `ReportMaterializer` for materializing a
         `Builder`'s `subnetwork.Reports` into `subnetwork.MaterializedReport`s.
         These reports are made available to the Generator at the next iteration,
