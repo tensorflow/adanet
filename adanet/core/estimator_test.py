@@ -612,7 +612,10 @@ class EstimatorTest(EstimatorTestCase):
           features={"x": tf.constant([[0., 0.]], name="serving_x")},
           receiver_tensors=serialized_example)
 
-    estimator.export_savedmodel(
+    export_saved_model_fn = getattr(estimator, "export_saved_model", None)
+    if not callable(export_saved_model_fn):
+      export_saved_model_fn = estimator.export_savedmodel
+    export_saved_model_fn(
         export_dir_base=self.test_subdirectory,
         serving_input_receiver_fn=serving_input_fn)
 
@@ -1190,7 +1193,10 @@ class EstimatorDifferentFeaturesPerModeTest(EstimatorTestCase):
       return tf.estimator.export.ServingInputReceiver(
           features=features, receiver_tensors=serialized_example)
 
-    estimator.export_savedmodel(
+    export_saved_model_fn = getattr(estimator, "export_saved_model", None)
+    if not callable(export_saved_model_fn):
+      export_saved_model_fn = estimator.export_savedmodel
+    export_saved_model_fn(
         export_dir_base=self.test_subdirectory,
         serving_input_receiver_fn=serving_input_fn)
 
