@@ -57,11 +57,12 @@ class Report(
       ValueError: If validation fails.
     """
 
-    def _is_valid_tensor(tensor):
-      """Returns True only if tensor is a scalar of the right type."""
+    def _is_scalar(tensor):
+      """Returns True iff tensor is scalar."""
+      return tensor.shape.ndims == 0
 
-      if tensor.shape.ndims > 0:
-        return False
+    def _is_accepted_dtype(tensor):
+      """Returns True iff tensor has the dtype we can handle."""
       return tensor.dtype in (tf.bool, tf.int32, tf.float32, tf.string)
 
     # Validate hparams
@@ -78,12 +79,13 @@ class Report(
         raise ValueError("attribute '{}' refers to invalid value: {}, type: {}."
                          "type must be Tensor.".format(key, value, type(value)))
 
-      if not _is_valid_tensor(value):
+      if not (_is_scalar(value) and _is_accepted_dtype(value)):
         raise ValueError(
             "attribute '{}' refers to invalid tensor {}. Shape: {}".format(
                 key, value, value.get_shape()))
 
     # Validate metrics
+    metrics_copy = {}
     for key, value in metrics.items():
       if not isinstance(value, tuple):
         raise ValueError(
@@ -99,10 +101,19 @@ class Report(
             "First element of metric tuple '{}' has value {} and type {}. "
             "Must be a Tensor.".format(key, value, type(value[0])))
 
-      if not _is_valid_tensor(value[0]):
+      if not _is_accepted_dtype(value[0]):
         raise ValueError(
-            "First element of metric '{}' refers to invalid Tensor {}.".format(
-                key, value[0]))
+            "First element of metric '{}' refers to Tensor of the wrong "
+            "dtype {}. Must be one of tf.bool, tf.int32, tf.float32, or"
+            "tf.string.".format(key, value[0].dtype))
+
+      if not _is_scalar(value[0]):
+        tf.logging.warn(
+            "First element of metric '{}' refers to Tensor of rank > 0. "
+            "AdaNet is currently unable to store metrics of rank > 0 -- this "
+            "metric will be dropped from the report. "
+            "value: {}".format(key, value[0]))
+        continue
 
       if not (isinstance(value[1], tf.Tensor) or
               isinstance(value[1], tf.Operation)):
@@ -110,8 +121,10 @@ class Report(
             "Second element of metric tuple '{}' has value {} and type {}. "
             "Must be a Tensor or Operation.".format(key, value, type(value[1])))
 
+      metrics_copy[key] = value
+
     return super(Report, cls).__new__(
-        cls, hparams=hparams, attributes=attributes, metrics=metrics)
+        cls, hparams=hparams, attributes=attributes, metrics=metrics_copy)
 
 
 class MaterializedReport(

@@ -56,10 +56,27 @@ class ReportTest(parameterized.TestCase, tf.test.TestCase):
   })
   def test_new(self, hparams, attributes, metrics):
     with self.test_session():
-      blr = Report(hparams=hparams, attributes=attributes, metrics=metrics)
-      self.assertEqual(hparams, blr.hparams)
-      self.assertEqual(attributes, blr.attributes)
-      self.assertEqual(metrics, blr.metrics)
+      report = Report(hparams=hparams, attributes=attributes, metrics=metrics)
+      self.assertEqual(hparams, report.hparams)
+      self.assertEqual(attributes, report.attributes)
+      self.assertEqual(metrics, report.metrics)
+
+  def test_drop_non_scalar_metric(self):
+    """Tests b/118632346."""
+
+    hparams = {"hoo": 1}
+    attributes = {"aoo": tf.constant(1)}
+    metrics = {
+        "moo1": (tf.constant(1), tf.constant(1)),
+        "moo2": (tf.constant([1, 1]), tf.constant([1, 1])),
+    }
+    want_metrics = metrics.copy()
+    del want_metrics["moo2"]
+    with self.test_session():
+      report = Report(hparams=hparams, attributes=attributes, metrics=metrics)
+      self.assertEqual(hparams, report.hparams)
+      self.assertEqual(attributes, report.attributes)
+      self.assertEqual(want_metrics, report.metrics)
 
   @parameterized.named_parameters({
       "testcase_name": "tensor_hparams",
@@ -88,13 +105,6 @@ class ReportTest(parameterized.TestCase, tf.test.TestCase):
       "attributes": {},
       "metrics": {
           "moo": (tf.constant(1),)
-      },
-  }, {
-      "testcase_name": "non_tensor_tuple_metrics",
-      "hparams": {},
-      "attributes": {},
-      "metrics": {
-          "moo": (1, 1)
       },
   })
   def test_new_errors(self, hparams, attributes, metrics):
