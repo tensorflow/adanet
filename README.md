@@ -26,7 +26,7 @@ $ pip install "tensorflow>=1.7.0"
 
 ## Installing with Pip
 
-You can use the [pip package manager](https://pip.pypa.io/en/stable/installing/) to install the official `adanet` package from [PyPi])(https://pypi.org/project/adanet/):
+You can use the [pip package manager](https://pip.pypa.io/en/stable/installing/) to install the official `adanet` package from [PyPi](https://pypi.org/project/adanet/):
 
 ```shell
 $ pip install adanet
