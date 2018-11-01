@@ -19,3 +19,13 @@ py_library(
         "//adanet/core",
     ],
 )
+
+py_test(
+    name = "adanet_test",
+    srcs = ["adanet_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":adanet",
+        "//adanet/examples",
+    ],
+)
