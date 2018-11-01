@@ -110,8 +110,11 @@ def _create_subnetwork_report_proto(materialized_subnetwork_report):
       if isinstance(value, bool):
         field[key].bool_value = value
       elif isinstance(value, (six.string_types, six.binary_type)):
-        # Proto requires unicode strings.
-        field[key].string_value = six.u(value)
+        # Proto string fields require unicode strings.
+        string_value = six.u(value)
+        if six.PY3:
+          string_value = str(string_value)
+        field[key].string_value = string_value
       elif isinstance(value, int):
         field[key].int_value = value
       elif isinstance(value, float):

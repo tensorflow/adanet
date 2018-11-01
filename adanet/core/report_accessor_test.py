@@ -202,6 +202,35 @@ class ReportAccessorTest(tf.test.TestCase):
     actual_reports = list(report_accessor.read_iteration_reports())
     self.assertEqual(materialized_reports, actual_reports)
 
+  def test_write_iteration_report_encoding(self):
+    """Tests GitHub issue #4."""
+
+    report_accessor = _ReportAccessor(self.get_temp_dir())
+    bytes_value = b"\n\x83\x01\n;adanet/iteration_2/ensemble_2_layer_dnn/"
+    materialized_reports = [
+        subnetwork.MaterializedReport(
+            iteration_number=0,
+            name="foo",
+            hparams={
+                "p2": bytes_value,
+            },
+            attributes={
+                "a2": bytes_value,
+            },
+            metrics={
+                "m2": bytes_value,
+            },
+            included_in_final_ensemble=True,
+        ),
+    ]
+
+    report_accessor.write_iteration_report(
+        iteration_number=0,
+        materialized_reports=materialized_reports,
+    )
+    actual_iteration_reports = list(report_accessor.read_iteration_reports())
+    self.assertEqual(1, len(actual_iteration_reports))
+
 
 if __name__ == "__main__":
   tf.test.main()
