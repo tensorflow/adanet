@@ -28,7 +28,7 @@ with open('adanet/version.py') as in_file:
 REQUIRED_PACKAGES = [
     'numpy >= 1.12.0',
     'six >= 1.10.0',
-    'protobuf >= 3.4.0',
+    'protobuf >= 3.6.0',
 ]
 
 setup(
