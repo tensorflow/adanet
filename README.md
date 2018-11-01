@@ -16,10 +16,20 @@ To get you started:
 
 ## Requirements
 
+Requires [Python](https://www.python.org/) 2.7, 3.4, 3.5, or 3.6.
+
 `adanet` depends on bug fixes and enhancements not present in TensorFlow releases prior to 1.7. You must install or upgrade your TensorFlow package to at least 1.7:
 
 ```shell
 $ pip install "tensorflow>=1.7.0"
+```
+
+## Installing with Pip
+
+You can use the [pip package manager](https://pip.pypa.io/en/stable/installing/) to install the official `adanet` package from [PyPi])(https://pypi.org/project/adanet/):
+
+```shell
+$ pip install adanet
 ```
 
 ## Installing from source
