@@ -13,10 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================-->
 
-# Current version (0.2.0-dev)
+# Current version (0.3.0-dev)
  * Under development.
+
+# Release 0.2.0
+
  * Estimator no longer creates eval metric ops in train mode.
  * Freezer no longer converts Variables to constants, allowing AdaNet to handle Variables larger than 2GB.
+ * Fixes some errors with Python 3.
 
 # Release 0.1.0
  * Initial AdaNet release.
