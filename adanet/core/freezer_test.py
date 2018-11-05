@@ -340,6 +340,8 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       "features": {
           "human_names": [["alice"], ["bob"]]
       },
+      "count_nodes":
+          True,
       "want_nodes": [
           u"human_names",
           u"input_layer/human_names_indicator/to_sparse_input/ignore_value"
@@ -357,9 +359,9 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
           u"input_layer/human_names_indicator/human_names_lookup/range",
           u"input_layer/human_names_indicator/human_names_lookup/ToInt64",
           u"input_layer/human_names_indicator/human_names_lookup"
-          "/hash_table",
-          u"input_layer/human_names_indicator/human_names_lookup"
           "/hash_table/Const",
+          u"input_layer/human_names_indicator/human_names_lookup"
+          "/hash_table",
           u"input_layer/human_names_indicator/human_names_lookup"
           "/hash_table/table_init",
           u"input_layer/human_names_indicator/hash_table_Lookup",
@@ -468,7 +470,8 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
                            subnetwork_fns,
                            features,
                            want_nodes,
-                           bias=0):
+                           bias=0,
+                           count_nodes=False):
     with tf.Graph().as_default() as g, self.test_session(graph=g) as sess:
       freezer = _EnsembleFreezer()
       filename = os.path.join(self.test_subdirectory, "frozen.pbtxt")
@@ -492,7 +495,10 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
         nodes.append(node_def.name)
         if node_def.op == "Const":
           consts.append(node_def.name)
-      self.assertEqual(want_nodes, nodes)
+      if count_nodes:
+        self.assertLen(nodes, len(want_nodes))
+      else:
+        self.assertEqual(want_nodes, nodes)
 
   @parameterized.named_parameters({
       "testcase_name": "persisted_tensor_with separator",
