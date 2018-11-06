@@ -78,7 +78,9 @@ class _DNNBuilder(Builder):
             shape=[2, self._layer_size],
             initializer=tf.glorot_uniform_initializer(seed=seed),
             name="weight")
-        hidden_layer = tf.matmul(features["x"], w)
+        disjoint_op = tf.constant([1], name="disjoint_op")
+        with tf.colocate_with(disjoint_op):  # tests b/118865235
+          hidden_layer = tf.matmul(features["x"], w)
 
       if previous_ensemble:
         other_hidden_layer = previous_ensemble.weighted_subnetworks[

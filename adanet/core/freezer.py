@@ -23,6 +23,9 @@ from adanet.core.ensemble import WeightedSubnetwork
 from adanet.core.subnetwork import Subnetwork
 import tensorflow as tf
 
+_COLOCATION_ATTR_KEY = u"_class"
+_COLOCATION_ATTR_PREFIX = b"loc:@"
+
 
 class _EnsembleFreezer(object):
   """Stateless object that saves, and loads a frozen AdaNet ensemble."""
@@ -599,6 +602,7 @@ def prune_graph(input_graph_def, output_node_names):
   """Extracts a subgraph, and removes some nodes.
 
   Removes nodes with "global_step" and "current_iteration" in their names.
+  Recursively keeps nodes that are colocated with any nodes in the output graph.
 
   Args:
     input_graph_def: GraphDef object holding the network.
@@ -608,17 +612,50 @@ def prune_graph(input_graph_def, output_node_names):
     GraphDef containing a simplified version of the original.
   """
 
-  inference_graph = tf.graph_util.extract_sub_graph(input_graph_def,
-                                                    output_node_names)
-
   output_graph_def = tf.GraphDef()
-  for input_node in inference_graph.node:
-    if ("global_step" in input_node.name or
-        "current_iteration" in input_node.name):
-      continue
+  node_names_in_output_graph = set()
+
+  def _find_colocated_node_names(input_node):
+    """Returns colocated node names specified in input_node proto."""
+
+    colocated_node_names = set()
+    if input_node.attr and _COLOCATION_ATTR_KEY in input_node.attr:
+      colo_strings = input_node.attr[_COLOCATION_ATTR_KEY].list.s
+      for colo_string in colo_strings:
+        if colo_string.startswith(_COLOCATION_ATTR_PREFIX):
+          colocated_node_name = (
+              colo_string[len(_COLOCATION_ATTR_PREFIX):].decode("ascii"))
+          colocated_node_names.add(colocated_node_name)
+    return colocated_node_names
+
+  def _copy_node_to_output_graph(input_node):
+    """Copies node to output_graph_def; updates node_names_in_output_graph."""
+
     output_node = tf.NodeDef()
     output_node.CopyFrom(input_node)
     output_graph_def.node.extend([output_node])
+    node_names_in_output_graph.add(output_node.name)
 
-  output_graph_def.library.CopyFrom(inference_graph.library)
+  missing_node_names = output_node_names
+  graph_library = None
+  graph_versions = None
+
+  while missing_node_names:
+    subgraph = tf.graph_util.extract_sub_graph(input_graph_def,
+                                               missing_node_names)
+    if graph_library is None:
+      graph_library = subgraph.library
+    if graph_versions is None:
+      graph_versions = subgraph.versions
+    colocated_node_names_seen = set()
+    for node in subgraph.node:
+      if "global_step" in node.name or "current_iteration" in node.name:
+        continue
+      _copy_node_to_output_graph(node)
+      colocated_node_names_seen |= _find_colocated_node_names(node)
+    missing_node_names = list(colocated_node_names_seen -
+                              node_names_in_output_graph)
+
+  output_graph_def.library.CopyFrom(graph_library)
+  output_graph_def.versions.CopyFrom(graph_versions)
   return output_graph_def

@@ -162,6 +162,58 @@ def _dnn_subnetwork_fn(keep_persisted_tensors=False, seed=42):
   return _dnn
 
 
+def _colocated_subnetwork_fn(seed=42):
+  """A linear subnetwork with colocation constraints for testing b/118865235.
+
+  op1 is a "roommate" of op2 if op2 has a colocation constraint with op1.
+  They are not necessarily siblings or cousins, since they might not have any
+  common ancestors.
+
+  Args:
+    seed: Random seed for initializing Variables deterministically.
+
+  Returns:
+    (features) -> WeightedSubnetwork.
+  """
+
+  def _colocated(features):
+    inputs = _extract_feature(features)
+    with tf.variable_scope("colocated"):
+      with tf.variable_scope("logits"):
+        w = tf.Variable(tf.random_normal([2, 1], seed=seed), name="weight")
+        disjoint_child1_roommate_child1_roommate = tf.constant(
+            [1], name="disjoint_child1_roommate_child1_roommate")
+        with tf.colocate_with(disjoint_child1_roommate_child1_roommate):
+          disjoint_child1_roommate_child1 = tf.constant(
+              [1], name="disjoint_child1_roommate_child1")
+        disjoint_child1_roommate_child2 = tf.constant(
+            [1], name="disjoint_child1_roommate_child2")
+        disjoint_child1_roommate = tf.add(
+            disjoint_child1_roommate_child1,
+            disjoint_child1_roommate_child2,
+            name="disjoint_child1_roommate")
+        with tf.colocate_with(disjoint_child1_roommate):
+          disjoint_child1 = tf.constant([1], name="disjoint_child1")
+        disjoint_child2 = tf.constant([1], name="disjoint_child2")
+        disjoint = tf.add(disjoint_child1, disjoint_child2, name="disjoint")
+        with tf.colocate_with(disjoint):
+          predictions = tf.matmul(inputs, w)
+
+      complexity = tf.constant(3, name="complexity")
+      subnetwork = Subnetwork(
+          last_layer=inputs,
+          logits=predictions,
+          complexity=complexity,
+          persisted_tensors={})
+      return WeightedSubnetwork(
+          name=tf.constant("colocated", name="name"),
+          logits=predictions,
+          weight=w,
+          subnetwork=subnetwork)
+
+  return _colocated
+
+
 class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
@@ -465,6 +517,29 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
           u"linear/name",
           u"bias",
       ],
+  }, {
+      "testcase_name":
+          "linear_with_colocation_constraints",
+      "subnetwork_fns": [_colocated_subnetwork_fn()],
+      "features": {
+          "feature": [[4., 3.]]
+      },
+      "want_nodes": [
+          u"feature",
+          u"colocated/logits/disjoint",
+          u"colocated/logits/disjoint_child1",
+          u"colocated/logits/disjoint_child2",
+          u"colocated/logits/disjoint_child1_roommate",
+          u"colocated/logits/disjoint_child1_roommate_child1",
+          u"colocated/logits/disjoint_child1_roommate_child1_roommate",
+          u"colocated/logits/disjoint_child1_roommate_child2",
+          u"colocated/logits/weight",
+          u"colocated/logits/weight/read",
+          u"colocated/logits/MatMul",
+          u"colocated/complexity",
+          u"colocated/name",
+          u"bias",
+      ],
   })
   def test_freeze_ensemble(self,
                            subnetwork_fns,
@@ -498,7 +573,7 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
       if count_nodes:
         self.assertLen(nodes, len(want_nodes))
       else:
-        self.assertEqual(want_nodes, nodes)
+        self.assertCountEqual(want_nodes, nodes)
 
   @parameterized.named_parameters({
       "testcase_name": "persisted_tensor_with separator",
@@ -690,6 +765,16 @@ class EnsembleFreezerTest(parameterized.TestCase, tf.test.TestCase):
           None,
       "features_to_load": {
           "x": [[2., 3], [4., -5]]
+      },
+      "want_logits": [[-1.255581], [-.715115]],
+  }, {
+      "testcase_name": "explicit_colocation",
+      "subnetwork_fns": [("colocated", _colocated_subnetwork_fn())],
+      "features_to_freeze": {
+          "x": [[-1., 1.]]
+      },
+      "features_to_load": {
+          "x": [[2., 3]]
       },
       "want_logits": [[-1.255581], [-.715115]],
   })
