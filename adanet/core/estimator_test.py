@@ -1092,7 +1092,11 @@ class EstimatorMembersOverrideTest(EstimatorTestCase):
         use_bias=True,
         config=config)
     self.assertIsNotNone(adanet)
-    linear = tf.contrib.estimator.LinearEstimator(
+    if hasattr(tf.estimator, "LinearEstimator"):
+      estimator_fn = tf.estimator.LinearEstimator
+    else:
+      estimator_fn = tf.contrib.estimator.LinearEstimator
+    linear = estimator_fn(
         head=_head(), feature_columns=[tf.feature_column.numeric_column("x")])
     self.assertIsNotNone(linear)
 
