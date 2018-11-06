@@ -10,6 +10,7 @@ message Value {
     float float_value = 2;
     int32 int_value = 3;
     bool bool_value = 4;
+    bytes bytes_value = 5;
   }
 }
 

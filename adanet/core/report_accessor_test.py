@@ -19,12 +19,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl.testing import parameterized
 from adanet.core import subnetwork
 from adanet.core.report_accessor import _ReportAccessor
 import tensorflow as tf
 
 
-class ReportAccessorTest(tf.test.TestCase):
+class ReportAccessorTest(parameterized.TestCase, tf.test.TestCase):
 
   def test_read_from_empty_file(self):
     report_accessor = _ReportAccessor(self.get_temp_dir())
@@ -38,18 +39,24 @@ class ReportAccessorTest(tf.test.TestCase):
             name="foo",
             hparams={
                 "p1": 1,
-                "p2": "hoo",
-                "p3": True,
+                "p2": "default_hparam",
+                "p3": b"binary_hparam",
+                "p4": u"unicode_hparam",
+                "p5": True,
             },
             attributes={
                 "a1": 1,
-                "a2": "aoo",
-                "a3": True,
+                "a2": "default_attribute",
+                "a3": b"binary_attribute",
+                "a4": u"unicode_attribute",
+                "a5": True,
             },
             metrics={
                 "m1": 1,
-                "m2": "moo",
-                "m3": True,
+                "m2": "default_metric",
+                "m3": b"binary_metric",
+                "m4": u"unicode_metric",
+                "m5": True,
             },
             included_in_final_ensemble=True,
         ),
@@ -72,18 +79,24 @@ class ReportAccessorTest(tf.test.TestCase):
                 name="foo1",
                 hparams={
                     "p1": 11,
-                    "p2": "hoo",
-                    "p3": True,
+                    "p2": "default_hparam",
+                    "p3": b"binary_hparam",
+                    "p4": u"unicode_hparam",
+                    "p5": True,
                 },
                 attributes={
                     "a1": 11,
-                    "a2": "aoo",
-                    "a3": True,
+                    "a2": "default_attribute",
+                    "a3": b"binary_attribute",
+                    "a4": u"unicode_attribute",
+                    "a5": True,
                 },
                 metrics={
                     "m1": 11,
-                    "m2": "moo",
-                    "m3": True,
+                    "m2": "default_metric",
+                    "m3": b"binary_metric",
+                    "m4": u"unicode_metric",
+                    "m5": True,
                 },
                 included_in_final_ensemble=False,
             ),
@@ -92,18 +105,24 @@ class ReportAccessorTest(tf.test.TestCase):
                 name="foo2",
                 hparams={
                     "p1": 12,
-                    "p2": "hoo",
-                    "p3": True,
+                    "p2": "default_hparam",
+                    "p3": b"binary_hparam",
+                    "p4": u"unicode_hparam",
+                    "p5": True,
                 },
                 attributes={
                     "a1": 12,
-                    "a2": "aoo",
-                    "a3": True,
+                    "a2": "default_attribute",
+                    "a3": b"binary_attribute",
+                    "a4": u"unicode_attribute",
+                    "a5": True,
                 },
                 metrics={
                     "m1": 12,
-                    "m2": "moo",
-                    "m3": True,
+                    "m2": "default_metric",
+                    "m3": b"binary_metric",
+                    "m4": u"unicode_metric",
+                    "m5": True,
                 },
                 included_in_final_ensemble=True,
             ),
@@ -114,18 +133,24 @@ class ReportAccessorTest(tf.test.TestCase):
                 name="foo1",
                 hparams={
                     "p1": 21,
-                    "p2": "hoo",
-                    "p3": True,
+                    "p2": "default_hparam",
+                    "p3": b"binary_hparam",
+                    "p4": u"unicode_hparam",
+                    "p5": True,
                 },
                 attributes={
                     "a1": 21,
-                    "a2": "aoo",
-                    "a3": True,
+                    "a2": "default_attribute",
+                    "a3": b"binary_attribute",
+                    "a4": u"unicode_attribute",
+                    "a5": True,
                 },
                 metrics={
                     "m1": 21,
-                    "m2": "moo",
-                    "m3": True,
+                    "m2": "default_metric",
+                    "m3": b"binary_metric",
+                    "m4": u"unicode_metric",
+                    "m5": True,
                 },
                 included_in_final_ensemble=True,
             ),
@@ -134,18 +159,24 @@ class ReportAccessorTest(tf.test.TestCase):
                 name="foo2",
                 hparams={
                     "p1": 22,
-                    "p2": "hoo",
-                    "p3": True,
+                    "p2": "default_hparam",
+                    "p3": b"binary_hparam",
+                    "p4": u"unicode_hparam",
+                    "p5": True,
                 },
                 attributes={
                     "a1": 22,
-                    "a2": "aoo",
-                    "a3": True,
+                    "a2": "default_attribute",
+                    "a3": b"binary_attribute",
+                    "a4": u"unicode_attribute",
+                    "a5": True,
                 },
                 metrics={
                     "m1": 22,
-                    "m2": "moo",
-                    "m3": True,
+                    "m2": "default_metric",
+                    "m3": b"binary_metric",
+                    "m4": u"unicode_metric",
+                    "m5": True,
                 },
                 included_in_final_ensemble=False,
             ),
@@ -156,18 +187,24 @@ class ReportAccessorTest(tf.test.TestCase):
                 name="foo1",
                 hparams={
                     "p1": 31,
-                    "p2": "hoo",
-                    "p3": True,
+                    "p2": "default_hparam",
+                    "p3": b"binary_hparam",
+                    "p4": u"unicode_hparam",
+                    "p5": True,
                 },
                 attributes={
                     "a1": 31,
-                    "a2": "aoo",
-                    "a3": True,
+                    "a2": "default_attribute",
+                    "a3": b"binary_attribute",
+                    "a4": u"unicode_attribute",
+                    "a5": True,
                 },
                 metrics={
                     "m1": 31,
-                    "m2": "moo",
-                    "m3": True,
+                    "m2": "default_metric",
+                    "m3": b"binary_metric",
+                    "m4": u"unicode_metric",
+                    "m5": True,
                 },
                 included_in_final_ensemble=False,
             ),
@@ -176,18 +213,24 @@ class ReportAccessorTest(tf.test.TestCase):
                 name="foo2",
                 hparams={
                     "p1": 32,
-                    "p2": "hoo",
-                    "p3": True,
+                    "p2": "default_hparam",
+                    "p3": b"binary_hparam",
+                    "p4": u"unicode_hparam",
+                    "p5": True,
                 },
                 attributes={
                     "a1": 32,
-                    "a2": "aoo",
-                    "a3": True,
+                    "a2": "default_attribute",
+                    "a3": b"binary_attribute",
+                    "a4": u"unicode_attribute",
+                    "a5": True,
                 },
                 metrics={
                     "m1": 32,
-                    "m2": "moo",
-                    "m3": True,
+                    "m2": "default_metric",
+                    "m3": b"binary_metric",
+                    "m4": u"unicode_metric",
+                    "m5": True,
                 },
                 included_in_final_ensemble=True,
             ),
@@ -206,19 +249,23 @@ class ReportAccessorTest(tf.test.TestCase):
     """Tests GitHub issue #4."""
 
     report_accessor = _ReportAccessor(self.get_temp_dir())
-    bytes_value = b"\n\x83\x01\n;adanet/iteration_2/ensemble_2_layer_dnn/"
+    binary_type_value = b"\n\x83\x01\n;adanet/iteration_2/ensemble_2_layer_dnn/"
+    text_type_value = u"\U0001f937"
     materialized_reports = [
         subnetwork.MaterializedReport(
             iteration_number=0,
             name="foo",
             hparams={
-                "p2": bytes_value,
+                "p1": binary_type_value,
+                "p2": text_type_value,
             },
             attributes={
-                "a2": bytes_value,
+                "a1": binary_type_value,
+                "a2": text_type_value,
             },
             metrics={
-                "m2": bytes_value,
+                "m1": binary_type_value,
+                "m2": text_type_value,
             },
             included_in_final_ensemble=True,
         ),
@@ -230,6 +277,46 @@ class ReportAccessorTest(tf.test.TestCase):
     )
     actual_iteration_reports = list(report_accessor.read_iteration_reports())
     self.assertEqual(1, len(actual_iteration_reports))
+
+  @parameterized.named_parameters({
+      "testcase_name": "hparams_invalid_type",
+      "hparams": {
+          "h1": None
+      },
+  }, {
+      "testcase_name": "attributes_invalid_type",
+      "attributes": {
+          "a1": None
+      },
+  }, {
+      "testcase_name": "metrics_invalid_type",
+      "metrics": {
+          "m1": None
+      },
+  })
+  def test_value_error(self, hparams=None, attributes=None, metrics=None):
+    if hparams is None:
+      hparams = {}
+    if attributes is None:
+      attributes = {}
+    if metrics is None:
+      metrics = {}
+    report_accessor = _ReportAccessor(self.get_temp_dir())
+    materialized_reports = [
+        subnetwork.MaterializedReport(
+            iteration_number=0,
+            name="foo",
+            hparams=hparams,
+            attributes=attributes,
+            metrics=metrics,
+            included_in_final_ensemble=True,
+        ),
+    ]
+    with self.assertRaises(ValueError):
+      report_accessor.write_iteration_report(
+          iteration_number=0,
+          materialized_reports=materialized_reports,
+      )
 
 
 if __name__ == "__main__":

@@ -249,6 +249,7 @@ py_test(
     deps = [
         ":report_accessor",
         "//adanet/core/subnetwork",
+        "@absl_py//absl/testing:parameterized",
     ],
 )
 

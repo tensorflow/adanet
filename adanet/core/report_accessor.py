@@ -50,7 +50,7 @@ def _iteration_report_pb_to_subnetwork_reports(iteration_report_pb):
 
     Raises:
       ValueError: if proto.field_name has a value that's not an int_value,
-        float_value, bool_value, or string_value.
+        float_value, bool_value, bytes_value, or string_value.
     """
 
     dictionary = {}
@@ -60,6 +60,8 @@ def _iteration_report_pb_to_subnetwork_reports(iteration_report_pb):
         value = proto_field[key].int_value
       elif proto_field[key].HasField("float_value"):
         value = proto_field[key].float_value
+      elif proto_field[key].HasField("bytes_value"):
+        value = proto_field[key].bytes_value
       elif proto_field[key].HasField("string_value"):
         value = proto_field[key].string_value
       elif proto_field[key].HasField("bool_value"):
@@ -101,27 +103,28 @@ def _create_subnetwork_report_proto(materialized_subnetwork_report):
       dictionary: dict where the keys and values come from.
 
     Raises:
-      ValueError: if value in dictionary is not an instance of string, int,
-        or float.
+      ValueError: if value in dictionary is not a binary type
+        (str in python 2; bytes in python 3), text type (unicode in python 2;
+        str in python 3), int, bool, or float.
     """
 
     for key, value in dictionary.items():
       field = getattr(proto, field_name)
       if isinstance(value, bool):
         field[key].bool_value = value
-      elif isinstance(value, (six.string_types, six.binary_type)):
-        # Proto string fields require unicode strings.
-        string_value = six.u(value)
-        if six.PY3:
-          string_value = str(string_value)
-        field[key].string_value = string_value
+      elif isinstance(value, six.binary_type):
+        field[key].bytes_value = value
+      elif isinstance(value, six.text_type):
+        field[key].string_value = value
       elif isinstance(value, int):
         field[key].int_value = value
       elif isinstance(value, float):
         field[key].float_value = value
       else:
-        raise ValueError("{} {}'s value must be an instance of string, int, "
-                         "bool, or float, but its type is {}.".format(
+        raise ValueError("{} {}'s value must be a binary type "
+                         "(str in python 2; bytes in python 3), "
+                         "a text type (unicode in python 2; str in python 3), "
+                         "int, bool, or float, but its type is {}.".format(
                              field_name, key, type(value)))
 
   subnetwork_report_pb = report_proto.SubnetworkReport()
