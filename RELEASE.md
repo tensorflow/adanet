@@ -15,6 +15,7 @@ limitations under the License.
 
 # Current version (0.3.0-dev)
  * Under development.
+ * Add official support for `tf.keras.layers`.
 
 # Release 0.2.0
 

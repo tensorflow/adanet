@@ -727,6 +727,133 @@ class EstimatorTest(EstimatorTestCase):
       estimator.train(input_fn=train_input_fn, steps=steps, max_steps=max_steps)
 
 
+class KerasCNNBuilder(Builder):
+  """Builds a CNN subnetwork for AdaNet."""
+
+  def __init__(self, learning_rate, seed=42):
+    """Initializes a `SimpleCNNBuilder`.
+
+    Args:
+      learning_rate: The float learning rate to use.
+      seed: The random seed.
+
+    Returns:
+      An instance of `SimpleCNNBuilder`.
+    """
+    self._learning_rate = learning_rate
+    self._seed = seed
+
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
+    """See `adanet.subnetwork.Builder`."""
+
+    seed = self._seed
+    if previous_ensemble:
+      seed += len(previous_ensemble.weighted_subnetworks)
+    images = list(features.values())[0]
+    images = tf.reshape(images, [-1, 2, 2, 1])
+    kernel_initializer = tf.keras.initializers.he_normal(seed=seed)
+    x = tf.keras.layers.Conv2D(
+        filters=3,
+        kernel_size=1,
+        padding="same",
+        activation="relu",
+        kernel_initializer=kernel_initializer)(
+            images)
+    x = tf.keras.layers.MaxPool2D(pool_size=2, strides=1)(x)
+    x = tf.keras.layers.Flatten()(x)
+    x = tf.keras.layers.Dense(
+        units=3, activation="relu", kernel_initializer=kernel_initializer)(
+            x)
+    logits = tf.layers.Dense(
+        units=1, activation=None, kernel_initializer=kernel_initializer)(
+            x)
+    complexity = tf.constant(1)
+    return Subnetwork(
+        last_layer=x,
+        logits=logits,
+        complexity=complexity,
+        persisted_tensors={})
+
+  def build_subnetwork_train_op(self,
+                                subnetwork,
+                                loss,
+                                var_list,
+                                labels,
+                                iteration_step,
+                                summary,
+                                previous_ensemble=None):
+    optimizer = tf.train.GradientDescentOptimizer(self._learning_rate)
+    return optimizer.minimize(loss=loss, var_list=var_list)
+
+  def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
+                                     iteration_step, summary):
+    return tf.no_op()
+
+  @property
+  def name(self):
+    return "simple_cnn"
+
+
+class EstimatorKerasLayersTest(EstimatorTestCase):
+
+  def test_lifecycle(self):
+    """Train entire estimator lifecycle using XOR dataset."""
+
+    run_config = tf.estimator.RunConfig(tf_random_seed=42)
+    estimator = Estimator(
+        head=_head(),
+        subnetwork_generator=SimpleGenerator(
+            [KerasCNNBuilder(learning_rate=1.)]),
+        max_iteration_steps=3,
+        evaluator=Evaluator(
+            input_fn=tu.dummy_input_fn([[1., 1., .1, .1]], [[0.]]), steps=3),
+        model_dir=self.test_subdirectory,
+        config=run_config)
+
+    xor_features = [[1., 0., 1., 0.], [0., 0., 0., 0.], [0., 1., 0., 1.],
+                    [1., 1., 1., 1.]]
+    xor_labels = [[1.], [0.], [1.], [0.]]
+    train_input_fn = tu.dummy_input_fn(xor_features, xor_labels)
+
+    # Train.
+    estimator.train(input_fn=train_input_fn, max_steps=9)
+
+    # Evaluate.
+    eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
+    tf.logging.info("%s", eval_results)
+    self.assertAlmostEqual(.75, eval_results["accuracy"], places=3)
+    self.assertAlmostEqual(.661, eval_results["loss"], places=3)
+
+    # Predict.
+    predictions = estimator.predict(
+        input_fn=tu.dataset_input_fn(features=[0., 0., 0., 0.], labels=None))
+    for prediction in predictions:
+      self.assertIsNotNone(prediction["classes"])
+      self.assertIsNotNone(prediction["probabilities"])
+
+    # Export SavedModel.
+    def serving_input_fn():
+      """Input fn for serving export, starting from serialized example."""
+      serialized_example = tf.placeholder(
+          dtype=tf.string, shape=(None), name="serialized_example")
+      return tf.estimator.export.ServingInputReceiver(
+          features={"x": tf.constant([[0., 0., 0., 0.]], name="serving_x")},
+          receiver_tensors=serialized_example)
+
+    export_saved_model_fn = getattr(estimator, "export_saved_model", None)
+    if not callable(export_saved_model_fn):
+      export_saved_model_fn = estimator.export_savedmodel
+    export_saved_model_fn(
+        export_dir_base=self.test_subdirectory,
+        serving_input_receiver_fn=serving_input_fn)
+
+
 class EstimatorCallingModelFnDirectlyTest(EstimatorTestCase):
   """Tests b/112108745. Warn users not to call model_fn directly."""
 
