@@ -39,9 +39,9 @@ bazel-bin/adanet/pip_package/build_pip_package /tmp/adanet_pkg
 # Install and test the pip package
 pip install /tmp/adanet_pkg/*.whl
 
+# Finally try importing `adanet` in Python outside the cloned directory:
+cd ..
 python -c "import adanet"
-
-
 
 # Then install the test dependencies
 # pip install -q -e .[tests]
