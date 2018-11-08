@@ -30,5 +30,9 @@ pip install /tmp/adanet_pkg/*.whl
 
 python -c "import adanet"
 
+# Install Bazel for tests.
+sudo apt-get install openjdk-8-jdk bazel
+
+
 # Then install the test dependencies
 # pip install -q -e .[tests]
