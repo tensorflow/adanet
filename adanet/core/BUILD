@@ -42,7 +42,7 @@ py_test(
     name = "estimator_test",
     size = "large",
     srcs = ["estimator_test.py"],
-    shard_count = 20,
+    shard_count = 40,
     srcs_version = "PY2AND3",
     deps = [
         ":ensemble",
