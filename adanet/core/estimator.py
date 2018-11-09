@@ -21,6 +21,7 @@ from __future__ import print_function
 
 from contextlib import contextmanager
 import errno
+import inspect
 import os
 import time
 
@@ -29,6 +30,7 @@ from adanet.core.ensemble import _EnsembleBuilder
 from adanet.core.ensemble import MixtureWeightType
 from adanet.core.freezer import _EnsembleFreezer
 from adanet.core.input_utils import make_placeholder_input_fn
+from adanet.core.input_utils import wrap_input_fn
 from adanet.core.iteration import _IterationBuilder
 from adanet.core.report_accessor import _ReportAccessor
 from adanet.core.summary import _ScopedSummary
@@ -147,8 +149,25 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
     summary_writer.flush()
 
 
-class Estimator(tf.estimator.Estimator):
-  """The AdaNet algorithm implemented with the `tf.estimator.Estimator` API.
+# TODO: raise an exception if use_tpu is True and we are passed a
+# `tf.estimator.RunConfig`.
+def _to_tpu_config(config):
+  """Creates a `tf.contrib.tpu.RunConfig` from a `tf.estimator.RunConfig`."""
+  config = config if config else tf.contrib.tpu.RunConfig()
+  if not isinstance(config, tf.contrib.tpu.RunConfig):
+    # Remove the head of the args list since this is `self`.
+    args = inspect.getargspec(tf.estimator.RunConfig.__init__).args[1:]
+    kwargs = {
+        arg: getattr(config, "_" + arg)
+        for arg in args
+        if hasattr(config, "_" + arg)
+    }
+    config = tf.contrib.tpu.RunConfig().replace(**kwargs)
+  return config
+
+
+class Estimator(tf.contrib.tpu.TPUEstimator):
+  """The AdaNet algorithm implemented with a `tf.contrib.tpu.TPUEstimator` API.
 
   AdaNet is as defined in the paper: https://arxiv.org/abs/1607.01097.
 
@@ -184,7 +203,7 @@ class Estimator(tf.estimator.Estimator):
   performance hit of reconstructing a graph between iterations), while having
   the flexibility of having a dynamic graph.
 
-  NOTE: Subclassing `tf.estimator.Estimator` is only necessary to work with
+  NOTE: Subclassing `tf.contrib.tpu.TPUEstimator` is only necessary to work with
   `tf.estimator.train_and_evaluate` which asserts that the estimator argument is
   a `tf.estimator.Estimator` subclass. However, all training is delegated to a
   separate `tf.estimator.Estimator` instance. It is responsible for supporting
@@ -217,6 +236,7 @@ class Estimator(tf.estimator.Estimator):
                replicate_ensemble_in_training=False,
                adanet_loss_decay=.9,
                worker_wait_timeout_secs=7200,
+               train_batch_size=None,
                model_dir=None,
                report_dir=None,
                config=None):
@@ -320,6 +340,11 @@ class Estimator(tf.estimator.Estimator):
         crashed or been turned down. When the timeout is exceeded, the worker
         exits the train loop. In situations where the chief job is much slower
         than the worker jobs, this timeout should be increased.
+      train_batch_size: An int representing the global training batch size.
+        TPUEstimator transforms this global batch size to a per-shard batch
+        size, as params['batch_size'], when calling input_fn and model_fn.
+        Cannot be None if use_tpu is True. Must be divisible by total number of
+        replicas.
       model_dir: Directory to save model parameters, graph and etc. This can
         also be used to load checkpoints from the directory into a estimator to
         continue training a previously saved model.
@@ -350,7 +375,7 @@ class Estimator(tf.estimator.Estimator):
     # Overwrite superclass's assert that members are not overwritten in order
     # to overwrite public methods. Note that we are doing something that is not
     # explicitly supported by the Estimator API and may break in the future.
-    tf.estimator.Estimator._assert_members_are_not_overridden = staticmethod(
+    tf.estimator.Estimator._assert_members_are_not_overridden = staticmethod(  # pylint: disable=protected-access
         lambda _: None)
 
     self._freezer = _EnsembleFreezer()
@@ -372,16 +397,21 @@ class Estimator(tf.estimator.Estimator):
     # added to `tf.estimator.Estimator` that are expected to be callable by
     # external functions, such as in b/110435640.
     super(Estimator, self).__init__(
-        model_fn=self._model_fn,
+        # NOTE: TPU support is currently not implemented.
+        use_tpu=False,
+        eval_on_tpu=False,
+        export_to_tpu=False,
+        train_batch_size=train_batch_size if train_batch_size else 0,
+        model_fn=self._adanet_model_fn,
         params={
             self._Keys.SUBNETWORK_GENERATOR: subnetwork_generator,
         },
-        config=config,
+        config=_to_tpu_config(config),
         model_dir=model_dir)
 
-    # These are defined after base Estimator's init so that they can
-    # use the same temporary model_dir as the underlying Estimator even if
-    # model_dir is not provided.
+    # These are defined after base Estimator's init so that they can use the
+    # same temporary model_dir as the underlying Estimator even if model_dir
+    # is not provided.
     self._ensemble_builder = _EnsembleBuilder(
         head=head,
         mixture_weight_type=mixture_weight_type,
@@ -451,7 +481,7 @@ class Estimator(tf.estimator.Estimator):
                         current_iteration)
         self._iteration_ended = False
         result = super(Estimator, self).train(
-            input_fn=input_fn,
+            input_fn=wrap_input_fn(input_fn, use_tpu=False),
             hooks=hooks,
             max_steps=max_steps,
             saving_listeners=saving_listeners)
@@ -472,7 +502,8 @@ class Estimator(tf.estimator.Estimator):
           # As the chief, store the train hooks and make a placeholder input_fn
           # in order to use them when preparing the next iteration.
           self._train_hooks = hooks
-          self._placeholder_input_fn = make_placeholder_input_fn(input_fn)
+          self._placeholder_input_fn = make_placeholder_input_fn(
+              wrap_input_fn(input_fn, use_tpu=False))
           self._prepare_next_iteration()
 
         # This inner loop serves mainly for synchronizing the workers with the
@@ -538,7 +569,7 @@ class Estimator(tf.estimator.Estimator):
     self._evaluation_checkpoint_path = checkpoint_path
     self._evaluation_name = name
     result = super(Estimator, self).evaluate(
-        input_fn,
+        input_fn=wrap_input_fn(input_fn, use_tpu=False),
         steps=steps,
         hooks=hooks,
         checkpoint_path=checkpoint_path,
@@ -546,14 +577,30 @@ class Estimator(tf.estimator.Estimator):
     self._evaluation_checkpoint_path = None
     return result
 
+  def predict(self,
+              input_fn,
+              predict_keys=None,
+              hooks=None,
+              checkpoint_path=None,
+              yield_single_examples=True):
+    """See `tf.estimator.Estimator` predict."""
+
+    return super(Estimator, self).predict(
+        input_fn=wrap_input_fn(input_fn, use_tpu=False),
+        predict_keys=predict_keys,
+        hooks=hooks,
+        checkpoint_path=checkpoint_path,
+        yield_single_examples=yield_single_examples)
+
   def _call_adanet_model_fn(self, input_fn, mode, params):
-    """Calls model_fn with the given mode and parameters."""
+    """Calls _adanet_model_fn with the given mode and parameters."""
 
     with tf.Graph().as_default():
       # Create global step before calling model_fn as does superclass.
       tf.train.get_or_create_global_step()
-      features, labels = input_fn()
-      self._model_fn(features, labels, mode, params)
+      wrapped_input_fn = wrap_input_fn(input_fn, use_tpu=False)
+      features, labels = wrapped_input_fn(params)
+      self._adanet_model_fn(features, labels, mode, params)
 
   def _prepare_next_iteration(self):
     """Prepares the next iteration.
@@ -972,7 +1019,7 @@ class Estimator(tf.estimator.Estimator):
 
     return previous_ensemble_reports, all_reports
 
-  def _model_fn(self, features, labels, mode, params):
+  def _adanet_model_fn(self, features, labels, mode, params):
     """AdaNet model_fn.
 
     This model_fn is expected to be called four times per iteration. The first
@@ -998,7 +1045,7 @@ class Estimator(tf.estimator.Estimator):
       params: A dict of parameters.
 
     Returns:
-      A `EstimatorSpec` instance.
+      A `TPUEstimatorSpec` instance.
 
     Raises:
       UserWarning: When calling model_fn directly in TRAIN mode.
@@ -1106,16 +1153,32 @@ class Estimator(tf.estimator.Estimator):
                             current_iteration.estimator_spec.loss)
 
     iteration_estimator_spec = current_iteration.estimator_spec
-    estimator_spec = tf.estimator.EstimatorSpec(
-        mode=mode,
-        predictions=iteration_estimator_spec.predictions,
-        loss=iteration_estimator_spec.loss,
-        train_op=iteration_estimator_spec.train_op,
-        eval_metric_ops=iteration_estimator_spec.eval_metric_ops,
-        training_hooks=self._training_hooks(current_iteration, training),
-        evaluation_hooks=self._evaluation_hooks(current_iteration, training),
-        scaffold=tf.train.Scaffold(summary_op=adanet_summary.merge_all()),
-        export_outputs=iteration_estimator_spec.export_outputs)
+    if mode == tf.estimator.ModeKeys.TRAIN:
+      estimator_spec = tf.contrib.tpu.TPUEstimatorSpec(
+          mode=mode,
+          predictions=iteration_estimator_spec.predictions,
+          loss=iteration_estimator_spec.loss,
+          train_op=iteration_estimator_spec.train_op,
+          eval_metrics=iteration_estimator_spec.eval_metrics,
+          training_hooks=self._training_hooks(current_iteration, training),
+          evaluation_hooks=self._evaluation_hooks(current_iteration, training),
+          # TODO: this is a hack to get scaffolding to work with
+          # TPUEstimator when use_tpu is false. This will not work when we
+          # actually start using TPUs and must be rewritten.
+          scaffold_fn=(
+              lambda: tf.train.Scaffold(summary_op=adanet_summary.merge_all())),
+          export_outputs=iteration_estimator_spec.export_outputs)
+    else:
+      estimator_spec = tf.estimator.EstimatorSpec(
+          mode=mode,
+          predictions=iteration_estimator_spec.predictions,
+          loss=iteration_estimator_spec.loss,
+          train_op=iteration_estimator_spec.train_op,
+          eval_metric_ops=iteration_estimator_spec.eval_metric_ops,
+          training_hooks=self._training_hooks(current_iteration, training),
+          evaluation_hooks=self._evaluation_hooks(current_iteration, training),
+          scaffold=tf.train.Scaffold(summary_op=adanet_summary.merge_all()),
+          export_outputs=iteration_estimator_spec.export_outputs)
 
     if self._Keys.EVALUATE_ENSEMBLES in params:
       self._best_ensemble_index = self._get_best_ensemble_index(

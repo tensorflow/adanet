@@ -739,8 +739,15 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
       estimator_spec = iteration.estimator_spec
       self.assertAllClose(
           want_predictions, sess.run(estimator_spec.predictions), atol=1e-3)
-      self.assertEqual(
-          set(want_eval_metric_ops), set(estimator_spec.eval_metric_ops.keys()))
+      if isinstance(estimator_spec, tf.contrib.tpu.TPUEstimatorSpec):
+        # TPUEstimatorSpec is only returned in train mode and should return no
+        # eval_metric_ops.
+        self.assertEqual(mode, tf.estimator.ModeKeys.TRAIN)
+        self.assertIsNone(estimator_spec.eval_metrics[0]())
+      else:
+        self.assertEqual(
+            set(want_eval_metric_ops),
+            set(estimator_spec.eval_metric_ops.keys()))
       self.assertEqual(want_best_candidate_index,
                        sess.run(iteration.best_candidate_index))
       self.assertEqual(want_is_over, sess.run(iteration.is_over))
