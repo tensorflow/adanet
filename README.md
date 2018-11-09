@@ -1,6 +1,7 @@
 # AdaNet
 
 [![PyPI version](https://badge.fury.io/py/adanet.svg)](https://badge.fury.io/py/adanet)
+[![Travis](https://travis-ci.org/tensorflow/adanet.svg?branch=master)](https://travis-ci.org/tensorflow/adanet)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/tensorflow/adanet/blob/master/LICENSE)
 
 <div align="center">
@@ -25,10 +26,10 @@ To get you started:
 
 Requires [Python](https://www.python.org/) 2.7, 3.4, 3.5, or 3.6.
 
-`adanet` depends on bug fixes and enhancements not present in TensorFlow releases prior to 1.7. You must install or upgrade your TensorFlow package to at least 1.7:
+`adanet` depends on bug fixes and enhancements not present in TensorFlow releases prior to 1.9. You must install or upgrade your TensorFlow package to at least 1.9:
 
 ```shell
-$ pip install "tensorflow>=1.7.0"
+$ pip install "tensorflow>=1.9.0"
 ```
 
 ## Installing with Pip
