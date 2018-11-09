@@ -16,9 +16,6 @@ fi
 # seeing with Python 3
 pip install -q -U numpy
 
-# First ensure that the base dependencies are sufficient for a full import
-# pip install -q -e .
-
 # Install Bazel for tests.
 # Step 1: Install the JDK
 sudo apt-get install openjdk-8-jdk
@@ -42,6 +39,3 @@ pip install /tmp/adanet_pkg/*.whl
 # Finally try importing `adanet` in Python outside the cloned directory:
 cd ..
 python -c "import adanet"
-
-# Then install the test dependencies
-# pip install -q -e .[tests]

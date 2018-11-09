@@ -8,11 +8,11 @@ python:
   - "3.6"
 env:
   global:
-    - TF_LATEST="1.10.*"
+    - TF_LATEST="1.11.*"
   matrix:
     # We test against recent versions of TensorFlow and tf-nightly.
     # If updating, also update TF_LATEST above
-    # TODO(rsepassi): Enable recent versions on release
+    # TODO(weill): Enable recent versions on release
     # - TF_VERSION="1.9.*"
     # - TF_VERSION="1.10.*"
     - TF_VERSION="tf-nightly"
