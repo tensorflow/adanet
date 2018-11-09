@@ -2018,5 +2018,74 @@ class EstimatorReportTest(EstimatorTestCase):
     self.compare_report_lists(want_all_reports, iteration_report["all_reports"])
 
 
+class EstimatorForceGrowTest(EstimatorTestCase):
+  """Tests the force_grow override.
+
+  Uses linear subnetworks with the same seed. They will produce identical
+  outputs, so unless the `force_grow` override is set, none of the new
+  subnetworks will improve the AdaNet objective, and AdaNet will not add them to
+  the ensemble.
+  """
+
+  @parameterized.named_parameters({
+      "testcase_name": "one_builder",
+      "builders": [_LinearBuilder("linear")],
+      "force_grow": False,
+      "want_subnetworks": 2,
+  }, {
+      "testcase_name": "one_builder_force_grow",
+      "builders": [_LinearBuilder("linear")],
+      "force_grow": True,
+      "want_subnetworks": 3,
+  }, {
+      "testcase_name": "two_builders_force_grow",
+      "builders": [_LinearBuilder("linear"),
+                   _LinearBuilder("linear2")],
+      "force_grow": True,
+      "want_subnetworks": 3,
+  }, {
+      "testcase_name":
+          "two_builders_force_grow_with_evaluator",
+      "builders": [_LinearBuilder("linear"),
+                   _LinearBuilder("linear2")],
+      "force_grow":
+          True,
+      "evaluator":
+          Evaluator(input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1),
+      "want_subnetworks":
+          3,
+  })
+  def test_force_grow(self,
+                      builders,
+                      force_grow,
+                      want_subnetworks,
+                      evaluator=None):
+    """Train entire estimator lifecycle using XOR dataset."""
+
+    run_config = tf.estimator.RunConfig(tf_random_seed=42)
+    subnetwork_generator = SimpleGenerator(builders)
+    estimator = Estimator(
+        head=_head(),
+        subnetwork_generator=subnetwork_generator,
+        max_iteration_steps=1,
+        evaluator=evaluator,
+        force_grow=force_grow,
+        model_dir=self.test_subdirectory,
+        config=run_config)
+
+    xor_features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
+    xor_labels = [[1.], [0.], [1.], [0.]]
+    train_input_fn = tu.dummy_input_fn(xor_features, xor_labels)
+
+    # Train for four iterations.
+    estimator.train(input_fn=train_input_fn, max_steps=4)
+
+    # Evaluate.
+    eval_results = estimator.evaluate(input_fn=train_input_fn, steps=1)
+    self.assertEqual(
+        want_subnetworks,
+        str(eval_results["architecture/adanet/ensembles"]).count("linear"))
+
+
 if __name__ == "__main__":
   tf.test.main()

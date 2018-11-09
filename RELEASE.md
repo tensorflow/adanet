@@ -15,6 +15,7 @@ limitations under the License.
 
 # Current version (0.4.0-dev)
  * Under development.
+ * Provide an override to force the AdaNet ensemble to grow at the end of each iteration.
 
 # Release 0.3.0
  * Add official support for `tf.keras.layers`.

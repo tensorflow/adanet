@@ -213,6 +213,7 @@ class Estimator(tf.estimator.Estimator):
                evaluator=None,
                report_materializer=None,
                use_bias=False,
+               force_grow=False,
                replicate_ensemble_in_training=False,
                adanet_loss_decay=.9,
                worker_wait_timeout_secs=7200,
@@ -287,6 +288,14 @@ class Estimator(tf.estimator.Estimator):
       use_bias: Whether to add a bias term to the ensemble's logits. Adding a
         bias allows the ensemble to learn a shift in the data, often leading to
         more stable training and better predictions.
+      force_grow: Boolean override that forces the ensemble to grow by one
+        subnetwork at the end of each iteration. Normally at the end of each
+        iteration, AdaNet selects the best candidate ensemble according to its
+        performance on the AdaNet objective. In some cases, the best ensemble is
+        the `previous_ensemble` as opposed to one that includes a newly trained
+        subnetwork. When `True`, the algorithm will not select the
+        `previous_ensemble` as the best candidate, and will ensure that after n
+        iterations the final ensemble is composed of n subnetworks.
       replicate_ensemble_in_training: Whether to freeze a copy of the ensembled
         subnetworks' subgraphs in training mode in addition to prediction mode.
         A copy of the subnetworks' subgraphs is always saved in prediction mode
@@ -350,6 +359,7 @@ class Estimator(tf.estimator.Estimator):
     self._report_materializer = report_materializer
 
     self._replicate_ensemble_in_training = replicate_ensemble_in_training
+    self._force_grow = force_grow
     self._worker_wait_timeout_secs = worker_wait_timeout_secs
 
     self._evaluation_name = None
@@ -688,11 +698,22 @@ class Estimator(tf.estimator.Estimator):
       Index of the best ensemble in the iteration's list of `_Candidates`.
     """
 
+    # Skip the evaluation phase when there is only one candidate subnetwork.
     if len(current_iteration.candidates) == 1:
       tf.logging.info(
           "As the only candidate, '%s' is moving onto the next iteration.",
           current_iteration.candidates[0].ensemble_spec.name)
       return 0
+
+    # The zero-th index candidate at iteration t>0 is always the
+    # previous_ensemble.
+    if current_iteration.number > 0 and self._force_grow and (len(
+        current_iteration.candidates) == 2):
+      tf.logging.info(
+          "As the only candidate with `force_grow` enabled, '%s' is moving"
+          "onto the next iteration.",
+          current_iteration.candidates[1].ensemble_spec.name)
+      return 1
 
     latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
     tf.logging.info("Starting ensemble evaluation for iteration %s",
@@ -718,14 +739,24 @@ class Estimator(tf.estimator.Estimator):
           values.append("{}/{} = {:.6f}".format(metric_name, ensemble_name,
                                                 adanet_losses[i]))
         tf.logging.info("Computed ensemble metrics: %s", ", ".join(values))
-        index = np.argmin(adanet_losses)
       else:
-        index = sess.run(current_iteration.best_candidate_index)
-    best_candidate = current_iteration.candidates[index]
+        adanet_losses = sess.run(
+            [c.adanet_loss for c in current_iteration.candidates])
+      if self._force_grow and current_iteration.number > 0:
+        tf.logging.info(
+            "The `force_grow` override is enabled, so the "
+            "the performance of the previous ensemble will be ignored.")
+        # NOTE: The zero-th index candidate at iteration t>0 is always the
+        # previous_ensemble.
+        adanet_losses = adanet_losses[1:]
+        index = np.argmin(adanet_losses) + 1
+      else:
+        index = np.argmin(adanet_losses)
     tf.logging.info("Finished ensemble evaluation for iteration %s",
                     current_iteration.number)
     tf.logging.info("'%s' at index %s is moving onto the next iteration",
-                    best_candidate.ensemble_spec.name, index)
+                    current_iteration.candidates[index].ensemble_spec.name,
+                    index)
     return index
 
   def _materialize_report(self, current_iteration):
