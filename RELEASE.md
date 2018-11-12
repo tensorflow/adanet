@@ -16,6 +16,7 @@ limitations under the License.
 # Current version (0.4.0-dev)
  * Under development.
  * Provide an override to force the AdaNet ensemble to grow at the end of each iteration.
+ * Correctly seed TensorFlow graph between iterations. This breaks some tests that check the outputs of `adanet.Estimator` models.
 
 # Release 0.3.0
  * Add official support for `tf.keras.layers`.

@@ -596,6 +596,7 @@ class Estimator(tf.contrib.tpu.TPUEstimator):
     """Calls _adanet_model_fn with the given mode and parameters."""
 
     with tf.Graph().as_default():
+      tf.set_random_seed(self.config.tf_random_seed)
       # Create global step before calling model_fn as does superclass.
       tf.train.get_or_create_global_step()
       wrapped_input_fn = wrap_input_fn(input_fn, use_tpu=False)

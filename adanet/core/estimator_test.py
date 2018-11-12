@@ -354,7 +354,7 @@ class EstimatorTest(EstimatorTestCase):
       "max_iteration_steps": 200,
       "max_steps": 300,
       "want_accuracy": 1.,
-      "want_loss": .00834,
+      "want_loss": .27956,
   }, {
       "testcase_name": "single_builder_steps",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
@@ -362,14 +362,14 @@ class EstimatorTest(EstimatorTestCase):
       "steps": 300,
       "max_steps": None,
       "want_accuracy": 1.,
-      "want_loss": .00834,
+      "want_loss": .27956,
   }, {
       "testcase_name": "single_builder_no_bias",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
       "max_iteration_steps": 200,
       "use_bias": False,
       "want_accuracy": .75,
-      "want_loss": .36746,
+      "want_loss": .44464,
   }, {
       "testcase_name":
           "single_builder_scalar_mixture_weight",
@@ -382,7 +382,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          3.1415e-6,
+          .09449,
   }, {
       "testcase_name":
           "single_builder_vector_mixture_weight",
@@ -395,22 +395,22 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          3.1415e-6,
+          .09449,
   }, {
       "testcase_name": "single_builder_replicate_ensemble_in_training",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
       "replicate_ensemble_in_training": True,
       "max_iteration_steps": 200,
       "max_steps": 300,
-      "want_accuracy": 1.,
-      "want_loss": .14729,
+      "want_accuracy": .75,
+      "want_loss": 2.27981,
   }, {
       "testcase_name": "single_builder_with_hook",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
       "max_iteration_steps": 200,
       "hooks": [_ModifierSessionRunHook()],
       "want_accuracy": 1.,
-      "want_loss": .00834,
+      "want_loss": .27956,
   }, {
       "testcase_name": "high_max_iteration_steps",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
@@ -428,7 +428,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00834,
+          .00912,
   }, {
       "testcase_name":
           "two_builders_different_layer_sizes",
@@ -441,7 +441,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00176,
+          .00178,
   }, {
       "testcase_name":
           "two_builders_different_layer_sizes_three_iterations",
@@ -454,7 +454,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00160,
+          .00159,
   }, {
       "testcase_name":
           "width_limiting_builder_no_pruning",
@@ -465,7 +465,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00330,
+          .13983,
   }, {
       "testcase_name":
           "width_limiting_builder_some_pruning",
@@ -475,9 +475,9 @@ class EstimatorTest(EstimatorTestCase):
       "max_iteration_steps":
           75,
       "want_accuracy":
-          1.,
+          .75,
       "want_loss":
-          .01078,
+          .41644,
   }, {
       "testcase_name":
           "width_limiting_builder_prune_all",
@@ -487,9 +487,9 @@ class EstimatorTest(EstimatorTestCase):
       "max_iteration_steps":
           75,
       "want_accuracy":
-          1.,
+          .75,
       "want_loss":
-          .01816,
+          .44568,
   }, {
       "testcase_name":
           "width_limiting_builder_mixed",
@@ -504,7 +504,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00330,
+          .13983,
   }, {
       "testcase_name":
           "evaluator_good_input",
@@ -519,7 +519,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00176,
+          .00178,
   }, {
       "testcase_name":
           "evaluator_bad_input",
@@ -534,7 +534,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00834,
+          .00786,
   }, {
       "testcase_name":
           "report_materializer",
@@ -550,7 +550,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00176,
+          .00178,
   })
   def test_lifecycle(self,
                      subnetwork_generator,
@@ -827,8 +827,8 @@ class EstimatorKerasLayersTest(EstimatorTestCase):
     # Evaluate.
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
     tf.logging.info("%s", eval_results)
-    self.assertAlmostEqual(.75, eval_results["accuracy"], places=3)
-    self.assertAlmostEqual(.661, eval_results["loss"], places=3)
+    self.assertAlmostEqual(.5, eval_results["accuracy"], places=3)
+    self.assertAlmostEqual(.69437, eval_results["loss"], places=3)
 
     # Predict.
     predictions = estimator.predict(
@@ -2031,18 +2031,18 @@ class EstimatorForceGrowTest(EstimatorTestCase):
       "testcase_name": "one_builder",
       "builders": [_LinearBuilder("linear")],
       "force_grow": False,
-      "want_subnetworks": 2,
+      "want_subnetworks": 1,
   }, {
       "testcase_name": "one_builder_force_grow",
       "builders": [_LinearBuilder("linear")],
       "force_grow": True,
-      "want_subnetworks": 3,
+      "want_subnetworks": 2,
   }, {
       "testcase_name": "two_builders_force_grow",
       "builders": [_LinearBuilder("linear"),
                    _LinearBuilder("linear2")],
       "force_grow": True,
-      "want_subnetworks": 3,
+      "want_subnetworks": 2,
   }, {
       "testcase_name":
           "two_builders_force_grow_with_evaluator",
@@ -2053,7 +2053,7 @@ class EstimatorForceGrowTest(EstimatorTestCase):
       "evaluator":
           Evaluator(input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1),
       "want_subnetworks":
-          3,
+          2,
   })
   def test_force_grow(self,
                       builders,
@@ -2078,7 +2078,7 @@ class EstimatorForceGrowTest(EstimatorTestCase):
     train_input_fn = tu.dummy_input_fn(xor_features, xor_labels)
 
     # Train for four iterations.
-    estimator.train(input_fn=train_input_fn, max_steps=4)
+    estimator.train(input_fn=train_input_fn, max_steps=3)
 
     # Evaluate.
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=1)
