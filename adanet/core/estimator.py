@@ -162,7 +162,12 @@ def _to_tpu_config(config):
         for arg in args
         if hasattr(config, "_" + arg)
     }
-    config = tf.contrib.tpu.RunConfig().replace(**kwargs)
+    # tpu.RunConfig defaults evaluation_master=master if it is not explicitly
+    # set. However, this breaks checks that evaluation_master matches the
+    # TF_CONFIG environment variable. To avoid this, we explicitly set
+    # evaluation_master.
+    config = tf.contrib.tpu.RunConfig(
+        evaluation_master=config.evaluation_master).replace(**kwargs)
   return config
 
 
