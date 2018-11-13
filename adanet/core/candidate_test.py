@@ -19,6 +19,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import contextlib
+
 from absl.testing import parameterized
 from adanet.core.candidate import _Candidate
 from adanet.core.candidate import _CandidateBuilder
@@ -61,6 +63,20 @@ class CandidateTest(parameterized.TestCase, tf.test.TestCase):
     with self.test_session():
       with self.assertRaises(ValueError):
         _Candidate(ensemble_spec, adanet_loss, is_training)
+
+
+class _FakeSummary(object):
+  """A fake adanet.Summary."""
+
+  def scalar(self, name, tensor, family=None):
+    del name
+    del tensor
+    del family
+    return "fake_scalar"
+
+  @contextlib.contextmanager
+  def current_scope(self):
+    yield
 
 
 class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
@@ -145,7 +161,7 @@ class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
         ensemble_spec=fake_ensemble_spec,
         training=training,
         iteration_step=iteration_step,
-        summary=tf.summary,
+        summary=_FakeSummary(),
         is_previous_best=is_previous_best)
     with self.test_session() as sess:
       sess.run(tf.global_variables_initializer())

@@ -20,6 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 import abc
+import contextlib
 
 import tensorflow as tf
 
@@ -160,6 +161,38 @@ class Summary(object):
     """
 
 
+def _strip_scope(name, scope, additional_scope):
+  """Returns the name with scope stripped from it."""
+
+  if additional_scope:
+    name = name.replace("{}/".format(additional_scope), "")
+  if scope:
+    name = name.replace("{}/".format(scope), "", 1)
+  return name
+
+
+def _strip_tag_scope(summary_tensor, scope, additional_scope):
+  """Returns a summary `Tensor` with scope stripped from the tag."""
+
+  if not scope and not additional_scope:
+    return summary_tensor
+
+  def _strip_serialized(serialized):
+    summ = tf.summary.Summary()
+    summ.ParseFromString(serialized)
+    summary = summ
+    for value in summary.value:
+      value.tag = _strip_scope(value.tag, scope, additional_scope)
+    return summary.SerializeToString()
+
+  return tf.py_func(
+      _strip_serialized,
+      inp=[summary_tensor],
+      Tout=tf.string,
+      stateful=False,
+      name="strip_tag_scope")
+
+
 class _ScopedSummary(Summary):
   """Records summaries in a given scope.
 
@@ -183,13 +216,26 @@ class _ScopedSummary(Summary):
     """
 
     self._scope = scope
+    self._additional_scope = None
     self._skip_summary = skip_summary
+    self._actual_summary_scalar_fn = tf.summary.scalar
+    self._actual_summary_image_fn = tf.summary.image
+    self._actual_summary_histogram_fn = tf.summary.histogram
+    self._actual_summary_audio_fn = tf.summary.audio
 
   @property
   def scope(self):
     """Returns scope string."""
 
     return self._scope
+
+  @contextlib.contextmanager
+  def current_scope(self):
+    """Registers the current context's scope to strip it from summary tags."""
+
+    self._additional_scope = tf.get_default_graph().get_name_scope()
+    yield
+    self._additional_scope = None
 
   def _collection_name(self):
     """Returns the collection for recording."""
@@ -213,12 +259,13 @@ class _ScopedSummary(Summary):
     if self._skip_summary:
       return tf.constant("")
 
-    summary = tf.summary.scalar(
+    summary = self._actual_summary_scalar_fn(
         name=self._prefix_scope(name),
         tensor=tensor,
         family=family,
         collections=[self._TMP_COLLECTION_NAME])
-    stripped_summary = self._strip_tag_scope(summary)
+    stripped_summary = _strip_tag_scope(summary, self.scope,
+                                        self._additional_scope)
     tf.add_to_collection(self._collection_name(), stripped_summary)
     return stripped_summary
 
@@ -228,13 +275,14 @@ class _ScopedSummary(Summary):
     if self._skip_summary:
       return tf.constant("")
 
-    summary = tf.summary.image(
+    summary = self._actual_summary_image_fn(
         name=self._prefix_scope(name),
         tensor=tensor,
         max_outputs=max_outputs,
         family=family,
         collections=[self._TMP_COLLECTION_NAME])
-    stripped_summary = self._strip_tag_scope(summary)
+    stripped_summary = _strip_tag_scope(summary, self.scope,
+                                        self._additional_scope)
     tf.add_to_collection(self._collection_name(), stripped_summary)
     return stripped_summary
 
@@ -244,12 +292,13 @@ class _ScopedSummary(Summary):
     if self._skip_summary:
       return tf.constant("")
 
-    summary = tf.summary.histogram(
+    summary = self._actual_summary_histogram_fn(
         name=self._prefix_scope(name),
         values=values,
         family=family,
         collections=[self._TMP_COLLECTION_NAME])
-    stripped_summary = self._strip_tag_scope(summary)
+    stripped_summary = _strip_tag_scope(summary, self.scope,
+                                        self._additional_scope)
     tf.add_to_collection(self._collection_name(), stripped_summary)
     return stripped_summary
 
@@ -259,42 +308,17 @@ class _ScopedSummary(Summary):
     if self._skip_summary:
       return tf.constant("")
 
-    summary = tf.summary.audio(
+    summary = self._actual_summary_audio_fn(
         name=self._prefix_scope(name),
         tensor=tensor,
         sample_rate=sample_rate,
         max_outputs=max_outputs,
         family=family,
         collections=[self._TMP_COLLECTION_NAME])
-    stripped_summary = self._strip_tag_scope(summary)
+    stripped_summary = _strip_tag_scope(summary, self.scope,
+                                        self._additional_scope)
     tf.add_to_collection(self._collection_name(), stripped_summary)
     return stripped_summary
-
-  def _strip_scope(self, name):
-    """Returns the name with scope stripped from it."""
-
-    return name.replace("{}/".format(self._scope), "")
-
-  def _strip_tag_scope(self, summary_tensor):
-    """Returns a summary `Tensor` with scope stripped from the tag."""
-
-    if not self._scope:
-      return summary_tensor
-
-    def _strip_serialized(serialized):
-      summ = tf.summary.Summary()
-      summ.ParseFromString(serialized)
-      summary = summ
-      for value in summary.value:
-        value.tag = self._strip_scope(value.tag)
-      return summary.SerializeToString()
-
-    return tf.py_func(
-        _strip_serialized,
-        inp=[summary_tensor],
-        Tout=tf.string,
-        stateful=False,
-        name="strip_tag_scope")
 
   def merge_all(self):
     """Returns a merged summary op."""

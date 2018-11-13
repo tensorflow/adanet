@@ -146,7 +146,7 @@ class _CandidateBuilder(object):
         with tf.control_dependencies([update_adanet_loss_op]):
           adanet_loss = adanet_loss.read_value()
 
-      with tf.name_scope(""):
+      with summary.current_scope():
         summary.scalar(
             "complexity_regularization/adanet/adanet_weighted_ensemble",
             ensemble_spec.complexity_regularization)

@@ -19,6 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import contextlib
 import os
 import shutil
 
@@ -27,6 +28,7 @@ from adanet.core.ensemble import _EnsembleBuilder
 from adanet.core.ensemble import MixtureWeightType
 from adanet.core.subnetwork import Builder
 from adanet.core.subnetwork import Subnetwork
+from adanet.core.summary import Summary
 import adanet.core.testing_utils as tu
 import tensorflow as tf
 
@@ -96,6 +98,26 @@ class _BuilderPrunerLeaveOne(_Builder):
     if previous_ensemble:
       return [0]
     return []
+
+
+class _FakeSummary(Summary):
+  """A fake adanet.Summary."""
+
+  def scalar(self, name, tensor, family=None):
+    return "fake_scalar"
+
+  def image(self, name, tensor, max_outputs=3, family=None):
+    return "fake_image"
+
+  def histogram(self, name, values, family=None):
+    return "fake_histogram"
+
+  def audio(self, name, tensor, sample_rate, max_outputs=3, family=None):
+    return "fake_audio"
+
+  @contextlib.contextmanager
+  def current_scope(self):
+    yield
 
 
 class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
@@ -261,7 +283,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
         subnetwork_builder=subnetwork_builder_class(
             _subnetwork_train_op_fn, _mixture_weights_train_op_fn,
             use_logits_last_layer, seed),
-        summary=tf.summary,
+        summary=_FakeSummary(),
         features=features,
         iteration_step=tf.train.get_or_create_global_step(),
         labels=labels,

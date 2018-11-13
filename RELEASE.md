@@ -15,6 +15,7 @@ limitations under the License.
 
 # Current version (0.4.0-dev)
  * Under development.
+ * Summaries will automatically scope themselves to the current subnetwork's scope. Similar summaries will now be correctly grouped together correctly across subnetworks in TensorBoard. This eliminates the need for the `tf.name_scope("")` hack.
  * Provide an override to force the AdaNet ensemble to grow at the end of each iteration.
  * Correctly seed TensorFlow graph between iterations. This breaks some tests that check the outputs of `adanet.Estimator` models.
 

@@ -105,8 +105,7 @@ class _DNNBuilder(Builder):
           logits_dimension,
           kernel_initializer=tf.glorot_uniform_initializer(seed=seed))
 
-    with tf.name_scope(""):
-      summary.scalar("scalar", 3)
+    summary.scalar("scalar", 3)
 
     return Subnetwork(
         last_layer=last_layer if self._return_penultimate_layer else logits,

@@ -321,23 +321,25 @@ class _EnsembleBuilder(object):
                                                        ensemble.bias.op.name))
         else:
           bias = self._create_bias(self._head.logits_dimension)
-          tf.logging.info("Builder '%s' is using a subset of the subnetworks "
-                          "from the previous ensemble, so its ensemble's bias "
-                          "term will not be warm started with the previous "
-                          "ensemble's bias.", subnetwork_builder.name)
+          tf.logging.info(
+              "Builder '%s' is using a subset of the subnetworks "
+              "from the previous ensemble, so its ensemble's bias "
+              "term will not be warm started with the previous "
+              "ensemble's bias.", subnetwork_builder.name)
       else:
         bias = self._create_bias(self._head.logits_dimension)
 
       with tf.variable_scope("weighted_subnetwork_{}".format(subnetwork_index)):
         with tf.variable_scope("subnetwork"):
           trainable_vars_before = tf.trainable_variables()
-          subnetwork = subnetwork_builder.build_subnetwork(
-              features=features,
-              logits_dimension=self._head.logits_dimension,
-              training=mode == tf.estimator.ModeKeys.TRAIN,
-              iteration_step=iteration_step,
-              summary=summary,
-              previous_ensemble=ensemble)
+          with summary.current_scope():
+            subnetwork = subnetwork_builder.build_subnetwork(
+                features=features,
+                logits_dimension=self._head.logits_dimension,
+                training=mode == tf.estimator.ModeKeys.TRAIN,
+                iteration_step=iteration_step,
+                summary=summary,
+                previous_ensemble=ensemble)
           trainable_vars_after = tf.trainable_variables()
           var_list = list(
               set(trainable_vars_after) - set(trainable_vars_before))
@@ -413,7 +415,7 @@ class _EnsembleBuilder(object):
       for logits in subnetwork_logits:
         ensemble_logits = tf.add(ensemble_logits, logits)
 
-    with tf.name_scope(""):
+    with summary.current_scope():
       summary.histogram("mixture_weights/adanet/adanet_weighted_ensemble",
                         weights)
       for iteration, weight in enumerate(weights):
@@ -476,7 +478,7 @@ class _EnsembleBuilder(object):
         eval_metric_ops["{}/adanet/subnetwork".format(metric)] = ops
       eval_metric_ops["architecture/adanet/ensembles"] = (
           _architecture_as_metric(weighted_subnetworks))
-      with tf.name_scope(""):
+      with summary.current_scope():
         summary.scalar("loss/adanet/adanet_weighted_ensemble",
                        adanet_weighted_ensemble_spec.loss)
         summary.scalar("loss/adanet/subnetwork", subnetwork_spec.loss)
@@ -489,15 +491,16 @@ class _EnsembleBuilder(object):
         previous_ensemble = None
         if previous_ensemble_spec:
           previous_ensemble = previous_ensemble_spec.ensemble
-        subnetwork_train_op = (
-            subnetwork_builder.build_subnetwork_train_op(
-                subnetwork=new_subnetwork,
-                loss=subnetwork_spec.loss,
-                var_list=var_list,
-                labels=labels,
-                iteration_step=iteration_step,
-                summary=summary,
-                previous_ensemble=previous_ensemble))
+        with summary.current_scope():
+          subnetwork_train_op = (
+              subnetwork_builder.build_subnetwork_train_op(
+                  subnetwork=new_subnetwork,
+                  loss=subnetwork_spec.loss,
+                  var_list=var_list,
+                  labels=labels,
+                  iteration_step=iteration_step,
+                  summary=summary,
+                  previous_ensemble=previous_ensemble))
       # Note that these mixture weights are on top of the last_layer of the
       # subnetwork constructed in TRAIN mode, which means that dropout is
       # still applied when the mixture weights are being trained.
@@ -505,13 +508,14 @@ class _EnsembleBuilder(object):
       if self._use_bias:
         ensemble_var_list.insert(0, bias)
       with tf.variable_scope("train_mixture_weights"):
-        ensemble_train_op = subnetwork_builder.build_mixture_weights_train_op(
-            loss=adanet_loss,
-            var_list=ensemble_var_list,
-            logits=ensemble_logits,
-            labels=labels,
-            iteration_step=iteration_step,
-            summary=summary)
+        with summary.current_scope():
+          ensemble_train_op = subnetwork_builder.build_mixture_weights_train_op(
+              loss=adanet_loss,
+              var_list=ensemble_var_list,
+              logits=ensemble_logits,
+              labels=labels,
+              iteration_step=iteration_step,
+              summary=summary)
       train_op = tf.group(subnetwork_train_op, ensemble_train_op)
 
     return _EnsembleSpec(
