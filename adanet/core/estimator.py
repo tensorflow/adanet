@@ -21,7 +21,6 @@ from __future__ import print_function
 
 from contextlib import contextmanager
 import errno
-import inspect
 import os
 import time
 
@@ -33,6 +32,7 @@ from adanet.core.input_utils import make_placeholder_input_fn
 from adanet.core.input_utils import wrap_input_fn
 from adanet.core.iteration import _IterationBuilder
 from adanet.core.report_accessor import _ReportAccessor
+from adanet.core.run_config_utils import to_tpu_run_config
 from adanet.core.summary import _ScopedSummary
 from adanet.core.timer import _CountDownTimer
 import numpy as np
@@ -147,28 +147,6 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
             "or a serialized string of Summary.", key)
     summary_writer.add_summary(summary_proto, current_global_step)
     summary_writer.flush()
-
-
-# TODO: raise an exception if use_tpu is True and we are passed a
-# `tf.estimator.RunConfig`.
-def _to_tpu_config(config):
-  """Creates a `tf.contrib.tpu.RunConfig` from a `tf.estimator.RunConfig`."""
-  config = config if config else tf.contrib.tpu.RunConfig()
-  if not isinstance(config, tf.contrib.tpu.RunConfig):
-    # Remove the head of the args list since this is `self`.
-    args = inspect.getargspec(tf.estimator.RunConfig.__init__).args[1:]
-    kwargs = {
-        arg: getattr(config, "_" + arg)
-        for arg in args
-        if hasattr(config, "_" + arg)
-    }
-    # tpu.RunConfig defaults evaluation_master=master if it is not explicitly
-    # set. However, this breaks checks that evaluation_master matches the
-    # TF_CONFIG environment variable. To avoid this, we explicitly set
-    # evaluation_master.
-    config = tf.contrib.tpu.RunConfig(
-        evaluation_master=config.evaluation_master).replace(**kwargs)
-  return config
 
 
 class Estimator(tf.contrib.tpu.TPUEstimator):
@@ -411,7 +389,7 @@ class Estimator(tf.contrib.tpu.TPUEstimator):
         params={
             self._Keys.SUBNETWORK_GENERATOR: subnetwork_generator,
         },
-        config=_to_tpu_config(config),
+        config=to_tpu_run_config(config),
         model_dir=model_dir)
 
     # These are defined after base Estimator's init so that they can use the
