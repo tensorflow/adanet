@@ -20,8 +20,13 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import contextlib
+import functools
+import inspect
 
 import tensorflow as tf
+from tensorflow.python.summary import summary as summary_lib
+from tensorflow.python.training import training_util
 
 
 class WeightedSubnetwork(
@@ -192,6 +197,67 @@ def _architecture_as_metric(weighted_subnetworks):
   return (architecture_summary, tf.no_op())
 
 
+@contextlib.contextmanager
+def _subnetwork_context(iteration_step_scope, scoped_summary):
+  """Monkey-patches global attributes with subnetwork-specifics ones."""
+
+  old_get_global_step_fn = tf.train.get_global_step
+  old_get_or_create_global_step_fn = tf.train.get_or_create_global_step
+  old_summary_scalar = summary_lib.scalar
+  old_summary_image = summary_lib.image
+  old_summary_histogram = summary_lib.histogram
+  old_summary_audio = summary_lib.audio
+
+  def iteration_step():
+    with tf.variable_scope(iteration_step_scope, reuse=tf.AUTO_REUSE):
+      return tf.get_variable(
+          "iteration_step",
+          shape=[],
+          initializer=tf.zeros_initializer(),
+          trainable=False,
+          dtype=tf.int64)
+
+  # Monkey-patch global attributes.
+  tf.summary.scalar = scoped_summary.scalar
+  tf.summary.image = scoped_summary.image
+  tf.summary.histogram = scoped_summary.histogram
+  tf.summary.audio = scoped_summary.audio
+  summary_lib.scalar = scoped_summary.scalar
+  summary_lib.image = scoped_summary.image
+  summary_lib.histogram = scoped_summary.histogram
+  summary_lib.audio = scoped_summary.audio
+  tf.train.get_global_step = iteration_step
+  tf.train.get_or_create_global_step = iteration_step
+  training_util.get_global_step = iteration_step
+  training_util.get_or_create_global_step = iteration_step
+
+  yield
+
+  # Revert monkey-patches.
+  training_util.get_or_create_global_step = old_get_or_create_global_step_fn
+  training_util.get_global_step = old_get_global_step_fn
+  tf.train.get_or_create_global_step = old_get_or_create_global_step_fn
+  tf.train.get_global_step = old_get_global_step_fn
+  summary_lib.audio = old_summary_audio
+  summary_lib.histogram = old_summary_histogram
+  summary_lib.image = old_summary_image
+  summary_lib.scalar = old_summary_scalar
+  tf.summary.audio = old_summary_audio
+  tf.summary.histogram = old_summary_histogram
+  tf.summary.image = old_summary_image
+  tf.summary.scalar = old_summary_scalar
+
+
+def _clear_trainable_variables():
+  del tf.get_collection_ref(tf.GraphKeys.TRAINABLE_VARIABLES)[:]
+
+
+def _set_trainable_variables(var_list):
+  _clear_trainable_variables()
+  for var in var_list:
+    tf.add_to_collections(tf.GraphKeys.TRAINABLE_VARIABLES, var)
+
+
 class _EnsembleBuilder(object):
   """Builds `Ensemble` instances."""
 
@@ -329,20 +395,31 @@ class _EnsembleBuilder(object):
       else:
         bias = self._create_bias(self._head.logits_dimension)
 
+      ensemble_scope = tf.get_variable_scope()
+
       with tf.variable_scope("weighted_subnetwork_{}".format(subnetwork_index)):
         with tf.variable_scope("subnetwork"):
-          trainable_vars_before = tf.trainable_variables()
-          with summary.current_scope():
-            subnetwork = subnetwork_builder.build_subnetwork(
-                features=features,
-                logits_dimension=self._head.logits_dimension,
-                training=mode == tf.estimator.ModeKeys.TRAIN,
-                iteration_step=iteration_step,
-                summary=summary,
-                previous_ensemble=ensemble)
-          trainable_vars_after = tf.trainable_variables()
-          var_list = list(
-              set(trainable_vars_after) - set(trainable_vars_before))
+          _clear_trainable_variables()
+          build_subnetwork = functools.partial(
+              subnetwork_builder.build_subnetwork,
+              features=features,
+              logits_dimension=self._head.logits_dimension,
+              training=mode == tf.estimator.ModeKeys.TRAIN,
+              iteration_step=iteration_step,
+              summary=summary,
+              previous_ensemble=ensemble)
+          # Check which args are in the implemented build_subnetwork method
+          # signature for backwards compatibility.
+          defined_args = inspect.getargspec(
+              subnetwork_builder.build_subnetwork).args
+          if "labels" in defined_args:
+            build_subnetwork = functools.partial(
+                build_subnetwork, labels=labels)
+          with summary.current_scope(), _subnetwork_context(
+              iteration_step_scope=ensemble_scope, scoped_summary=summary):
+            tf.logging.info("Building subnetwork '%s'", subnetwork_builder.name)
+            subnetwork = build_subnetwork()
+          var_list = tf.trainable_variables()
         weighted_subnetworks.append(
             self._build_weighted_subnetwork(
                 tf.constant(subnetwork_builder.name, name="name"), subnetwork,
@@ -487,11 +564,15 @@ class _EnsembleBuilder(object):
 
     train_op = None
     if mode == tf.estimator.ModeKeys.TRAIN and subnetwork_builder:
+      ensemble_scope = tf.get_variable_scope()
+      _set_trainable_variables(var_list)
       with tf.variable_scope("train_subnetwork"):
         previous_ensemble = None
         if previous_ensemble_spec:
           previous_ensemble = previous_ensemble_spec.ensemble
-        with summary.current_scope():
+
+        with summary.current_scope(), _subnetwork_context(
+            iteration_step_scope=ensemble_scope, scoped_summary=summary):
           subnetwork_train_op = (
               subnetwork_builder.build_subnetwork_train_op(
                   subnetwork=new_subnetwork,
@@ -507,8 +588,11 @@ class _EnsembleBuilder(object):
       ensemble_var_list = [w.weight for w in weighted_subnetworks]
       if self._use_bias:
         ensemble_var_list.insert(0, bias)
+      _set_trainable_variables(ensemble_var_list)
+      ensemble_scope = tf.get_variable_scope()
       with tf.variable_scope("train_mixture_weights"):
-        with summary.current_scope():
+        with summary.current_scope(), _subnetwork_context(
+            iteration_step_scope=ensemble_scope, scoped_summary=summary):
           ensemble_train_op = subnetwork_builder.build_mixture_weights_train_op(
               loss=adanet_loss,
               var_list=ensemble_var_list,
@@ -601,10 +685,13 @@ class _EnsembleBuilder(object):
         weight_shape = [last_layer_size, logits_dimension]
 
     with tf.variable_scope("logits"):
+      # Mark as not trainable to not add to the TRAINABLE_VARIABLES collection.
+      # Training is handled explicitly with var_lists.
       weight = tf.get_variable(
           name="mixture_weight",
           shape=weight_shape,
-          initializer=weight_initializer)
+          initializer=weight_initializer,
+          trainable=False)
       if self._mixture_weight_type == MixtureWeightType.MATRIX:
         # TODO: Add Unit tests for the ndims == 3 path.
         if ndims > 3:
@@ -648,5 +735,7 @@ class _EnsembleBuilder(object):
     if prior is None:
       prior = tf.zeros_initializer()
       shape = logits_dimension
+    # Mark as not trainable to not add to the TRAINABLE_VARIABLES collection.
+    # Training is handled explicitly with var_lists.
     return tf.get_variable(
-        name="bias", shape=shape, initializer=prior, trainable=self._use_bias)
+        name="bias", shape=shape, initializer=prior, trainable=False)

@@ -15,6 +15,11 @@ limitations under the License.
 
 # Current version (0.4.0-dev)
  * Under development.
+ * Add `adanet.AutoEnsembleEstimator` for learning to ensemble `tf.estimator.Estimator` instances.
+ * Pass labels to `adanet.subnetwork.Builder`'s `build_subnetwork` method.
+ * The TRAINABLE_VARIABLES collection will only contain variables relevant to the current `adanet.subnetwork.Builder`, so not passing `var_list` to the `optimizer.minimize` will lead to the same behavior as passing it in by default.
+ * Using `tf.summary` inside `adanet.subnetwork.Builder` is now equivalent to using the `adanet.Summary` object.
+ * Accessing the `global_step` from within an `adanet.subnetwork.Builder` will return the `iteration_step` variable instead, so that the step starts at zero at the beginning of each iteration. One subnetwork incrementing the step will not affect other subnetworks.
  * Summaries will automatically scope themselves to the current subnetwork's scope. Similar summaries will now be correctly grouped together correctly across subnetworks in TensorBoard. This eliminates the need for the `tf.name_scope("")` hack.
  * Provide an override to force the AdaNet ensemble to grow at the end of each iteration.
  * Correctly seed TensorFlow graph between iterations. This breaks some tests that check the outputs of `adanet.Estimator` models.

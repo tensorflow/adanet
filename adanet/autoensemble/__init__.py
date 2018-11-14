@@ -1,4 +1,4 @@
-"""An AdaNet algorithm implementation in Tensorflow using a single graph.
+"""The TensorFlow AdaNet autoensemble module.
 
 Copyright 2018 The AdaNet Authors. All Rights Reserved.
 
@@ -19,13 +19,4 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.autoensemble import AutoEnsembleEstimator
-from adanet.core import Ensemble
-from adanet.core import Estimator
-from adanet.core import Evaluator
-from adanet.core import MixtureWeightType
-from adanet.core import ReportMaterializer
-from adanet.core import subnetwork
-from adanet.core import Summary
-from adanet.core import WeightedSubnetwork
-from adanet.core.subnetwork import Subnetwork
+from adanet.autoensemble.estimator import AutoEnsembleEstimator

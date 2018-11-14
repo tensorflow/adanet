@@ -121,6 +121,7 @@ class Builder(object):
   @abc.abstractmethod
   def build_subnetwork(self,
                        features,
+                       labels,
                        logits_dimension,
                        training,
                        iteration_step,
@@ -132,8 +133,13 @@ class Builder(object):
     and `build_mixture_weights_train_op` are called. This method should
     construct the candidate subnetwork's graph operations and variables.
 
+    Accessing the global step via `tf.train.get_or_create_global_step()` or
+    `tf.train.get_global_step()` within this scope will return an incrementable
+    iteration step since the beginning of the iteration.
+
     Args:
       features: Input `dict` of `Tensor` objects.
+      labels: Labels `Tensor`. Can be `None`.
       logits_dimension: Size of the last dimension of the logits `Tensor`.
         Typically, logits have for shape `[batch_size, logits_dimension]`.
       training: A python boolean indicating whether the graph is in training
@@ -141,7 +147,8 @@ class Builder(object):
       iteration_step: Integer `Tensor` representing the step since the beginning
         of the current iteration, as opposed to the global step.
       summary: An `adanet.Summary` for scoping summaries to individual
-        subnetworks in Tensorboard.
+        subnetworks in Tensorboard. Using `tf.summary` within this scope will
+        use this `adanet.Summary` under the hood.
       previous_ensemble: The best `Ensemble` from iteration t-1. The created
         subnetwork will extend the previous ensemble to form the `Ensemble` at
         iteration t.
@@ -157,7 +164,9 @@ class Builder(object):
 
     This method will be called once after `build_subnetwork`.
 
-    NOTE: This method should _not_ increment the global step tensor.
+    Accessing the global step via `tf.train.get_or_create_global_step()` or
+    `tf.train.get_global_step()` within this scope will return an incrementable
+    iteration step since the beginning of the iteration.
 
     Args:
       subnetwork: Newest subnetwork, that is not part of the
@@ -169,7 +178,8 @@ class Builder(object):
       iteration_step: Integer `Tensor` representing the step since the beginning
         of the current iteration, as opposed to the global step.
       summary: An `adanet.Summary` for scoping summaries to individual
-        subnetworks in Tensorboard.
+        subnetworks in Tensorboard. Using `tf.summary` within this scope will
+        use this `adanet.Summary` under the hood.
       previous_ensemble: The best `Ensemble` from iteration t-1. The created
         subnetwork will extend the previous ensemble to form the `Ensemble` at
         iteration t. Is None for iteration 0.
@@ -188,7 +198,9 @@ class Builder(object):
 
     This method will be called once after `build_subnetwork`.
 
-    NOTE: This method should _not_ increment the global step tensor.
+    Accessing the global step via `tf.train.get_or_create_global_step()` or
+    `tf.train.get_global_step()` within this scope will return an incrementable
+    iteration step since the beginning of the iteration.
 
     Args:
       loss: A `Tensor` containing the ensemble's loss to minimize.
@@ -200,7 +212,8 @@ class Builder(object):
       iteration_step: Integer `Tensor` representing the step since the beginning
         of the current iteration, as opposed to the global step.
       summary: An `adanet.Summary` for scoping summaries to individual
-        subnetworks in Tensorboard.
+        subnetworks in Tensorboard. Using `tf.summary` within this scope will
+        use this `adanet.Summary` under the hood.
 
     Returns:
       A train op.

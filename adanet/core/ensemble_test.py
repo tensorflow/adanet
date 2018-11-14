@@ -60,6 +60,20 @@ class _Builder(Builder):
     assert training is not None
     assert iteration_step is not None
     assert summary is not None
+
+    # Trainable variables collection should always be empty when
+    # build_subnetwork is called.
+    assert not tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+
+    # Subnetworks get iteration steps instead of global steps.
+    global_step = tf.train.get_global_step()
+    assert "ensemble_test/iteration_step" == global_step.op.name
+
+    # Subnetworks get scoped summaries.
+    assert "fake_scalar" == tf.summary.scalar("scalar", 1.)
+    assert "fake_image" == tf.summary.image("image", 1.)
+    assert "fake_histogram" == tf.summary.histogram("histogram", 1.)
+    assert "fake_audio" == tf.summary.audio("audio", 1., 1.)
     last_layer = tu.dummy_tensor(shape=(2, 3))
     logits = tf.layers.dense(
         last_layer,
@@ -267,11 +281,33 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
     def _subnetwork_train_op_fn(loss, var_list):
       self.assertEqual(2, len(var_list))
+      self.assertEqual(var_list,
+                       tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
+      # Subnetworks get iteration steps instead of global steps.
+      self.assertEqual("ensemble_test/iteration_step",
+                       tf.train.get_global_step().op.name)
+
+      # Subnetworks get scoped summaries.
+      self.assertEqual("fake_scalar", tf.summary.scalar("scalar", 1.))
+      self.assertEqual("fake_image", tf.summary.image("image", 1.))
+      self.assertEqual("fake_histogram", tf.summary.histogram("histogram", 1.))
+      self.assertEqual("fake_audio", tf.summary.audio("audio", 1., 1.))
       optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
       return optimizer.minimize(loss, var_list=var_list)
 
     def _mixture_weights_train_op_fn(loss, var_list):
       self.assertEqual(want_mixture_weight_vars, len(var_list))
+      self.assertEqual(var_list,
+                       tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
+      # Subnetworks get iteration steps instead of global steps.
+      self.assertEqual("ensemble_test/iteration_step",
+                       tf.train.get_global_step().op.name)
+
+      # Subnetworks get scoped summaries.
+      self.assertEqual("fake_scalar", tf.summary.scalar("scalar", 1.))
+      self.assertEqual("fake_image", tf.summary.image("image", 1.))
+      self.assertEqual("fake_histogram", tf.summary.histogram("histogram", 1.))
+      self.assertEqual("fake_audio", tf.summary.audio("audio", 1., 1.))
       optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
       return optimizer.minimize(loss, var_list=var_list)
 
@@ -291,6 +327,16 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
     with self.test_session() as sess:
       sess.run(tf.global_variables_initializer())
+
+      # Get the real global step outside a subnetwork's context.
+      self.assertEqual("global_step", tf.train.get_global_step().op.name)
+
+      # Get global tf.summary outside a subnetwork's context.
+      self.assertNotEqual("fake_scalar", tf.summary.scalar("scalar", 1.))
+      self.assertNotEqual("fake_image", tf.summary.image("image", 1.))
+      self.assertNotEqual("fake_histogram", tf.summary.histogram(
+          "histogram", 1.))
+      self.assertNotEqual("fake_audio", tf.summary.audio("audio", 1., 1.))
 
       if mode == tf.estimator.ModeKeys.PREDICT:
         self.assertAllClose(
