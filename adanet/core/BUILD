@@ -32,7 +32,6 @@ py_library(
         ":input_utils",
         ":iteration",
         ":report_accessor",
-        ":run_config_utils",
         ":summary",
         ":timer",
         "@six_archive//:six",
@@ -189,23 +188,6 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":input_utils",
-        "@absl_py//absl/testing:parameterized",
-    ],
-)
-
-py_library(
-    name = "run_config_utils",
-    srcs = ["run_config_utils.py"],
-    deps = [
-    ],
-)
-
-py_test(
-    name = "run_config_utils_test",
-    srcs = ["run_config_utils_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":run_config_utils",
         "@absl_py//absl/testing:parameterized",
     ],
 )

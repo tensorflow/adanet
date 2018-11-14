@@ -242,26 +242,13 @@ class _IterationBuilder(object):
           candidates, best_candidate_index, mode)
       best_export_outputs = self._best_export_outputs(
           candidates, best_candidate_index, mode, best_predictions)
-
-      if mode == tf.estimator.ModeKeys.TRAIN:
-        estimator_spec = tf.contrib.tpu.TPUEstimatorSpec(
-            mode=mode,
-            predictions=best_predictions,
-            loss=best_loss,
-            train_op=self._create_train_op(candidates, mode, iteration_step),
-            # TODO: this is a hack to get eval_metrics to work with
-            # TPUEstimator when use_tpu is false. This does not work when we
-            # actually start using TPUs.
-            eval_metrics=(lambda: best_eval_metric_ops, ()),
-            export_outputs=best_export_outputs)
-      else:
-        estimator_spec = tf.estimator.EstimatorSpec(
-            mode=mode,
-            predictions=best_predictions,
-            loss=best_loss,
-            train_op=self._create_train_op(candidates, mode, iteration_step),
-            eval_metric_ops=best_eval_metric_ops,
-            export_outputs=best_export_outputs)
+      estimator_spec = tf.estimator.EstimatorSpec(
+          mode=mode,
+          predictions=best_predictions,
+          loss=best_loss,
+          train_op=self._create_train_op(candidates, mode, iteration_step),
+          eval_metric_ops=best_eval_metric_ops,
+          export_outputs=best_export_outputs)
 
       return _Iteration(
           number=iteration_number,

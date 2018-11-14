@@ -19,8 +19,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import inspect
-
 import tensorflow as tf
 
 
@@ -59,9 +57,7 @@ def make_placeholder_input_fn(input_fn):
 
   # Create temporary graph to collect `Tensor` information.
   with tf.Graph().as_default():
-    # We ignore batch sizes for place_holder_input_fns so there is no need to
-    # pass a `params` object to the input_fn.
-    features, labels = input_fn({})
+    features, labels = input_fn()
     feature_info = {}
     for name, feature in features.items():
       feature_info[name] = (feature.op.name, feature.get_shape().as_list(),
@@ -95,23 +91,3 @@ def make_placeholder_input_fn(input_fn):
     return features, labels
 
   return _placeholder_input_fn
-
-
-def wrap_input_fn(input_fn, use_tpu):
-  """Wraps the input_fn with one which takes a `params` argument.
-
-  This allows input_fns defined for `Estimator` to also work for `TPUEstimator`
-  when not using TPUs.
-
-  Args:
-    input_fn: The input_fn to wrap. If running on TPUs or input_fn already takes
-      a params argument, the original input_fn is returned.
-    use_tpu: Whether TPUs are being used.
-
-  Returns:
-    An input_fn which takes a `params` argument.
-  """
-  has_params = "params" in inspect.getargspec(input_fn).args
-  if has_params or use_tpu:
-    return input_fn
-  return lambda params: input_fn()

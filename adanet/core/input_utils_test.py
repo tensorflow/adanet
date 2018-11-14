@@ -19,11 +19,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import inspect
-
 from absl.testing import parameterized
 from adanet.core.input_utils import make_placeholder_input_fn
-from adanet.core.input_utils import wrap_input_fn
 import tensorflow as tf
 
 
@@ -50,9 +47,7 @@ class InputUtilsTest(parameterized.TestCase, tf.test.TestCase):
     sparse = tf.SparseTensorValue(
         indices=[[0, 0], [0, 1]], values=[-1., 1.], dense_shape=[1, 2])
 
-    def input_fn(params):
-      del params  # Unused.
-
+    def input_fn():
       features = {
           "dense":
               tf.constant(dense, name="foo"),
@@ -68,7 +63,7 @@ class InputUtilsTest(parameterized.TestCase, tf.test.TestCase):
       return features, labels
 
     placeholder_input_fn = make_placeholder_input_fn(input_fn)
-    features, labels = input_fn({})
+    features, labels = input_fn()
     got_features, got_labels = placeholder_input_fn()
 
     with self.test_session() as sess:
@@ -93,25 +88,6 @@ class InputUtilsTest(parameterized.TestCase, tf.test.TestCase):
                     got_labels["label_1"]: label["label_1"],
                     got_labels["label_2"]: label["label_2"],
                 }))
-
-  @parameterized.named_parameters(
-      {
-          "testcase_name": "no_params_no_use_tpu",
-          "input_fn": lambda: (),
-          "use_tpu": False,
-          "want_params": True
-      },
-      {
-          "testcase_name": "no_params_use_tpu",
-          "input_fn": lambda: (),
-          "use_tpu": True,
-          "want_params": False
-      },
-  )
-  def test_wrap_input_fn(self, input_fn, use_tpu, want_params):
-    wrapped_input_fn = wrap_input_fn(input_fn, use_tpu)
-    has_params = "params" in inspect.getargspec(wrapped_input_fn).args
-    self.assertEqual(has_params, want_params)
 
 
 if __name__ == "__main__":
