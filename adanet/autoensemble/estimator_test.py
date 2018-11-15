@@ -28,6 +28,8 @@ import tensorflow as tf
 
 from tensorflow.python.estimator.export import export
 
+tf.logging.set_verbosity(tf.logging.INFO)
+
 
 class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
 
@@ -35,7 +37,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     # Setup and cleanup test directory.
     self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
-    os.mkdir(self.test_subdirectory)
+    os.makedirs(self.test_subdirectory)
 
   def tearDown(self):
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
@@ -46,10 +48,10 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     labels = [[1.]]
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
-    head = tf.contrib.estimator.binary_classification_head(
+    head = tf.contrib.estimator.regression_head(
         loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate=3.)
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=.01)
     feature_columns = [tf.feature_column.numeric_column("input_1", shape=[2])]
 
     def train_input_fn():
@@ -77,6 +79,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
                 optimizer=optimizer,
                 hidden_units=[3]),
         ],
+        logits_key="predictions",
         max_iteration_steps=4,
         force_grow=True,
         model_dir=self.test_subdirectory,
@@ -87,11 +90,12 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
 
     # Evaluate.
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
-    self.assertAlmostEqual(0.0049838871, eval_results["loss"], places=3)
-    self.assertAlmostEqual(1., eval_results["accuracy"])
+    self.assertIsNotNone(eval_results["loss"])
 
     want_subnetworks = [
-        "t0_DNNEstimator1", "t1_DNNEstimator1",
+        "t0_DNNEstimator1",
+        "t1_LinearEstimator0",
+        "t2_DNNEstimator1",
     ]
     for subnetwork in want_subnetworks:
       self.assertIn(subnetwork,
@@ -100,8 +104,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     # Predict.
     predictions = estimator.predict(input_fn=test_input_fn)
     for prediction in predictions:
-      self.assertIsNotNone(prediction["classes"])
-      self.assertIsNotNone(prediction["probabilities"])
+      self.assertIsNotNone(prediction["predictions"])
 
     # Export SavedModel.
     def serving_input_fn():

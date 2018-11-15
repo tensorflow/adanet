@@ -38,14 +38,16 @@ import tensorflow as tf
 
 from tensorflow.python.estimator.export import export
 
+tf.logging.set_verbosity(tf.logging.INFO)
+
 
 class _DNNBuilder(Builder):
   """A simple DNN subnetwork builder."""
 
   def __init__(self,
                name,
-               learning_rate=3.,
-               mixture_weight_learning_rate=3.,
+               learning_rate=.001,
+               mixture_weight_learning_rate=.001,
                return_penultimate_layer=True,
                layer_size=1,
                seed=13):
@@ -179,19 +181,19 @@ class _SimpleBuilder(Builder):
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate=3.)
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=.001)
     return optimizer.minimize(loss, var_list=var_list)
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
                                      iteration_step, summary):
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate=3.)
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=.001)
     return optimizer.minimize(loss, var_list=var_list)
 
 
 class _LinearBuilder(Builder):
   """A simple linear subnetwork builder."""
 
-  def __init__(self, name, mixture_weight_learning_rate=.1, seed=42):
+  def __init__(self, name, mixture_weight_learning_rate=.001, seed=42):
     self._name = name
     self._mixture_weight_learning_rate = mixture_weight_learning_rate
     self._seed = seed
@@ -222,7 +224,7 @@ class _LinearBuilder(Builder):
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=.001)
     return optimizer.minimize(loss, var_list=var_list)
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
@@ -263,8 +265,8 @@ class _WidthLimitingDNNBuilder(_DNNBuilder):
 
   def __init__(self,
                name,
-               learning_rate=3.,
-               mixture_weight_learning_rate=3.,
+               learning_rate=.001,
+               mixture_weight_learning_rate=.001,
                return_penultimate_layer=True,
                layer_size=1,
                width_limit=None,
@@ -321,7 +323,7 @@ class _ModifierSessionRunHook(tf.train.SessionRunHook):
 
 
 def _head():
-  return tf.contrib.estimator.binary_classification_head(
+  return tf.contrib.estimator.regression_head(
       loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
 
@@ -331,7 +333,7 @@ class EstimatorTestCase(parameterized.TestCase, tf.test.TestCase):
     # Setup and cleanup test directory.
     self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
-    os.mkdir(self.test_subdirectory)
+    os.makedirs(self.test_subdirectory)
 
   def tearDown(self):
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
@@ -593,7 +595,6 @@ class EstimatorTest(EstimatorTestCase):
     eval_results = estimator.evaluate(
         input_fn=train_input_fn, steps=10, hooks=hooks)
     tf.logging.info("%s", eval_results)
-    self.assertAlmostEqual(want_accuracy, eval_results["accuracy"], places=3)
     self.assertAlmostEqual(want_loss, eval_results["loss"], places=5)
     self.assertEqual(max_steps or steps, eval_results["global_step"])
 
@@ -601,8 +602,7 @@ class EstimatorTest(EstimatorTestCase):
     predictions = estimator.predict(
         input_fn=tu.dataset_input_fn(features=[0., 0.], labels=None))
     for prediction in predictions:
-      self.assertIsNotNone(prediction["classes"])
-      self.assertIsNotNone(prediction["probabilities"])
+      self.assertIsNotNone(prediction["predictions"])
 
     # Export SavedModel.
     def serving_input_fn():
@@ -666,7 +666,7 @@ class EstimatorTest(EstimatorTestCase):
 
     report_materializer = ReportMaterializer(input_fn=train_input_fn, steps=1)
     estimator = Estimator(
-        head=tf.contrib.estimator.binary_classification_head(),
+        head=tf.contrib.estimator.regression_head(),
         subnetwork_generator=SimpleGenerator(
             [_SimpleBuilder(name="simple", feature_columns=[feature_column])]),
         report_materializer=report_materializer,
@@ -808,7 +808,7 @@ class EstimatorKerasLayersTest(EstimatorTestCase):
     estimator = Estimator(
         head=_head(),
         subnetwork_generator=SimpleGenerator(
-            [KerasCNNBuilder(learning_rate=1.)]),
+            [KerasCNNBuilder(learning_rate=.001)]),
         max_iteration_steps=3,
         evaluator=Evaluator(
             input_fn=tu.dummy_input_fn([[1., 1., .1, .1]], [[0.]]), steps=3),
@@ -1005,7 +1005,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
     subnetwork_generator = SimpleGenerator(
-        [_DNNBuilder("dnn", mixture_weight_learning_rate=.01)])
+        [_DNNBuilder("dnn", mixture_weight_learning_rate=.001)])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
@@ -1138,7 +1138,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
     seed = 42
     run_config = tf.estimator.RunConfig(tf_random_seed=seed)
     subnetwork_generator = SimpleGenerator(
-        [_LinearBuilder("linear", mixture_weight_learning_rate=.01, seed=seed)])
+        [_LinearBuilder("linear", mixture_weight_learning_rate=.001, seed=seed)])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
@@ -1709,7 +1709,7 @@ class EstimatorReportTest(EstimatorTestCase):
               _DNNBuilder("dnn_1", layer_size=1, learning_rate=0.),
               _DNNBuilder("dnn_2", layer_size=2, learning_rate=0.),
               # fixing the match for dnn_3 to win in every iteration.
-              _DNNBuilder("dnn_3", layer_size=3, learning_rate=3.),
+              _DNNBuilder("dnn_3", layer_size=3, learning_rate=.001),
           ],
           "num_iterations":
               3,
