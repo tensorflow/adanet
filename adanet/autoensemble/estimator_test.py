@@ -93,9 +93,8 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     self.assertIsNotNone(eval_results["loss"])
 
     want_subnetworks = [
-        "t0_DNNEstimator1",
-        "t1_LinearEstimator0",
-        "t2_DNNEstimator1",
+        "LinearEstimator0",
+        "DNNEstimator1",
     ]
     for subnetwork in want_subnetworks:
       self.assertIn(subnetwork,
