@@ -827,7 +827,10 @@ class EstimatorKerasLayersTest(EstimatorTestCase):
     # Evaluate.
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
     tf.logging.info("%s", eval_results)
-    self.assertAlmostEqual(0.26195815, eval_results["loss"], places=3)
+    want_loss =  0.16915826
+    if LooseVersion(tf.VERSION) >= LooseVersion("1.10.0"):
+      want_loss =  0.26195815
+    self.assertAlmostEqual(want_loss, eval_results["loss"], places=3)
 
     # Predict.
     predictions = estimator.predict(

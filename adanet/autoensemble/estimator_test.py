@@ -122,7 +122,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
         estimator,
         export_dir_base=export_dir_base,
         input_receiver_fn=serving_input_fn,
-        mode=tf.estimator.ModeKeys.EVAL)
+        mode=tf.estimator.ModeKeys.PREDICT)
 
 
 if __name__ == "__main__":
