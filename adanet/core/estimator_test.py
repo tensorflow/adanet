@@ -19,6 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from distutils.version import LooseVersion
 import os
 import shutil
 
@@ -1391,6 +1392,10 @@ class EstimatorExportSavedModelForEvalTest(EstimatorTestCase):
 
   def test_export_saved_model_for_eval(self):
     """Tests new SavedModel exporting functionality."""
+
+    if LooseVersion(tf.VERSION) < LooseVersion("1.10.0"):
+      self.skipTest("export_saved_model_for_eval is not "
+                    "supported before TF v1.10.0.")
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
     subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
