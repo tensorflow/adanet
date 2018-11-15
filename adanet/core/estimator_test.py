@@ -348,14 +348,14 @@ class EstimatorTest(EstimatorTestCase):
       "steps": 1,
       "max_steps": None,
       "want_accuracy": .75,
-      "want_loss": .69314,
+      "want_loss": 0.49899703,
   }, {
       "testcase_name": "single_builder_max_steps",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
       "max_iteration_steps": 200,
       "max_steps": 300,
       "want_accuracy": 1.,
-      "want_loss": .27956,
+      "want_loss": 0.32420248,
   }, {
       "testcase_name": "single_builder_steps",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
@@ -363,14 +363,14 @@ class EstimatorTest(EstimatorTestCase):
       "steps": 300,
       "max_steps": None,
       "want_accuracy": 1.,
-      "want_loss": .27956,
+      "want_loss": 0.32420248,
   }, {
       "testcase_name": "single_builder_no_bias",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
       "max_iteration_steps": 200,
       "use_bias": False,
       "want_accuracy": .75,
-      "want_loss": .44464,
+      "want_loss": 0.496736,
   }, {
       "testcase_name":
           "single_builder_scalar_mixture_weight",
@@ -383,7 +383,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .09449,
+          0.32317898,
   }, {
       "testcase_name":
           "single_builder_vector_mixture_weight",
@@ -396,7 +396,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .09449,
+          0.32317898,
   }, {
       "testcase_name": "single_builder_replicate_ensemble_in_training",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
@@ -404,20 +404,20 @@ class EstimatorTest(EstimatorTestCase):
       "max_iteration_steps": 200,
       "max_steps": 300,
       "want_accuracy": .75,
-      "want_loss": 2.27981,
+      "want_loss": 0.32420215,
   }, {
       "testcase_name": "single_builder_with_hook",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
       "max_iteration_steps": 200,
       "hooks": [_ModifierSessionRunHook()],
       "want_accuracy": 1.,
-      "want_loss": .27956,
+      "want_loss": 0.32420248,
   }, {
       "testcase_name": "high_max_iteration_steps",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
       "max_iteration_steps": 500,
       "want_accuracy": .75,
-      "want_loss": .59545,
+      "want_loss": 0.32487726,
   }, {
       "testcase_name":
           "two_builders",
@@ -429,7 +429,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00912,
+          0.27713922,
   }, {
       "testcase_name":
           "two_builders_different_layer_sizes",
@@ -442,7 +442,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00178,
+          0.29696745,
   }, {
       "testcase_name":
           "two_builders_different_layer_sizes_three_iterations",
@@ -455,7 +455,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00159,
+          0.26433355,
   }, {
       "testcase_name":
           "width_limiting_builder_no_pruning",
@@ -466,7 +466,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .13983,
+          0.32001898,
   }, {
       "testcase_name":
           "width_limiting_builder_some_pruning",
@@ -478,7 +478,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           .75,
       "want_loss":
-          .41644,
+          0.38592532,
   }, {
       "testcase_name":
           "width_limiting_builder_prune_all",
@@ -490,7 +490,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           .75,
       "want_loss":
-          .44568,
+          0.43492866,
   }, {
       "testcase_name":
           "width_limiting_builder_mixed",
@@ -505,7 +505,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .13983,
+          0.32001898,
   }, {
       "testcase_name":
           "evaluator_good_input",
@@ -520,7 +520,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00178,
+          0.31241742,
   }, {
       "testcase_name":
           "evaluator_bad_input",
@@ -535,7 +535,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00786,
+          0.29696745,
   }, {
       "testcase_name":
           "report_materializer",
@@ -551,7 +551,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00178,
+          0.29696745,
   })
   def test_lifecycle(self,
                      subnetwork_generator,
@@ -826,15 +826,13 @@ class EstimatorKerasLayersTest(EstimatorTestCase):
     # Evaluate.
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
     tf.logging.info("%s", eval_results)
-    self.assertAlmostEqual(.5, eval_results["accuracy"], places=3)
-    self.assertAlmostEqual(.69437, eval_results["loss"], places=3)
+    self.assertAlmostEqual(0.26195815, eval_results["loss"], places=3)
 
     # Predict.
     predictions = estimator.predict(
         input_fn=tu.dataset_input_fn(features=[0., 0., 0., 0.], labels=None))
     for prediction in predictions:
-      self.assertIsNotNone(prediction["classes"])
-      self.assertIsNotNone(prediction["probabilities"])
+      self.assertIsNotNone(prediction["predictions"])
 
     # Export SavedModel.
     def serving_input_fn():
@@ -1022,7 +1020,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
     train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
     estimator.train(input_fn=train_input_fn, max_steps=3)
 
-    ensemble_loss = .693
+    ensemble_loss = 1.
     self.assertAlmostEqual(
         ensemble_loss,
         _check_eventfile_for_keyword("loss", self.test_subdirectory),
@@ -1057,24 +1055,24 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
       "testcase_name": "none_metrics",
       "head": _EvalMetricsHead(None),
       "want_summaries": [],
-      "want_loss": .910,
+      "want_loss": .9910,
   }, {
       "testcase_name": "metrics_fn",
       "head": _EvalMetricsHead(None),
       "metric_fn": lambda predictions: {"avg": tf.metrics.mean(predictions)},
       "want_summaries": ["avg"],
-      "want_loss": .910,
+      "want_loss": .9910,
   }, {
       "testcase_name": "empty_metrics",
       "head": _EvalMetricsHead({}),
       "want_summaries": [],
-      "want_loss": .910,
+      "want_loss": .9910,
   }, {
       "testcase_name": "evaluation_name",
       "head": _EvalMetricsHead({}),
       "evaluation_name": "continuous",
       "want_summaries": [],
-      "want_loss": .910,
+      "want_loss": .9910,
       "global_subdir": "eval_continuous",
       "candidate_subdir": "candidate/linear/eval_continuous",
   }, {
@@ -1087,7 +1085,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
           "average_loss", "average_loss/adanet/adanet_weighted_ensemble"
       ],
       "want_loss":
-          .691,
+          .96453667,
   }, {
       "testcase_name":
           "binary_classification_head",
@@ -1098,7 +1096,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
           "average_loss", "average_loss/adanet/adanet_weighted_ensemble"
       ],
       "want_loss":
-          .671,
+          0.6909014,
   }, {
       "testcase_name":
           "all_metrics",
@@ -1123,7 +1121,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
           "serialized_summary/adanet/adanet_weighted_ensemble/0",
       ],
       "want_loss":
-          .910,
+          .9910,
   })
   def test_eval_metrics(self,
                         head,
@@ -1137,8 +1135,9 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
 
     seed = 42
     run_config = tf.estimator.RunConfig(tf_random_seed=seed)
-    subnetwork_generator = SimpleGenerator(
-        [_LinearBuilder("linear", mixture_weight_learning_rate=.001, seed=seed)])
+    subnetwork_generator = SimpleGenerator([
+        _LinearBuilder("linear", mixture_weight_learning_rate=.001, seed=seed)
+    ])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
@@ -1457,7 +1456,7 @@ class EstimatorExportSavedModelForEvalTest(EstimatorTestCase):
 
       # Read metric again; it should no longer be zero.
       self.assertAlmostEqual(
-          .201,
+          0.996,
           sess.run(
               tf.saved_model.utils.get_tensor_from_tensor_info(
                   signature_def.outputs["metrics/average_loss/value"])),
@@ -1488,12 +1487,23 @@ class EstimatorReportTest(EstimatorTestCase):
     for qualified_name in report_dict_1.keys():
       report_1 = report_dict_1[qualified_name]
       report_2 = report_dict_2[qualified_name]
-      self.assertEqual(report_1.hparams, report_2.hparams)
-      self.assertEqual(report_1.attributes, report_2.attributes)
-      self.assertEqual(report_1.included_in_final_ensemble,
-                       report_2.included_in_final_ensemble)
+      self.assertEqual(
+          report_1.hparams,
+          report_2.hparams,
+          msg="{} vs. {}".format(report_1, report_2))
+      self.assertEqual(
+          report_1.attributes,
+          report_2.attributes,
+          msg="{} vs. {}".format(report_1, report_2))
+      self.assertEqual(
+          report_1.included_in_final_ensemble,
+          report_2.included_in_final_ensemble,
+          msg="{} vs. {}".format(report_1, report_2))
       for metric_key, metric_value in report_1.metrics.items():
-        self.assertEqual(metric_value, report_2.metrics[metric_key])
+        self.assertEqual(
+            metric_value,
+            report_2.metrics[metric_key],
+            msg="{} vs. {}".format(report_1, report_2))
 
   @parameterized.named_parameters(
       {
@@ -1543,7 +1553,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   metrics={
                       "moo": 3,
                   },
-                  included_in_final_ensemble=False,
+                  included_in_final_ensemble=True,
               ),
               MaterializedReport(
                   iteration_number=0,
@@ -1567,7 +1577,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   metrics={
                       "moo": 3,
                   },
-                  included_in_final_ensemble=True,
+                  included_in_final_ensemble=False,
               ),
           ]],
           "want_previous_ensemble_reports": [],
@@ -1783,7 +1793,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       metrics={
                           "moo": 3,
                       },
-                      included_in_final_ensemble=False,
+                      included_in_final_ensemble=True,
                   ),
                   MaterializedReport(
                       iteration_number=1,
@@ -1795,7 +1805,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       metrics={
                           "moo": 3,
                       },
-                      included_in_final_ensemble=True,
+                      included_in_final_ensemble=False,
                   ),
               ],
               [
@@ -1829,7 +1839,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       metrics={
                           "moo": 3,
                       },
-                      included_in_final_ensemble=False,
+                      included_in_final_ensemble=True,
                   ),
                   MaterializedReport(
                       iteration_number=2,
@@ -1841,7 +1851,7 @@ class EstimatorReportTest(EstimatorTestCase):
                       metrics={
                           "moo": 3,
                       },
-                      included_in_final_ensemble=True,
+                      included_in_final_ensemble=False,
                   ),
               ],
           ],
@@ -1860,8 +1870,8 @@ class EstimatorReportTest(EstimatorTestCase):
               ),
               MaterializedReport(
                   iteration_number=1,
-                  name="dnn_3",
-                  hparams={"layer_size": 3},
+                  name="dnn_2",
+                  hparams={"layer_size": 2},
                   attributes={
                       "complexity": 3,
                   },
@@ -1938,7 +1948,7 @@ class EstimatorReportTest(EstimatorTestCase):
                   metrics={
                       "moo": 3,
                   },
-                  included_in_final_ensemble=False,
+                  included_in_final_ensemble=True,
               ),
               MaterializedReport(
                   iteration_number=1,
@@ -1950,15 +1960,15 @@ class EstimatorReportTest(EstimatorTestCase):
                   metrics={
                       "moo": 3,
                   },
-                  included_in_final_ensemble=True,
+                  included_in_final_ensemble=False,
               ),
           ],
       },
   )
-  def testReportGenerationAndUsage(self, subnetwork_builders, num_iterations,
-                                   want_materialized_iteration_reports,
-                                   want_previous_ensemble_reports,
-                                   want_all_reports):
+  def test_report_generation_and_usage(
+      self, subnetwork_builders, num_iterations,
+      want_materialized_iteration_reports, want_previous_ensemble_reports,
+      want_all_reports):
     # Stores the iteration_number, previous_ensemble_reports and all_reports
     # arguments in the self._iteration_reports dictionary, overwriting what
     # was seen in previous iterations.
