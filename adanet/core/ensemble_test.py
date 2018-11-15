@@ -26,6 +26,7 @@ import shutil
 from absl.testing import parameterized
 from adanet.core.ensemble import _EnsembleBuilder
 from adanet.core.ensemble import MixtureWeightType
+from adanet.core.ensemble import WeightedSubnetwork
 from adanet.core.subnetwork import Builder
 from adanet.core.subnetwork import Subnetwork
 from adanet.core.summary import Summary
@@ -383,6 +384,125 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
           adanet_lambda=0.,
           adanet_beta=0.,
           use_bias=True)
+
+
+def _make_metrics(sess, metric_fn):
+  head = tf.contrib.estimator.binary_classification_head(
+      loss_reduction=tf.losses.Reduction.SUM)
+  builder = _EnsembleBuilder(
+      head, MixtureWeightType.SCALAR, metric_fn=metric_fn)
+  features = {"x": tf.constant([[1.], [2.]])}
+  labels = tf.constant([0, 1])
+  ensemble_spec = builder.build_ensemble_spec(
+      "fake_ensemble", [
+          WeightedSubnetwork(
+              name=tf.constant("fake_weighted"),
+              logits=[[1.], [2.]],
+              weight=[1.],
+              subnetwork=Subnetwork(
+                  logits=[[1.], [2.]],
+                  last_layer=[1.],
+                  complexity=1.,
+                  persisted_tensors={}))
+      ],
+      summary=_FakeSummary(),
+      bias=0.,
+      features=features,
+      mode=tf.estimator.ModeKeys.EVAL,
+      labels=labels,
+      iteration_step=1.)
+  sess.run((tf.global_variables_initializer(),
+            tf.local_variables_initializer()))
+  metrics = sess.run(ensemble_spec.eval_metric_ops)
+  return {k: metrics[k][1] for k in metrics}
+
+
+class EnsembleBuilderMetricFnTest(tf.test.TestCase):
+
+  def test_should_add_metrics(self):
+
+    def _test_metric_fn(metric_fn):
+      with self.test_session() as sess:
+        metrics = _make_metrics(sess, metric_fn)
+      self.assertIn("mean_x/adanet/adanet_weighted_ensemble", metrics)
+      self.assertIn("mean_x/adanet/uniform_average_ensemble", metrics)
+      self.assertIn("mean_x/adanet/subnetwork", metrics)
+      self.assertEqual(1.5, metrics["mean_x/adanet/adanet_weighted_ensemble"])
+      self.assertEqual(1.5, metrics["mean_x/adanet/uniform_average_ensemble"])
+      self.assertEqual(1.5, metrics["mean_x/adanet/subnetwork"])
+      # assert that it keeps original head metrics
+      self.assertIn("auc/adanet/adanet_weighted_ensemble", metrics)
+      self.assertIn("auc/adanet/uniform_average_ensemble", metrics)
+      self.assertIn("auc/adanet/subnetwork", metrics)
+
+    def metric_fn_1(features):
+      return {"mean_x": tf.metrics.mean(features["x"])}
+
+    # TODO: Add support for tf.keras.metrics.Mean like `add_metrics`.
+    _test_metric_fn(metric_fn_1)
+
+  def test_should_error_out_for_not_recognized_args(self):
+    head = tf.contrib.estimator.binary_classification_head(
+        loss_reduction=tf.losses.Reduction.SUM)
+
+    def metric_fn(features, not_recognized):
+      _, _ = features, not_recognized
+      return {}
+
+    with self.assertRaisesRegexp(ValueError, "not_recognized"):
+      _EnsembleBuilder(head, MixtureWeightType.SCALAR, metric_fn=metric_fn)
+
+  def test_all_supported_args(self):
+
+    def metric_fn(features, predictions, labels):
+      self.assertIn("x", features)
+      self.assertIsNotNone(labels)
+      self.assertIn("logistic", predictions)
+      return {}
+
+    with self.test_session() as sess:
+      _make_metrics(sess, metric_fn)
+
+  def test_all_supported_args_in_different_order(self):
+
+    def metric_fn(labels, features, predictions):
+      self.assertIn("x", features)
+      self.assertIsNotNone(labels)
+      self.assertIn("logistic", predictions)
+      return {}
+
+    with self.test_session() as sess:
+      _make_metrics(sess, metric_fn)
+
+  def test_all_args_are_optional(self):
+
+    def _test_metric_fn(metric_fn):
+      with self.test_session() as sess:
+        metrics = _make_metrics(sess, metric_fn)
+      self.assertEqual(2., metrics["two/adanet/subnetwork"])
+
+    def metric_fn_1():
+      return {"two": tf.metrics.mean(tf.constant([2.]))}
+
+    # TODO: Add support for tf.keras.metrics.Mean like `add_metrics`.
+    _test_metric_fn(metric_fn_1)
+
+  def test_overrides_existing_metrics(self):
+
+    def _test_metric_fn(metric_fn):
+      with self.test_session() as sess:
+        metrics = _make_metrics(sess, metric_fn=None)
+      self.assertNotEqual(2., metrics["auc/adanet/subnetwork"])
+
+      with self.test_session() as sess:
+        metrics = _make_metrics(sess, metric_fn=metric_fn)
+      self.assertEqual(2., metrics["auc/adanet/subnetwork"])
+
+    def metric_fn_1():
+      return {"auc": tf.metrics.mean(tf.constant([2.]))}
+
+    # TODO: Add support for tf.keras.metrics.Mean like `add_metrics`.
+    _test_metric_fn(metric_fn_1)
 
 
 if __name__ == "__main__":

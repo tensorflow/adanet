@@ -227,7 +227,8 @@ class _IterationBuilder(object):
             subnetwork_report = subnetwork.Report(
                 hparams={}, attributes={}, metrics={})
           if ensemble_spec.eval_metric_ops is not None:
-            for metric_name, metric in ensemble_spec.eval_metric_ops.items():
+            for metric_name in sorted(ensemble_spec.eval_metric_ops):
+              metric = ensemble_spec.eval_metric_ops[metric_name]
               subnetwork_report.metrics[metric_name] = metric
           subnetwork_report.metrics["adanet_loss"] = tf.metrics.mean(
               ensemble_spec.adanet_loss)
@@ -336,11 +337,13 @@ class _IterationBuilder(object):
         ensemble_spec = candidate.ensemble_spec
         if not ensemble_spec.eval_metric_ops:
           continue
-        for metric_name, metric_op in ensemble_spec.eval_metric_ops.items():
+        for metric_name in sorted(ensemble_spec.eval_metric_ops):
+          metric_op = ensemble_spec.eval_metric_ops[metric_name]
           if metric_name not in all_metrics:
             all_metrics[metric_name] = []
           all_metrics[metric_name].append(metric_op)
-      for metric_name, metric_ops in all_metrics.items():
+      for metric_name in sorted(all_metrics):
+        metric_ops = all_metrics[metric_name]
         if len(metric_ops) != len(candidates):
           continue
         values, ops = list(zip(*metric_ops))
@@ -402,7 +405,8 @@ class _IterationBuilder(object):
         if isinstance(ensemble_spec.predictions, dict):
           if not predictions:
             predictions = {}
-          for key, tensor in ensemble_spec.predictions.items():
+          for key in sorted(ensemble_spec.predictions):
+            tensor = ensemble_spec.predictions[key]
             if key in predictions:
               predictions[key].append(tensor)
             else:
@@ -414,7 +418,8 @@ class _IterationBuilder(object):
 
       if isinstance(predictions, dict):
         best_predictions = {}
-        for key, tensor_list in predictions.items():
+        for key in sorted(predictions):
+          tensor_list = predictions[key]
           best_predictions[key] = tf.stack(tensor_list)[best_candidate_index]
       else:
         best_predictions = tf.stack(predictions)[best_candidate_index]
@@ -472,7 +477,8 @@ class _IterationBuilder(object):
       export_outputs = {}
       for candidate in candidates:
         ensemble_spec = candidate.ensemble_spec
-        for key, export_output in ensemble_spec.export_outputs.items():
+        for key in sorted(ensemble_spec.export_outputs):
+          export_output = ensemble_spec.export_outputs[key]
           if isinstance(export_output,
                         tf.estimator.export.ClassificationOutput):
             if key not in export_outputs:
@@ -497,8 +503,8 @@ class _IterationBuilder(object):
       # Stack tensor lists into correct ExportOutput type, outputting the
       # correct values based on the best candidate index.
       best_export_outputs = {}
-      export_types = candidates[0].ensemble_spec.export_outputs.items()
-      for key, export_output in export_types:
+      for key in sorted(candidates[0].ensemble_spec.export_outputs):
+        export_output = candidates[0].ensemble_spec.export_outputs[key]
         if isinstance(export_output, tf.estimator.export.ClassificationOutput):
           scores, classes = None, None
           if export_outputs[key][0]:

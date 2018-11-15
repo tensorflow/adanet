@@ -174,10 +174,10 @@ class AutoEnsembleEstimator(Estimator):
                logits_key="logits",
                adanet_lambda=0.,
                evaluator=None,
+               metric_fn=None,
                force_grow=False,
                adanet_loss_decay=.9,
                worker_wait_timeout_secs=7200,
-               train_batch_size=None,
                model_dir=None,
                config=None):
     """Initializes an `AutoEnsembleEstimator`.
@@ -195,10 +195,10 @@ class AutoEnsembleEstimator(Estimator):
         are present in its `model_fn`'s `EstimatorSpec` predictions dictionary.
       adanet_lambda: See `adanet.Estimator`.
       evaluator:  See `adanet.Estimator`.
+      metric_fn:  See `adanet.Estimator`.
       force_grow:  See `adanet.Estimator`.
       adanet_loss_decay: See `adanet.Estimator`.
       worker_wait_timeout_secs: See `adanet.Estimator`.
-      train_batch_size:  See `adanet.Estimator`.
       model_dir: See `adanet.Estimator`.
       config: See `adanet.Estimator`.
 
@@ -224,6 +224,7 @@ class AutoEnsembleEstimator(Estimator):
         max_iteration_steps=max_iteration_steps,
         adanet_lambda=adanet_lambda,
         evaluator=evaluator,
+        metric_fn=metric_fn,
         force_grow=force_grow,
         adanet_loss_decay=adanet_loss_decay,
         worker_wait_timeout_secs=worker_wait_timeout_secs,

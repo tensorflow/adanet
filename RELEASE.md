@@ -15,6 +15,7 @@ limitations under the License.
 
 # Current version (0.4.0-dev)
  * Under development.
+ * Allow users to pass custom eval metrics when constructing an `adanet.Estimator`.
  * Add `adanet.AutoEnsembleEstimator` for learning to ensemble `tf.estimator.Estimator` instances.
  * Pass labels to `adanet.subnetwork.Builder`'s `build_subnetwork` method.
  * The TRAINABLE_VARIABLES collection will only contain variables relevant to the current `adanet.subnetwork.Builder`, so not passing `var_list` to the `optimizer.minimize` will lead to the same behavior as passing it in by default.

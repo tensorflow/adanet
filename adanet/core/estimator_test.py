@@ -1059,6 +1059,12 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
       "want_summaries": [],
       "want_loss": .910,
   }, {
+      "testcase_name": "metrics_fn",
+      "head": _EvalMetricsHead(None),
+      "metric_fn": lambda predictions: {"avg": tf.metrics.mean(predictions)},
+      "want_summaries": ["avg"],
+      "want_loss": .910,
+  }, {
       "testcase_name": "empty_metrics",
       "head": _EvalMetricsHead({}),
       "want_summaries": [],
@@ -1124,6 +1130,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
                         want_loss,
                         want_summaries,
                         evaluation_name=None,
+                        metric_fn=None,
                         global_subdir="eval",
                         candidate_subdir="candidate/linear/eval"):
     """Test that AdaNet evaluation metrics get persisted correctly."""
@@ -1143,6 +1150,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
         warm_start_mixture_weights=True,
         max_iteration_steps=6,
         use_bias=True,
+        metric_fn=metric_fn,
         config=run_config,
         model_dir=self.test_subdirectory)
     train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])

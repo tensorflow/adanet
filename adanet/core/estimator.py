@@ -213,6 +213,7 @@ class Estimator(tf.estimator.Estimator):
                evaluator=None,
                report_materializer=None,
                use_bias=False,
+               metric_fn=None,
                force_grow=False,
                replicate_ensemble_in_training=False,
                adanet_loss_decay=.9,
@@ -221,28 +222,6 @@ class Estimator(tf.estimator.Estimator):
                report_dir=None,
                config=None):
     """Initializes an `Estimator`.
-
-    Regarding the options for `mixture_weight_type`:
-
-    A `SCALAR` mixture weight is a rank 0 tensor. It performs an element-
-    wise multiplication with its subnetwork's logits. This mixture weight
-    is the simplest to learn, the quickest to train, and most likely to
-    generalize well.
-
-    A `VECTOR` mixture weight is a tensor of shape [k] where k is the
-    ensemble's logits dimension as defined by `head`. It is similar to
-    `SCALAR` in that it performs an element-wise multiplication with its
-    subnetwork's logits, but is more flexible in learning a subnetworks's
-    preferences per class.
-
-    A `MATRIX` mixture weight is a tensor of shape [a, b] where a is the
-    number of outputs from the subnetwork's `last_layer` and b is the
-    number of outputs from the ensemble's `logits`. This weight
-    matrix-multiplies the subnetwork's `last_layer`. This mixture weight
-    offers the most flexibility and expressivity, allowing subnetworks to
-    have outputs of different dimensionalities. However, it also has the
-    most trainable parameters (a*b), and is therefore the most sensitive to
-    learning rates and regularization.
 
     Args:
       head: A `tf.contrib.estimator.Head` instance for computing loss and
@@ -254,12 +233,30 @@ class Estimator(tf.estimator.Estimator):
         training stops before `max_iteration_steps` steps.
       mixture_weight_type: The `adanet.MixtureWeightType` defining which mixture
         weight type to learn in the linear combination of subnetwork outputs.
+        * `SCALAR`: creates a rank 0 tensor mixture weight . It performs an
+          element- wise multiplication with its subnetwork's logits. This
+          mixture weight is the simplest to learn, the quickest to train, and
+          most likely to generalize well.
+        * `VECTOR`:  creates a tensor with shape [k] where k is the ensemble's
+          logits dimension as defined by `head`. It is similar to `SCALAR` in
+          that it performs an element-wise multiplication with its subnetwork's
+          logits, but is more flexible in learning a subnetworks's preferences
+          per class.
+        * `MATRIX`: creates a tensor of shape [a, b] where a is the number of
+          outputs from the subnetwork's `last_layer` and b is the number of
+          outputs from the ensemble's `logits`. This weight matrix-multiplies
+          the subnetwork's `last_layer`. This mixture weight offers the most
+          flexibility and expressivity, allowing subnetworks to have outputs of
+          different dimensionalities. However, it also has the most trainable
+          parameters (a*b), and is therefore the most sensitive to learning
+          rates and regularization.
       mixture_weight_initializer: The initializer for mixture_weights. When
-        `None`, the default is different according to `mixture_weight_type`.
-        `SCALAR` initializes to 1/N where N is the number of subnetworks in the
-        ensemble giving a uniform average. `VECTOR` initializes each entry to
-        1/N where N is the number of subnetworks in the ensemble giving a
-        uniform average. `MATRIX` uses `tf.zeros_initializer`.
+        `None`, the default is different according to `mixture_weight_type`:
+        * `SCALAR`: initializes to 1/N where N is the number of subnetworks in
+          the ensemble giving a uniform average.
+        * `VECTOR`: initializes each entry to 1/N where N is the number of
+          subnetworks in the ensemble giving a uniform average.
+        * `MATRIX`: uses `tf.zeros_initializer`.
       warm_start_mixture_weights: Whether, at the beginning of an iteration, to
         initialize the mixture weights of the subnetworks from the previous
         ensemble to their learned value at the previous iteration, as opposed to
@@ -288,6 +285,19 @@ class Estimator(tf.estimator.Estimator):
       use_bias: Whether to add a bias term to the ensemble's logits. Adding a
         bias allows the ensemble to learn a shift in the data, often leading to
         more stable training and better predictions.
+      metric_fn: A function which should obey the following signature:
+        - Args: can only have following three arguments in any order:
+          * predictions: Predictions `Tensor` or dict of `Tensor` created by
+            given `head`.
+          * features: Input `dict` of `Tensor` objects created by `input_fn`
+            which is given to `estimator.evaluate` as an argument.
+          * labels:  Labels `Tensor` or dict of `Tensor` created by `input_fn`
+            which is given to `estimator.evaluate` as an argument.
+        - Returns: Dict of metric results keyed by name. Final metrics are a
+          union of this and `head's` existing metrics. If there is a name
+          conflict between this and `head`s existing metrics, this will override
+          the existing one. The values of the dict are the results of calling a
+          metric function, namely a `(metric_tensor, update_op)` tuple.
       force_grow: Boolean override that forces the ensemble to grow by one
         subnetwork at the end of each iteration. Normally at the end of each
         iteration, AdaNet selects the best candidate ensemble according to its
@@ -390,7 +400,8 @@ class Estimator(tf.estimator.Estimator):
         checkpoint_dir=self._model_dir,
         adanet_lambda=adanet_lambda,
         adanet_beta=adanet_beta,
-        use_bias=use_bias)
+        use_bias=use_bias,
+        metric_fn=metric_fn)
     candidate_builder = _CandidateBuilder(
         max_steps=max_iteration_steps,
         adanet_loss_decay=self._adanet_loss_decay)
@@ -1010,7 +1021,9 @@ class Estimator(tf.estimator.Estimator):
       raise UserWarning(
           "The adanet.Estimator's model_fn should not be called directly in "
           "TRAIN mode, because its behavior is undefined outside the context "
-          "of its `train` method.")
+          "of its `train` method. If you are trying to add custom metrics "
+          "with `tf.contrib.estimator.add_metrics`, pass the `metric_fn` to "
+          "this `Estimator's` constructor instead.")
 
     # Wrap features so that their ops always have the same names for when
     # freezing and loading ensembles.

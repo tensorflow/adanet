@@ -28,6 +28,8 @@ import tensorflow as tf
 from tensorflow.python.summary import summary as summary_lib
 from tensorflow.python.training import training_util
 
+_VALID_METRIC_FN_ARGS = set(["features", "labels", "predictions"])
+
 
 class WeightedSubnetwork(
     collections.namedtuple("WeightedSubnetwork",
@@ -197,6 +199,49 @@ def _architecture_as_metric(weighted_subnetworks):
   return (architecture_summary, tf.no_op())
 
 
+def _call_metric_fn(metric_fn, features, labels, predictions):
+  """Calls metric fn with proper arguments."""
+
+  if not metric_fn:
+    return {}
+
+  metric_fn_args = inspect.getargspec(metric_fn).args
+  kwargs = {}
+  if "features" in metric_fn_args:
+    kwargs["features"] = features
+  if "labels" in metric_fn_args:
+    kwargs["labels"] = labels
+  if "predictions" in metric_fn_args:
+    kwargs["predictions"] = predictions
+  return metric_fn(**kwargs)
+
+
+def _verify_metric_fn_args(metric_fn):
+  if not metric_fn:
+    return
+  args = set(inspect.getargspec(metric_fn).args)
+  invalid_args = list(args - _VALID_METRIC_FN_ARGS)
+  if invalid_args:
+    raise ValueError("metric_fn (%s) has following not expected args: %s" %
+                     (metric_fn, invalid_args))
+
+
+def _add_eval_metric_ops(eval_metric_ops, group_name, estimator_spec,
+                         metric_fn):
+  """Adds eval metric ops to the given dictionary for the given group name."""
+
+  eval_metric_ops["loss/adanet/{}".format(group_name)] = tf.metrics.mean(
+      estimator_spec.loss)
+  metric_ops = estimator_spec.eval_metric_ops
+  for metric in sorted(metric_ops):
+    eval_metric_ops["{metric}/adanet/{group_name}".format(
+        metric=metric, group_name=group_name)] = metric_ops[metric]
+  metric_ops = metric_fn(predictions=estimator_spec.predictions)
+  for metric in sorted(metric_ops):
+    eval_metric_ops["{metric}/adanet/{group_name}".format(
+        metric=metric, group_name=group_name)] = metric_ops[metric]
+
+
 @contextlib.contextmanager
 def _subnetwork_context(iteration_step_scope, scoped_summary):
   """Monkey-patches global attributes with subnetwork-specifics ones."""
@@ -270,7 +315,8 @@ class _EnsembleBuilder(object):
                checkpoint_dir=None,
                adanet_lambda=0.,
                adanet_beta=0.,
-               use_bias=True):
+               use_bias=True,
+               metric_fn=None):
     """Returns an initialized `_EnsembleBuilder`.
 
     Args:
@@ -298,6 +344,20 @@ class _EnsembleBuilder(object):
         all subnetworks' weights 'w' in the ensemble regardless of their
         complexity. See Equation (4) in the AdaNet paper.
       use_bias: Whether to add a bias term to the ensemble's logits.
+      metric_fn: A function which should obey the following signature:
+        - Args: can only have following three arguments in any order:
+          * predictions: Predictions `Tensor` or dict of `Tensor` created by
+            given `Head`.
+          * features: Input `dict` of `Tensor` objects created by `input_fn`
+            which is given to `estimator.evaluate` as an argument.
+          * labels:  Labels `Tensor` or dict of `Tensor` created by `input_fn`
+            which is given to `estimator.evaluate` as an argument.
+        - Returns: Dict of metric results keyed by name. Final metrics are a
+          union of this and `Head's` existing metrics. If there is a name
+          conflict between this and `estimator`s existing metrics, this will
+          override the existing one. The values of the dict are the results of
+          calling a metric function, namely a `(metric_tensor, update_op)`
+          tuple.
 
     Returns:
       An `_EnsembleBuilder` instance.
@@ -305,12 +365,15 @@ class _EnsembleBuilder(object):
     Raises:
       ValueError: if warm_start_mixture_weights is True but checkpoint_dir is
       None.
+      ValueError: if metric_fn is invalid.
     """
 
     if warm_start_mixture_weights:
       if checkpoint_dir is None:
         raise ValueError("checkpoint_dir cannot be None when "
                          "warm_start_mixture_weights is True.")
+
+    _verify_metric_fn_args(metric_fn)
 
     self._head = head
     self._mixture_weight_type = mixture_weight_type
@@ -320,6 +383,7 @@ class _EnsembleBuilder(object):
     self._adanet_lambda = adanet_lambda
     self._adanet_beta = adanet_beta
     self._use_bias = use_bias
+    self._metric_fn = metric_fn
 
   def append_new_subnetwork(self,
                             ensemble_spec,
@@ -539,21 +603,26 @@ class _EnsembleBuilder(object):
     eval_metric_ops = {}
     if mode != tf.estimator.ModeKeys.PREDICT:
       adanet_loss = ensemble_loss + ensemble_complexity_regularization
-      eval_metric_ops["loss/adanet/adanet_weighted_ensemble"] = tf.metrics.mean(
-          ensemble_loss)
-      for metric, ops in adanet_weighted_ensemble_spec.eval_metric_ops.items():
-        eval_metric_ops["{}/adanet/adanet_weighted_ensemble".format(
-            metric)] = ops
-      avg_metric_ops = uniform_average_ensemble_spec.eval_metric_ops
-      eval_metric_ops["loss/adanet/uniform_average_ensemble"] = tf.metrics.mean(
-          uniform_average_ensemble_spec.loss)
-      for metric, ops in avg_metric_ops.items():
-        eval_metric_ops["{}/adanet/uniform_average_ensemble".format(
-            metric)] = ops
-      eval_metric_ops["loss/adanet/subnetwork"] = tf.metrics.mean(
-          subnetwork_spec.loss)
-      for metric, ops in subnetwork_spec.eval_metric_ops.items():
-        eval_metric_ops["{}/adanet/subnetwork".format(metric)] = ops
+      metric_fn = functools.partial(
+          _call_metric_fn,
+          metric_fn=self._metric_fn,
+          features=features,
+          labels=labels)
+      _add_eval_metric_ops(
+          eval_metric_ops=eval_metric_ops,
+          group_name="adanet_weighted_ensemble",
+          estimator_spec=adanet_weighted_ensemble_spec,
+          metric_fn=metric_fn)
+      _add_eval_metric_ops(
+          eval_metric_ops=eval_metric_ops,
+          group_name="uniform_average_ensemble",
+          estimator_spec=uniform_average_ensemble_spec,
+          metric_fn=metric_fn)
+      _add_eval_metric_ops(
+          eval_metric_ops=eval_metric_ops,
+          group_name="subnetwork",
+          estimator_spec=subnetwork_spec,
+          metric_fn=metric_fn)
       eval_metric_ops["architecture/adanet/ensembles"] = (
           _architecture_as_metric(weighted_subnetworks))
       with summary.current_scope():
