@@ -21,6 +21,4 @@ env:
 install:
   - ./oss_scripts/oss_pip_install.sh
 script:
-  # TODO: Add //adanet/core:estimator_test.
-  # Currently it is causing continuous integration to timeout.
-  - bazel test -c opt //adanet:adanet_test //adanet/autoensemble/... //adanet/core:candidate_test //adanet/core:ensemble_test //adanet/core:evaluator_test //adanet/core:freezer_test //adanet/core:input_utils_test //adanet/core:iteration_test //adanet/core:report_accessor_test //adanet/core:report_materializer_test //adanet/core:summary_test //adanet/core:timer_test //adanet/core/subnetwork/... //adanet/examples/...
+  - bazel test -c opt //... --test_output=errors

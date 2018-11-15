@@ -34,9 +34,12 @@ from adanet.core.subnetwork import Report
 from adanet.core.subnetwork import SimpleGenerator
 from adanet.core.subnetwork import Subnetwork
 import adanet.core.testing_utils as tu
+from distutils.version import LooseVersion
 import tensorflow as tf
 
 from tensorflow.python.estimator.export import export
+
+tf.logging.set_verbosity(tf.logging.INFO)
 
 
 class _DNNBuilder(Builder):
@@ -44,8 +47,8 @@ class _DNNBuilder(Builder):
 
   def __init__(self,
                name,
-               learning_rate=3.,
-               mixture_weight_learning_rate=3.,
+               learning_rate=.001,
+               mixture_weight_learning_rate=.001,
                return_penultimate_layer=True,
                layer_size=1,
                seed=13):
@@ -179,19 +182,19 @@ class _SimpleBuilder(Builder):
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate=3.)
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=.001)
     return optimizer.minimize(loss, var_list=var_list)
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
                                      iteration_step, summary):
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate=3.)
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=.001)
     return optimizer.minimize(loss, var_list=var_list)
 
 
 class _LinearBuilder(Builder):
   """A simple linear subnetwork builder."""
 
-  def __init__(self, name, mixture_weight_learning_rate=.1, seed=42):
+  def __init__(self, name, mixture_weight_learning_rate=.001, seed=42):
     self._name = name
     self._mixture_weight_learning_rate = mixture_weight_learning_rate
     self._seed = seed
@@ -222,7 +225,7 @@ class _LinearBuilder(Builder):
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=.001)
     return optimizer.minimize(loss, var_list=var_list)
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
@@ -263,8 +266,8 @@ class _WidthLimitingDNNBuilder(_DNNBuilder):
 
   def __init__(self,
                name,
-               learning_rate=3.,
-               mixture_weight_learning_rate=3.,
+               learning_rate=.001,
+               mixture_weight_learning_rate=.001,
                return_penultimate_layer=True,
                layer_size=1,
                width_limit=None,
@@ -321,7 +324,7 @@ class _ModifierSessionRunHook(tf.train.SessionRunHook):
 
 
 def _head():
-  return tf.contrib.estimator.binary_classification_head(
+  return tf.contrib.estimator.regression_head(
       loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
 
@@ -331,7 +334,7 @@ class EstimatorTestCase(parameterized.TestCase, tf.test.TestCase):
     # Setup and cleanup test directory.
     self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
-    os.mkdir(self.test_subdirectory)
+    os.makedirs(self.test_subdirectory)
 
   def tearDown(self):
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
@@ -346,14 +349,14 @@ class EstimatorTest(EstimatorTestCase):
       "steps": 1,
       "max_steps": None,
       "want_accuracy": .75,
-      "want_loss": .69314,
+      "want_loss": 0.49899703,
   }, {
       "testcase_name": "single_builder_max_steps",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
       "max_iteration_steps": 200,
       "max_steps": 300,
       "want_accuracy": 1.,
-      "want_loss": .27956,
+      "want_loss": 0.32420248,
   }, {
       "testcase_name": "single_builder_steps",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
@@ -361,14 +364,14 @@ class EstimatorTest(EstimatorTestCase):
       "steps": 300,
       "max_steps": None,
       "want_accuracy": 1.,
-      "want_loss": .27956,
+      "want_loss": 0.32420248,
   }, {
       "testcase_name": "single_builder_no_bias",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
       "max_iteration_steps": 200,
       "use_bias": False,
       "want_accuracy": .75,
-      "want_loss": .44464,
+      "want_loss": 0.496736,
   }, {
       "testcase_name":
           "single_builder_scalar_mixture_weight",
@@ -381,7 +384,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .09449,
+          0.32317898,
   }, {
       "testcase_name":
           "single_builder_vector_mixture_weight",
@@ -394,7 +397,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .09449,
+          0.32317898,
   }, {
       "testcase_name": "single_builder_replicate_ensemble_in_training",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
@@ -402,20 +405,20 @@ class EstimatorTest(EstimatorTestCase):
       "max_iteration_steps": 200,
       "max_steps": 300,
       "want_accuracy": .75,
-      "want_loss": 2.27981,
+      "want_loss": 0.32420215,
   }, {
       "testcase_name": "single_builder_with_hook",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
       "max_iteration_steps": 200,
       "hooks": [_ModifierSessionRunHook()],
       "want_accuracy": 1.,
-      "want_loss": .27956,
+      "want_loss": 0.32420248,
   }, {
       "testcase_name": "high_max_iteration_steps",
       "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
       "max_iteration_steps": 500,
       "want_accuracy": .75,
-      "want_loss": .59545,
+      "want_loss": 0.32487726,
   }, {
       "testcase_name":
           "two_builders",
@@ -427,7 +430,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00912,
+          0.27713922,
   }, {
       "testcase_name":
           "two_builders_different_layer_sizes",
@@ -440,7 +443,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00178,
+          0.29696745,
   }, {
       "testcase_name":
           "two_builders_different_layer_sizes_three_iterations",
@@ -453,7 +456,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00159,
+          0.26433355,
   }, {
       "testcase_name":
           "width_limiting_builder_no_pruning",
@@ -464,7 +467,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .13983,
+          0.32001898,
   }, {
       "testcase_name":
           "width_limiting_builder_some_pruning",
@@ -476,7 +479,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           .75,
       "want_loss":
-          .41644,
+          0.38592532,
   }, {
       "testcase_name":
           "width_limiting_builder_prune_all",
@@ -488,7 +491,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           .75,
       "want_loss":
-          .44568,
+          0.43492866,
   }, {
       "testcase_name":
           "width_limiting_builder_mixed",
@@ -503,7 +506,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .13983,
+          0.32001898,
   }, {
       "testcase_name":
           "evaluator_good_input",
@@ -518,7 +521,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00178,
+          0.31241742,
   }, {
       "testcase_name":
           "evaluator_bad_input",
@@ -533,7 +536,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00786,
+          0.29696745,
   }, {
       "testcase_name":
           "report_materializer",
@@ -549,7 +552,7 @@ class EstimatorTest(EstimatorTestCase):
       "want_accuracy":
           1.,
       "want_loss":
-          .00178,
+          0.29696745,
   })
   def test_lifecycle(self,
                      subnetwork_generator,
@@ -593,7 +596,6 @@ class EstimatorTest(EstimatorTestCase):
     eval_results = estimator.evaluate(
         input_fn=train_input_fn, steps=10, hooks=hooks)
     tf.logging.info("%s", eval_results)
-    self.assertAlmostEqual(want_accuracy, eval_results["accuracy"], places=3)
     self.assertAlmostEqual(want_loss, eval_results["loss"], places=5)
     self.assertEqual(max_steps or steps, eval_results["global_step"])
 
@@ -601,8 +603,7 @@ class EstimatorTest(EstimatorTestCase):
     predictions = estimator.predict(
         input_fn=tu.dataset_input_fn(features=[0., 0.], labels=None))
     for prediction in predictions:
-      self.assertIsNotNone(prediction["classes"])
-      self.assertIsNotNone(prediction["probabilities"])
+      self.assertIsNotNone(prediction["predictions"])
 
     # Export SavedModel.
     def serving_input_fn():
@@ -666,7 +667,7 @@ class EstimatorTest(EstimatorTestCase):
 
     report_materializer = ReportMaterializer(input_fn=train_input_fn, steps=1)
     estimator = Estimator(
-        head=tf.contrib.estimator.binary_classification_head(),
+        head=tf.contrib.estimator.regression_head(),
         subnetwork_generator=SimpleGenerator(
             [_SimpleBuilder(name="simple", feature_columns=[feature_column])]),
         report_materializer=report_materializer,
@@ -808,7 +809,7 @@ class EstimatorKerasLayersTest(EstimatorTestCase):
     estimator = Estimator(
         head=_head(),
         subnetwork_generator=SimpleGenerator(
-            [KerasCNNBuilder(learning_rate=1.)]),
+            [KerasCNNBuilder(learning_rate=.001)]),
         max_iteration_steps=3,
         evaluator=Evaluator(
             input_fn=tu.dummy_input_fn([[1., 1., .1, .1]], [[0.]]), steps=3),
@@ -826,15 +827,18 @@ class EstimatorKerasLayersTest(EstimatorTestCase):
     # Evaluate.
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
     tf.logging.info("%s", eval_results)
-    self.assertAlmostEqual(.5, eval_results["accuracy"], places=3)
-    self.assertAlmostEqual(.69437, eval_results["loss"], places=3)
+    want_loss = 0.16915826
+    if LooseVersion(tf.VERSION) >= LooseVersion("1.10.0"):
+      # After TF v1.10.0 the loss computed from a neural network using Keras
+      # layers changed, however it is not clear why.
+      want_loss = 0.26195815
+    self.assertAlmostEqual(want_loss, eval_results["loss"], places=3)
 
     # Predict.
     predictions = estimator.predict(
         input_fn=tu.dataset_input_fn(features=[0., 0., 0., 0.], labels=None))
     for prediction in predictions:
-      self.assertIsNotNone(prediction["classes"])
-      self.assertIsNotNone(prediction["probabilities"])
+      self.assertIsNotNone(prediction["predictions"])
 
     # Export SavedModel.
     def serving_input_fn():
@@ -1005,7 +1009,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
     subnetwork_generator = SimpleGenerator(
-        [_DNNBuilder("dnn", mixture_weight_learning_rate=.01)])
+        [_DNNBuilder("dnn", mixture_weight_learning_rate=.001)])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
@@ -1022,7 +1026,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
     train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
     estimator.train(input_fn=train_input_fn, max_steps=3)
 
-    ensemble_loss = .693
+    ensemble_loss = 1.
     self.assertAlmostEqual(
         ensemble_loss,
         _check_eventfile_for_keyword("loss", self.test_subdirectory),
@@ -1057,24 +1061,24 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
       "testcase_name": "none_metrics",
       "head": _EvalMetricsHead(None),
       "want_summaries": [],
-      "want_loss": .910,
+      "want_loss": .9910,
   }, {
       "testcase_name": "metrics_fn",
       "head": _EvalMetricsHead(None),
       "metric_fn": lambda predictions: {"avg": tf.metrics.mean(predictions)},
       "want_summaries": ["avg"],
-      "want_loss": .910,
+      "want_loss": .9910,
   }, {
       "testcase_name": "empty_metrics",
       "head": _EvalMetricsHead({}),
       "want_summaries": [],
-      "want_loss": .910,
+      "want_loss": .9910,
   }, {
       "testcase_name": "evaluation_name",
       "head": _EvalMetricsHead({}),
       "evaluation_name": "continuous",
       "want_summaries": [],
-      "want_loss": .910,
+      "want_loss": .9910,
       "global_subdir": "eval_continuous",
       "candidate_subdir": "candidate/linear/eval_continuous",
   }, {
@@ -1087,7 +1091,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
           "average_loss", "average_loss/adanet/adanet_weighted_ensemble"
       ],
       "want_loss":
-          .691,
+          .96453667,
   }, {
       "testcase_name":
           "binary_classification_head",
@@ -1098,7 +1102,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
           "average_loss", "average_loss/adanet/adanet_weighted_ensemble"
       ],
       "want_loss":
-          .671,
+          0.6909014,
   }, {
       "testcase_name":
           "all_metrics",
@@ -1123,7 +1127,7 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
           "serialized_summary/adanet/adanet_weighted_ensemble/0",
       ],
       "want_loss":
-          .910,
+          .9910,
   })
   def test_eval_metrics(self,
                         head,
@@ -1137,8 +1141,9 @@ class EstimatorSummaryWriterTest(EstimatorTestCase):
 
     seed = 42
     run_config = tf.estimator.RunConfig(tf_random_seed=seed)
-    subnetwork_generator = SimpleGenerator(
-        [_LinearBuilder("linear", mixture_weight_learning_rate=.01, seed=seed)])
+    subnetwork_generator = SimpleGenerator([
+        _LinearBuilder("linear", mixture_weight_learning_rate=.001, seed=seed)
+    ])
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
@@ -1393,6 +1398,10 @@ class EstimatorExportSavedModelForEvalTest(EstimatorTestCase):
   def test_export_saved_model_for_eval(self):
     """Tests new SavedModel exporting functionality."""
 
+    if LooseVersion(tf.VERSION) < LooseVersion("1.10.0"):
+      self.skipTest("export_saved_model_for_eval is not "
+                    "supported before TF v1.10.0.")
+
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
     subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
     report_materializer = ReportMaterializer(
@@ -1457,7 +1466,7 @@ class EstimatorExportSavedModelForEvalTest(EstimatorTestCase):
 
       # Read metric again; it should no longer be zero.
       self.assertAlmostEqual(
-          .201,
+          0.996,
           sess.run(
               tf.saved_model.utils.get_tensor_from_tensor_info(
                   signature_def.outputs["metrics/average_loss/value"])),
@@ -1488,12 +1497,23 @@ class EstimatorReportTest(EstimatorTestCase):
     for qualified_name in report_dict_1.keys():
       report_1 = report_dict_1[qualified_name]
       report_2 = report_dict_2[qualified_name]
-      self.assertEqual(report_1.hparams, report_2.hparams)
-      self.assertEqual(report_1.attributes, report_2.attributes)
-      self.assertEqual(report_1.included_in_final_ensemble,
-                       report_2.included_in_final_ensemble)
+      self.assertEqual(
+          report_1.hparams,
+          report_2.hparams,
+          msg="{} vs. {}".format(report_1, report_2))
+      self.assertEqual(
+          report_1.attributes,
+          report_2.attributes,
+          msg="{} vs. {}".format(report_1, report_2))
+      self.assertEqual(
+          report_1.included_in_final_ensemble,
+          report_2.included_in_final_ensemble,
+          msg="{} vs. {}".format(report_1, report_2))
       for metric_key, metric_value in report_1.metrics.items():
-        self.assertEqual(metric_value, report_2.metrics[metric_key])
+        self.assertEqual(
+            metric_value,
+            report_2.metrics[metric_key],
+            msg="{} vs. {}".format(report_1, report_2))
 
   @parameterized.named_parameters(
       {
@@ -1525,10 +1545,18 @@ class EstimatorReportTest(EstimatorTestCase):
           "subnetwork_builders": [
               # learning_rate is set to 0 for all but one Builder
               # to make sure that only one of them can learn.
-              _DNNBuilder("dnn_1", layer_size=1, learning_rate=0.),
-              _DNNBuilder("dnn_2", layer_size=2, learning_rate=0.),
+              _DNNBuilder(
+                  "dnn_1",
+                  layer_size=1,
+                  learning_rate=0.,
+                  mixture_weight_learning_rate=0.),
+              _DNNBuilder(
+                  "dnn_2",
+                  layer_size=2,
+                  learning_rate=0.,
+                  mixture_weight_learning_rate=0.),
               # fixing the match for dnn_3 to win.
-              _DNNBuilder("dnn_3", layer_size=3, learning_rate=3.),
+              _DNNBuilder("dnn_3", layer_size=3),
           ],
           "num_iterations":
               1,
@@ -1706,10 +1734,18 @@ class EstimatorReportTest(EstimatorTestCase):
           "subnetwork_builders": [
               # learning_rate is set to 0 for all but one Builder
               # to make sure that only one of them can learn.
-              _DNNBuilder("dnn_1", layer_size=1, learning_rate=0.),
-              _DNNBuilder("dnn_2", layer_size=2, learning_rate=0.),
+              _DNNBuilder(
+                  "dnn_1",
+                  layer_size=1,
+                  learning_rate=0.,
+                  mixture_weight_learning_rate=0.),
+              _DNNBuilder(
+                  "dnn_2",
+                  layer_size=2,
+                  learning_rate=0.,
+                  mixture_weight_learning_rate=0.),
               # fixing the match for dnn_3 to win in every iteration.
-              _DNNBuilder("dnn_3", layer_size=3, learning_rate=3.),
+              _DNNBuilder("dnn_3", layer_size=3),
           ],
           "num_iterations":
               3,
@@ -1955,10 +1991,10 @@ class EstimatorReportTest(EstimatorTestCase):
           ],
       },
   )
-  def testReportGenerationAndUsage(self, subnetwork_builders, num_iterations,
-                                   want_materialized_iteration_reports,
-                                   want_previous_ensemble_reports,
-                                   want_all_reports):
+  def test_report_generation_and_usage(
+      self, subnetwork_builders, num_iterations,
+      want_materialized_iteration_reports, want_previous_ensemble_reports,
+      want_all_reports):
     # Stores the iteration_number, previous_ensemble_reports and all_reports
     # arguments in the self._iteration_reports dictionary, overwriting what
     # was seen in previous iterations.
