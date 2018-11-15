@@ -87,7 +87,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
 
     # Evaluate.
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
-    self.assertAlmostEqual(0.0039954609, eval_results["loss"], places=3)
+    self.assertAlmostEqual(0.0049838871, eval_results["loss"], places=3)
     self.assertAlmostEqual(1., eval_results["accuracy"])
 
     want_subnetworks = [

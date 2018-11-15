@@ -227,6 +227,5 @@ class AutoEnsembleEstimator(Estimator):
         force_grow=force_grow,
         adanet_loss_decay=adanet_loss_decay,
         worker_wait_timeout_secs=worker_wait_timeout_secs,
-        train_batch_size=train_batch_size,
         model_dir=model_dir,
         config=config)

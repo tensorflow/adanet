@@ -208,7 +208,8 @@ def _subnetwork_context(iteration_step_scope, scoped_summary):
   old_summary_histogram = summary_lib.histogram
   old_summary_audio = summary_lib.audio
 
-  def iteration_step():
+  def iteration_step(graph=None):
+    del graph
     with tf.variable_scope(iteration_step_scope, reuse=tf.AUTO_REUSE):
       return tf.get_variable(
           "iteration_step",
