@@ -19,6 +19,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
+import shutil
+
+from absl.testing import parameterized
 from adanet.core.ensemble import _EnsembleSpec
 from adanet.core.ensemble import Ensemble
 from adanet.core.ensemble import WeightedSubnetwork
@@ -200,7 +204,9 @@ def dummy_estimator_spec(loss=None,
 def dummy_input_fn(features, labels):
   """Returns an input_fn that returns feature and labels `Tensors`."""
 
-  def _input_fn():
+  def _input_fn(params=None):
+    del params  # Unused.
+
     input_features = {"x": tf.constant(features, name="x")}
     input_labels = tf.constant(labels, name="y")
     return input_features, input_labels
@@ -211,7 +217,11 @@ def dummy_input_fn(features, labels):
 def dataset_input_fn(features=8., labels=9.):
   """Returns feature and label `Tensors` via a `Dataset`."""
 
-  def _input_fn():
+  def _input_fn(params=None):
+    """The `Dataset` input_fn which will be returned."""
+
+    del params  # Unused.
+
     input_features = tf.data.Dataset.from_tensors(
         [features]).make_one_shot_iterator().get_next()
     if labels is not None:
@@ -267,3 +277,20 @@ def tensor_features(features):
       feature = tf.convert_to_tensor(feature)
     result[key] = feature
   return result
+
+
+def head():
+  return tf.contrib.estimator.regression_head(
+      loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
+
+
+class AdanetTestCase(parameterized.TestCase, tf.test.TestCase):
+
+  def setUp(self):
+    # Setup and cleanup test directory.
+    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
+    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
+    os.makedirs(self.test_subdirectory)
+
+  def tearDown(self):
+    shutil.rmtree(self.test_subdirectory, ignore_errors=True)

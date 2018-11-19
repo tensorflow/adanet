@@ -220,7 +220,8 @@ class Estimator(tf.estimator.Estimator):
                worker_wait_timeout_secs=7200,
                model_dir=None,
                report_dir=None,
-               config=None):
+               config=None,
+               **kwargs):
     """Initializes an `Estimator`.
 
     Args:
@@ -338,6 +339,7 @@ class Estimator(tf.estimator.Estimator):
         `report_materializer` is None, this will not save anything. If `None` or
         empty string, defaults to "<model_dir>/report".
       config: `RunConfig` object to configure the runtime settings.
+      **kwargs: Extra keyword args passed to the parent.
 
     Returns:
       An `Estimator` instance.
@@ -382,12 +384,13 @@ class Estimator(tf.estimator.Estimator):
     # added to `tf.estimator.Estimator` that are expected to be callable by
     # external functions, such as in b/110435640.
     super(Estimator, self).__init__(
-        model_fn=self._model_fn,
+        model_fn=self._adanet_model_fn,
         params={
             self._Keys.SUBNETWORK_GENERATOR: subnetwork_generator,
         },
         config=config,
-        model_dir=model_dir)
+        model_dir=model_dir,
+        **kwargs)
 
     # These are defined after base Estimator's init so that they can
     # use the same temporary model_dir as the underlying Estimator even if
@@ -565,7 +568,7 @@ class Estimator(tf.estimator.Estimator):
       # Create global step before calling model_fn as does superclass.
       tf.train.get_or_create_global_step()
       features, labels = input_fn()
-      self._model_fn(features, labels, mode, params)
+      self._adanet_model_fn(features, labels, mode, params)
 
   def _prepare_next_iteration(self):
     """Prepares the next iteration.
@@ -984,7 +987,7 @@ class Estimator(tf.estimator.Estimator):
 
     return previous_ensemble_reports, all_reports
 
-  def _model_fn(self, features, labels, mode, params):
+  def _adanet_model_fn(self, features, labels, mode, params):
     """AdaNet model_fn.
 
     This model_fn is expected to be called four times per iteration. The first

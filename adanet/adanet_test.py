@@ -38,6 +38,7 @@ class AdaNetTest(tf.test.TestCase):
     self.assertIsNotNone(adanet.subnetwork.Generator)
     self.assertIsNotNone(adanet.subnetwork.Subnetwork)
     self.assertIsNotNone(adanet.Summary)
+    self.assertIsNotNone(adanet.TPUEstimator)
     self.assertIsNotNone(adanet.WeightedSubnetwork)
     self.assertIsNotNone(simple_dnn.Generator)
 

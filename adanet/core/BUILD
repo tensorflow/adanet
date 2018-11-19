@@ -19,6 +19,7 @@ py_library(
         ":evaluator",
         ":report_materializer",
         ":summary",
+        ":tpu_estimator",
     ],
 )
 
@@ -52,6 +53,27 @@ py_test(
         ":testing_utils",
         "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+py_library(
+    name = "tpu_estimator",
+    srcs = ["tpu_estimator.py"],
+    deps = [
+        ":ensemble",
+        ":estimator",
+        "@six_archive//:six",
+    ],
+)
+
+py_test(
+    name = "tpu_estimator_test",
+    srcs = ["tpu_estimator_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":testing_utils",
+        ":tpu_estimator",
+        "//adanet/core/subnetwork",
     ],
 )
 
@@ -213,6 +235,7 @@ py_library(
     deps = [
         ":ensemble",
         "//adanet/core/subnetwork",
+        "@absl_py//absl/testing:parameterized",
     ],
 )
 

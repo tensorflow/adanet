@@ -27,5 +27,6 @@ from adanet.core import MixtureWeightType
 from adanet.core import ReportMaterializer
 from adanet.core import subnetwork
 from adanet.core import Summary
+from adanet.core import TPUEstimator
 from adanet.core import WeightedSubnetwork
 from adanet.core.subnetwork import Subnetwork
