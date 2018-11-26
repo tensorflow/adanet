@@ -67,13 +67,21 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
       ]).make_one_shot_iterator().get_next()
       return {"input_1": input_features}, None
 
+    if hasattr(tf.estimator, "LinearEstimator"):
+      linear_estimator_fn = tf.estimator.LinearEstimator
+    else:
+      linear_estimator_fn = tf.contrib.estimator.LinearEstimator
+    if hasattr(tf.estimator, "DNNEstimator"):
+      dnn_estimator_fn = tf.estimator.DNNEstimator
+    else:
+      dnn_estimator_fn = tf.contrib.estimator.DNNEstimator
     estimator = AutoEnsembleEstimator(
         head=head,
         candidate_pool=[
-            tf.contrib.estimator.LinearEstimator(
+            linear_estimator_fn(
                 head=head, feature_columns=feature_columns,
                 optimizer=optimizer),
-            tf.contrib.estimator.DNNEstimator(
+            dnn_estimator_fn(
                 head=head,
                 feature_columns=feature_columns,
                 optimizer=optimizer,
