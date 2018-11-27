@@ -25,6 +25,7 @@ from adanet.core.subnetwork import Report
 from adanet.core.subnetwork import SimpleGenerator
 from adanet.core.subnetwork import Subnetwork
 from adanet.core.tpu_estimator import TPUEstimator
+from distutils.version import LooseVersion
 import tensorflow as tf
 
 
@@ -119,6 +120,12 @@ class _DNNBuilder(Builder):
 
 
 class TPUEstimatorTest(tu.AdanetTestCase):
+
+  def setUp(self):
+    super(TPUEstimatorTest, self).setUp()
+    if LooseVersion(tf.VERSION) < LooseVersion("1.11.0"):
+      self.skipTest("TPUEstimatorSpec does not support `training_hooks`"
+                    "TF v1.11.0.")
 
   def test_tpu_estimator_simple_lifecycle(self):
     config = tf.contrib.tpu.RunConfig(tf_random_seed=42)

@@ -286,12 +286,15 @@ def head():
 
 
 class AdanetTestCase(parameterized.TestCase, tf.test.TestCase):
+  """A parameterized `TestCase` that manages a test subdirectory."""
 
   def setUp(self):
+    super(AdanetTestCase, self).setUp()
     # Setup and cleanup test directory.
     self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
     os.makedirs(self.test_subdirectory)
 
   def tearDown(self):
+    super(AdanetTestCase, self).tearDown()
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
