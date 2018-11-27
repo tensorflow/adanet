@@ -107,7 +107,8 @@ def dummy_ensemble_spec(name,
     predictions = logits
   weighted_subnetworks = [
       WeightedSubnetwork(
-          name=tf.constant(name),
+          name=name,
+          iteration_number=1,
           logits=dummy_tensor([2, 1], random_seed * 4),
           weight=dummy_tensor([2, 1], random_seed * 4),
           subnetwork=Subnetwork(

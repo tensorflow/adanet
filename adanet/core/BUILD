@@ -29,8 +29,6 @@ py_library(
     deps = [
         ":candidate",
         ":ensemble",
-        ":freezer",
-        ":input_utils",
         ":iteration",
         ":report_accessor",
         ":summary",
@@ -158,28 +156,6 @@ py_test(
 )
 
 py_library(
-    name = "freezer",
-    srcs = ["freezer.py"],
-    deps = [
-        ":ensemble",
-        "//adanet/core/subnetwork",
-    ],
-)
-
-py_test(
-    name = "freezer_test",
-    srcs = ["freezer_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":ensemble",
-        ":freezer",
-        ":testing_utils",
-        "//adanet/core/subnetwork",
-        "@absl_py//absl/testing:parameterized",
-    ],
-)
-
-py_library(
     name = "summary",
     srcs = ["summary.py"],
     deps = [
@@ -194,23 +170,6 @@ py_test(
         ":summary",
         "@absl_py//absl/testing:parameterized",
         "@six_archive//:six",
-    ],
-)
-
-py_library(
-    name = "input_utils",
-    srcs = ["input_utils.py"],
-    deps = [
-    ],
-)
-
-py_test(
-    name = "input_utils_test",
-    srcs = ["input_utils_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":input_utils",
-        "@absl_py//absl/testing:parameterized",
     ],
 )
 

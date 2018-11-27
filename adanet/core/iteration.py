@@ -97,12 +97,17 @@ class _Iteration(
 class _IterationBuilder(object):
   """Builds AdaNet iterations."""
 
-  def __init__(self, candidate_builder, ensemble_builder):
+  def __init__(self,
+               candidate_builder,
+               ensemble_builder,
+               replicate_ensemble_in_training=False):
     """Creates an `_IterationBuilder` instance.
 
     Args:
       candidate_builder: A `_CandidateBuilder` instance.
       ensemble_builder: An `_EnsembleBuilder` instance.
+      replicate_ensemble_in_training: Whether to build the frozen subnetworks in
+        `training` mode during training.
 
     Returns:
       An `_IterationBuilder` object.
@@ -110,6 +115,7 @@ class _IterationBuilder(object):
 
     self._candidate_builder = candidate_builder
     self._ensemble_builder = ensemble_builder
+    self._replicate_ensemble_in_training = replicate_ensemble_in_training
     super(_IterationBuilder, self).__init__()
 
   def build_iteration(self,
@@ -119,7 +125,8 @@ class _IterationBuilder(object):
                       mode,
                       labels=None,
                       previous_ensemble_summary=None,
-                      previous_ensemble_spec=None):
+                      previous_ensemble_spec=None,
+                      rebuilding=False):
     """Builds and returns AdaNet iteration t.
 
     This method uses the generated the candidate subnetworks given the ensemble
@@ -129,7 +136,7 @@ class _IterationBuilder(object):
     defined by lowest complexity-regularized loss on the train set.
 
     Args:
-      iteration_number: The iteration number.
+      iteration_number: Integer iteration number.
       subnetwork_builders: A list of `Builders` for adding ` Subnetworks` to the
         graph. Each subnetwork is then wrapped in a `_Candidate` to train.
       features: Dictionary of `Tensor` objects keyed by feature name.
@@ -138,6 +145,8 @@ class _IterationBuilder(object):
       labels: `Tensor` of labels. Can be `None`.
       previous_ensemble_summary: The `_ScopedSummary` for the previous ensemble.
       previous_ensemble_spec: Optional `_EnsembleSpec` for iteration t-1.
+      rebuilding: Boolean whether the iteration is being rebuilt only to restore
+        the previous best subnetworks and ensembles.
 
     Returns:
       An _Iteration instance.
@@ -147,8 +156,26 @@ class _IterationBuilder(object):
       ValueError: If two `Builder` instances share the same name.
     """
 
+    tf.logging.info("%s iteration %s",
+                    "Rebuilding" if rebuilding else "Building",
+                    iteration_number)
+
     if not subnetwork_builders:
       raise ValueError("Each iteration must have at least one Builder.")
+
+    # TODO: Consider moving ensemble mode logic to ensemble.py.
+    ensemble_mode = mode
+    if rebuilding:
+      # Create the frozen ensemble in EVAL mode by default. This way their
+      # outputs aren't affected by dropout etc.
+      ensemble_mode = tf.estimator.ModeKeys.EVAL
+      if mode == tf.estimator.ModeKeys.PREDICT:
+        ensemble_mode = mode
+
+      # Only replicate in training mode when the user requests it.
+      if self._replicate_ensemble_in_training and (
+          mode == tf.estimator.ModeKeys.TRAIN):
+        ensemble_mode = mode
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
@@ -202,15 +229,19 @@ class _IterationBuilder(object):
           raise ValueError("Two ensembles have the same name '{}'".format(
               subnetwork_builder.name))
         seen_builder_names[subnetwork_builder.name] = True
+        ensemble_name = "t{}_{}".format(iteration_number,
+                                        subnetwork_builder.name)
         summary = _ScopedSummary(
-            subnetwork_builder.name, skip_summary=skip_summaries)
+            ensemble_name, skip_summary=skip_summaries or rebuilding)
         summaries.append(summary)
         ensemble_spec = self._ensemble_builder.append_new_subnetwork(
+            ensemble_name=ensemble_name,
             ensemble_spec=previous_ensemble_spec,
+            iteration_number=iteration_number,
             subnetwork_builder=subnetwork_builder,
             summary=summary,
             features=features,
-            mode=mode,
+            mode=ensemble_mode,
             iteration_step=iteration_step_tensor,
             labels=labels)
         candidate = self._candidate_builder.build_candidate(

@@ -300,12 +300,15 @@ class _FakeEnsembleBuilder(object):
     if eval_metric_ops_fn:
       self._eval_metric_ops_fn = eval_metric_ops_fn
 
-  def append_new_subnetwork(self, ensemble_spec, subnetwork_builder,
+  def append_new_subnetwork(self, ensemble_name, ensemble_spec,
+                            subnetwork_builder, iteration_number,
                             iteration_step, summary, features, mode, labels):
+    del ensemble_name
     del summary
     del mode
     del features
     del labels
+    del iteration_number
     del iteration_step
 
     num_subnetworks = 0
@@ -827,10 +830,13 @@ class _HeadEnsembleBuilder(object):
   def __init__(self, head):
     self._head = head
 
-  def append_new_subnetwork(self, ensemble_spec, subnetwork_builder,
+  def append_new_subnetwork(self, ensemble_name, ensemble_spec,
+                            subnetwork_builder, iteration_number,
                             iteration_step, summary, features, mode, labels):
+    del ensemble_name
     del ensemble_spec
     del subnetwork_builder
+    del iteration_number
     del iteration_step
     del summary
 

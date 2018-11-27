@@ -26,7 +26,6 @@ import shutil
 from absl.testing import parameterized
 from adanet.core.ensemble import _EnsembleBuilder
 from adanet.core.ensemble import MixtureWeightType
-from adanet.core.ensemble import WeightedSubnetwork
 from adanet.core.subnetwork import Builder
 from adanet.core.subnetwork import Subnetwork
 from adanet.core.summary import Summary
@@ -316,12 +315,14 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
         # Note: when ensemble_spec is not None and warm_start_mixture_weights
         # is True, we need to make sure that the bias and mixture weights are
         # already saved to the checkpoint_dir.
+        ensemble_name="test",
         ensemble_spec=ensemble_spec_fn(),
         subnetwork_builder=subnetwork_builder_class(
             _subnetwork_train_op_fn, _mixture_weights_train_op_fn,
             use_logits_last_layer, seed),
         summary=_FakeSummary(),
         features=features,
+        iteration_number=1,
         iteration_step=tf.train.get_or_create_global_step(),
         labels=labels,
         mode=mode)
@@ -393,24 +394,20 @@ def _make_metrics(sess, metric_fn):
       head, MixtureWeightType.SCALAR, metric_fn=metric_fn)
   features = {"x": tf.constant([[1.], [2.]])}
   labels = tf.constant([0, 1])
-  ensemble_spec = builder.build_ensemble_spec(
-      "fake_ensemble", [
-          WeightedSubnetwork(
-              name=tf.constant("fake_weighted"),
-              logits=[[1.], [2.]],
-              weight=[1.],
-              subnetwork=Subnetwork(
-                  logits=[[1.], [2.]],
-                  last_layer=[1.],
-                  complexity=1.,
-                  persisted_tensors={}))
-      ],
+
+  ensemble_spec = builder.append_new_subnetwork(
+      ensemble_name="test",
+      ensemble_spec=None,
+      subnetwork_builder=_Builder(
+          lambda unused0, unused1: tf.no_op(),
+          lambda unused0, unused1: tf.no_op(),
+          use_logits_last_layer=True),
+      iteration_number=0,
+      iteration_step=1,
       summary=_FakeSummary(),
-      bias=0.,
       features=features,
       mode=tf.estimator.ModeKeys.EVAL,
-      labels=labels,
-      iteration_step=1.)
+      labels=labels)
   sess.run((tf.global_variables_initializer(),
             tf.local_variables_initializer()))
   metrics = sess.run(ensemble_spec.eval_metric_ops)
@@ -494,7 +491,7 @@ class EnsembleBuilderMetricFnTest(tf.test.TestCase):
         metrics = _make_metrics(sess, metric_fn=None)
       self.assertNotEqual(2., metrics["auc/adanet/subnetwork"])
 
-      with self.test_session() as sess:
+      with tf.Graph().as_default() as g, self.test_session(g) as sess:
         metrics = _make_metrics(sess, metric_fn=metric_fn)
       self.assertEqual(2., metrics["auc/adanet/subnetwork"])
 

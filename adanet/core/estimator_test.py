@@ -986,7 +986,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
         _check_eventfile_for_keyword("iteration/adanet/iteration",
                                      self.test_subdirectory))
 
-    candidate_subdir = os.path.join(self.test_subdirectory, "candidate/dnn")
+    candidate_subdir = os.path.join(self.test_subdirectory, "candidate/t0_dnn")
     self.assertAlmostEqual(
         3., _check_eventfile_for_keyword("scalar", candidate_subdir), places=3)
     self.assertAlmostEqual(
@@ -1030,7 +1030,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
       "want_summaries": [],
       "want_loss": .9910,
       "global_subdir": "eval_continuous",
-      "candidate_subdir": "candidate/linear/eval_continuous",
+      "candidate_subdir": "candidate/t0_linear/eval_continuous",
   }, {
       "testcase_name":
           "regression_head",
@@ -1086,7 +1086,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
                         evaluation_name=None,
                         metric_fn=None,
                         global_subdir="eval",
-                        candidate_subdir="candidate/linear/eval"):
+                        candidate_subdir="candidate/t0_linear/eval"):
     """Test that AdaNet evaluation metrics get persisted correctly."""
 
     seed = 42
@@ -1948,10 +1948,10 @@ class EstimatorReportTest(tu.AdanetTestCase):
     # Stores the iteration_number, previous_ensemble_reports and all_reports
     # arguments in the self._iteration_reports dictionary, overwriting what
     # was seen in previous iterations.
-    self._iteration_reports = {}
+    spied_iteration_reports = {}
 
     def _spy_fn(iteration_number, previous_ensemble_reports, all_reports):
-      self._iteration_reports[iteration_number] = {
+      spied_iteration_reports[iteration_number] = {
           "previous_ensemble_reports": previous_ensemble_reports,
           "all_reports": all_reports,
       }
@@ -2005,7 +2005,7 @@ class EstimatorReportTest(tu.AdanetTestCase):
 
     # Check the arguments passed into the generate_candidates method of the
     # Generator.
-    iteration_report = self._iteration_reports[num_iterations - 1]
+    iteration_report = spied_iteration_reports[num_iterations - 1]
     self.compare_report_lists(want_previous_ensemble_reports,
                               iteration_report["previous_ensemble_reports"])
     self.compare_report_lists(want_all_reports, iteration_report["all_reports"])
@@ -2021,26 +2021,33 @@ class EstimatorForceGrowTest(tu.AdanetTestCase):
   """
 
   @parameterized.named_parameters({
-      "testcase_name": "one_builder",
-      "builders": [_LinearBuilder("linear")],
+      "testcase_name": "one_builder_no_force_grow",
+      "builders": [_LinearBuilder("linear", mixture_weight_learning_rate=0.)],
       "force_grow": False,
       "want_subnetworks": 1,
   }, {
-      "testcase_name": "one_builder_force_grow",
-      "builders": [_LinearBuilder("linear")],
-      "force_grow": True,
-      "want_subnetworks": 2,
-  }, {
-      "testcase_name": "two_builders_force_grow",
-      "builders": [_LinearBuilder("linear"),
-                   _LinearBuilder("linear2")],
+      "testcase_name": "one_builder",
+      "builders": [_LinearBuilder("linear", mixture_weight_learning_rate=0.)],
       "force_grow": True,
       "want_subnetworks": 2,
   }, {
       "testcase_name":
-          "two_builders_force_grow_with_evaluator",
-      "builders": [_LinearBuilder("linear"),
-                   _LinearBuilder("linear2")],
+          "two_builders",
+      "builders": [
+          _LinearBuilder("linear", mixture_weight_learning_rate=0.),
+          _LinearBuilder("linear2", mixture_weight_learning_rate=0.)
+      ],
+      "force_grow":
+          True,
+      "want_subnetworks":
+          2,
+  }, {
+      "testcase_name":
+          "two_builders_with_evaluator",
+      "builders": [
+          _LinearBuilder("linear", mixture_weight_learning_rate=0.),
+          _LinearBuilder("linear2", mixture_weight_learning_rate=0.)
+      ],
       "force_grow":
           True,
       "evaluator":
@@ -2077,7 +2084,7 @@ class EstimatorForceGrowTest(tu.AdanetTestCase):
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=1)
     self.assertEqual(
         want_subnetworks,
-        str(eval_results["architecture/adanet/ensembles"]).count("linear"))
+        str(eval_results["architecture/adanet/ensembles"]).count(" linear "))
 
 
 if __name__ == "__main__":

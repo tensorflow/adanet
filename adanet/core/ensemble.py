@@ -32,8 +32,9 @@ _VALID_METRIC_FN_ARGS = set(["features", "labels", "predictions"])
 
 
 class WeightedSubnetwork(
-    collections.namedtuple("WeightedSubnetwork",
-                           ["name", "weight", "logits", "subnetwork"])):
+    collections.namedtuple(
+        "WeightedSubnetwork",
+        ["name", "iteration_number", "weight", "logits", "subnetwork"])):
   """An AdaNet weighted subnetwork.
 
   A weighted subnetwork is a weight 'w' applied to a subnetwork's last layer
@@ -41,11 +42,17 @@ class WeightedSubnetwork(
   complexity.
   """
 
-  def __new__(cls, name, weight, logits, subnetwork):
+  def __new__(cls,
+              name="",
+              iteration_number=0,
+              weight=None,
+              logits=None,
+              subnetwork=None):
     """Creates a `WeightedSubnetwork` instance.
 
     Args:
-      name: The string `tf.constant` name of `subnetwork`.
+      name: String name of `subnetwork` as defined by its `subnetwork.Builder`.
+      iteration_number: Integer iteration when the subnetwork was created.
       weight: The weight `Tensor` to apply to this subnetwork. The AdaNet paper
         refers to this weight as 'w' in Equations (4), (5), and (6).
       logits: The output `Tensor` after the matrix multiplication of `weight`
@@ -59,7 +66,12 @@ class WeightedSubnetwork(
     """
 
     return super(WeightedSubnetwork, cls).__new__(
-        cls, name=name, weight=weight, logits=logits, subnetwork=subnetwork)
+        cls,
+        name=name,
+        iteration_number=iteration_number,
+        weight=weight,
+        logits=logits,
+        subnetwork=subnetwork)
 
 
 class Ensemble(
@@ -190,9 +202,7 @@ class MixtureWeightType(object):
 def _architecture_as_metric(weighted_subnetworks):
   """Returns a representation of the ensemble's architecture as a tf.metric."""
 
-  joined_names = " | ".join([
-      str(tf.contrib.util.constant_value(w.name)) for w in weighted_subnetworks
-  ])
+  joined_names = " | ".join([w.name for w in weighted_subnetworks])
   architecture = tf.convert_to_tensor(
       "| {} |".format(joined_names), name="architecture")
   architecture_summary = tf.summary.text("architecture/adanet", architecture)
@@ -277,21 +287,22 @@ def _subnetwork_context(iteration_step_scope, scoped_summary):
   training_util.get_global_step = iteration_step
   training_util.get_or_create_global_step = iteration_step
 
-  yield
-
-  # Revert monkey-patches.
-  training_util.get_or_create_global_step = old_get_or_create_global_step_fn
-  training_util.get_global_step = old_get_global_step_fn
-  tf.train.get_or_create_global_step = old_get_or_create_global_step_fn
-  tf.train.get_global_step = old_get_global_step_fn
-  summary_lib.audio = old_summary_audio
-  summary_lib.histogram = old_summary_histogram
-  summary_lib.image = old_summary_image
-  summary_lib.scalar = old_summary_scalar
-  tf.summary.audio = old_summary_audio
-  tf.summary.histogram = old_summary_histogram
-  tf.summary.image = old_summary_image
-  tf.summary.scalar = old_summary_scalar
+  try:
+    yield
+  finally:
+    # Revert monkey-patches.
+    training_util.get_or_create_global_step = old_get_or_create_global_step_fn
+    training_util.get_global_step = old_get_global_step_fn
+    tf.train.get_or_create_global_step = old_get_or_create_global_step_fn
+    tf.train.get_global_step = old_get_global_step_fn
+    summary_lib.audio = old_summary_audio
+    summary_lib.histogram = old_summary_histogram
+    summary_lib.image = old_summary_image
+    summary_lib.scalar = old_summary_scalar
+    tf.summary.audio = old_summary_audio
+    tf.summary.histogram = old_summary_histogram
+    tf.summary.image = old_summary_image
+    tf.summary.scalar = old_summary_scalar
 
 
 def _clear_trainable_variables():
@@ -386,8 +397,10 @@ class _EnsembleBuilder(object):
     self._metric_fn = metric_fn
 
   def append_new_subnetwork(self,
+                            ensemble_name,
                             ensemble_spec,
                             subnetwork_builder,
+                            iteration_number,
                             iteration_step,
                             summary,
                             features,
@@ -404,9 +417,11 @@ class _EnsembleBuilder(object):
     complexity L1-regularizes this weight.
 
     Args:
+      ensemble_name: String name of the ensemble.
       ensemble_spec: The recipient `_EnsembleSpec` for the `Subnetwork`.
       subnetwork_builder: A `adanet.Builder` instance which defines how to train
         the subnetwork and ensemble mixture weights.
+      iteration_number: Integer current iteration number.
       iteration_step: Integer `Tensor` representing the step since the beginning
         of the current iteration, as opposed to the global step.
       summary: A `_ScopedSummary` instance for recording ensemble summaries.
@@ -418,7 +433,7 @@ class _EnsembleBuilder(object):
       An new `EnsembleSpec` instance with the `Subnetwork` appended.
     """
 
-    with tf.variable_scope("ensemble_{}".format(subnetwork_builder.name)):
+    with tf.variable_scope("ensemble_{}".format(ensemble_name)):
       weighted_subnetworks = []
       subnetwork_index = 0
       num_subnetworks = 1
@@ -440,6 +455,7 @@ class _EnsembleBuilder(object):
             weighted_subnetworks.append(
                 self._build_weighted_subnetwork(
                     weighted_subnetwork.name,
+                    weighted_subnetwork.iteration_number,
                     weighted_subnetwork.subnetwork,
                     self._head.logits_dimension,
                     num_subnetworks,
@@ -487,11 +503,11 @@ class _EnsembleBuilder(object):
           var_list = tf.trainable_variables()
         weighted_subnetworks.append(
             self._build_weighted_subnetwork(
-                tf.constant(subnetwork_builder.name, name="name"), subnetwork,
+                subnetwork_builder.name, iteration_number, subnetwork,
                 self._head.logits_dimension, num_subnetworks))
 
-      return self.build_ensemble_spec(
-          name=subnetwork_builder.name,
+      return self._build_ensemble_spec(
+          name=ensemble_name,
           weighted_subnetworks=weighted_subnetworks,
           summary=summary,
           bias=bias,
@@ -503,18 +519,18 @@ class _EnsembleBuilder(object):
           var_list=var_list,
           previous_ensemble_spec=ensemble_spec)
 
-  def build_ensemble_spec(self,
-                          name,
-                          weighted_subnetworks,
-                          summary,
-                          bias,
-                          features,
-                          mode,
-                          iteration_step,
-                          labels=None,
-                          subnetwork_builder=None,
-                          var_list=None,
-                          previous_ensemble_spec=None):
+  def _build_ensemble_spec(self,
+                           name,
+                           weighted_subnetworks,
+                           summary,
+                           bias,
+                           features,
+                           mode,
+                           iteration_step,
+                           labels=None,
+                           subnetwork_builder=None,
+                           var_list=None,
+                           previous_ensemble_spec=None):
     """Builds an `_EnsembleSpec` with the given `WeightedSubnetwork`s.
 
     Args:
@@ -712,6 +728,7 @@ class _EnsembleBuilder(object):
 
   def _build_weighted_subnetwork(self,
                                  name,
+                                 iteration_number,
                                  subnetwork,
                                  logits_dimension,
                                  num_subnetworks,
@@ -719,7 +736,8 @@ class _EnsembleBuilder(object):
     """Builds an `WeightedSubnetwork`.
 
     Args:
-      name: The string `tf.constant` name of `subnetwork`.
+      name: String name of `subnetwork`.
+      iteration_number: Integer iteration when the subnetwork was created.
       subnetwork: The `Subnetwork` to weight.
       logits_dimension: The number of outputs from the logits.
       num_subnetworks: The number of subnetworks in the ensemble.
@@ -784,7 +802,11 @@ class _EnsembleBuilder(object):
         logits = tf.multiply(subnetwork.logits, weight)
 
     return WeightedSubnetwork(
-        name=name, subnetwork=subnetwork, logits=logits, weight=weight)
+        name=name,
+        iteration_number=iteration_number,
+        subnetwork=subnetwork,
+        logits=logits,
+        weight=weight)
 
   def _create_bias(self, logits_dimension, prior=None):
     """Returns a bias term vector.

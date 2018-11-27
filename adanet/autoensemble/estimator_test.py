@@ -100,14 +100,6 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
     self.assertIsNotNone(eval_results["loss"])
 
-    want_subnetworks = [
-        "LinearEstimator0",
-        "DNNEstimator1",
-    ]
-    for subnetwork in want_subnetworks:
-      self.assertIn(subnetwork,
-                    str(eval_results["architecture/adanet/ensembles"]))
-
     # Predict.
     predictions = estimator.predict(input_fn=test_input_fn)
     for prediction in predictions:

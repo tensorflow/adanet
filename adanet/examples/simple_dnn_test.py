@@ -33,6 +33,7 @@ class _FakeEnsemble(object):
     self._weighted_subnetworks = [
         adanet.WeightedSubnetwork(
             name=None,
+            iteration_number=None,
             weight=None,
             logits=None,
             subnetwork=adanet.Subnetwork(

@@ -29,9 +29,8 @@ import tensorflow as tf
 class _BuilderFromEstimator(Builder):
   """An `adanet.Builder` from a `tf.estimator.Estimator`."""
 
-  def __init__(self, estimator, iteration_number, index, logits_key):
+  def __init__(self, estimator, index, logits_key):
     self._estimator = estimator
-    self._iteration_number = iteration_number
     self._index = index
     self._logits_key = logits_key
 
@@ -39,10 +38,8 @@ class _BuilderFromEstimator(Builder):
   def name(self):
     """See `adanet.subnetwork.Builder`."""
 
-    return "t{t}_{class_name}{index}".format(
-        t=self._iteration_number,
-        class_name=self._estimator.__class__.__name__,
-        index=self._index)
+    return "{class_name}{index}".format(
+        class_name=self._estimator.__class__.__name__, index=self._index)
 
   def build_subnetwork(self, features, labels, logits_dimension, training,
                        iteration_step, summary, previous_ensemble):
@@ -103,10 +100,7 @@ class _GeneratorFromCandidatePool(Generator):
       if isinstance(candidate, tf.estimator.Estimator):
         builders.append(
             _BuilderFromEstimator(
-                candidate,
-                iteration_number,
-                index=i,
-                logits_key=self._logits_key))
+                candidate, index=i, logits_key=self._logits_key))
         continue
     return builders
 
