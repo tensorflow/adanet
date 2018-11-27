@@ -36,7 +36,14 @@ from adanet.core.subnetwork import Subnetwork
 from distutils.version import LooseVersion
 import tensorflow as tf
 
-from tensorflow.python.estimator.export import export
+# Module path changed. Try importing from new and old location to maintain
+# backwards compatibility.
+# pylint: disable=g-import-not-at-top
+try:
+  from tensorflow_estimator.python.estimator.export import export
+except ImportError:
+  from tensorflow.python.estimator.export import export
+# pylint: enable=g-import-not-at-top
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
