@@ -68,7 +68,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     summary = tf.Summary()
     summary.ParseFromString(summary_str)
     values = summary.value
-    self.assertEqual(len(values), 1)
+    self.assertLen(values, 1)
     self.assertEqual(values[0].tag, "outer/inner")
     self.assertEqual(values[0].simple_value, 3.0)
 
@@ -91,13 +91,13 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
 
     summary.ParseFromString(sm1)
     values = summary.value
-    self.assertEqual(len(values), 1)
+    self.assertLen(values, 1)
     self.assertEqual(values[0].tag, "family/outer/family/inner")
     self.assertEqual(values[0].simple_value, 7.0)
 
     summary.ParseFromString(sm2)
     values = summary.value
-    self.assertEqual(len(values), 1)
+    self.assertLen(values, 1)
     self.assertEqual(values[0].tag, "family/outer/family/inner_1")
     self.assertEqual(values[0].simple_value, 7.0)
 
@@ -119,7 +119,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
       summ_str = s.run(ss)
     summary = tf.Summary()
     summary.ParseFromString(summ_str)
-    self.assertEqual(len(summary.value), 1)
+    self.assertLen(summary.value, 1)
     value = summary.value[0]
     self.assertEqual(value.tag, "summary")
     self.assertEqual(value.simple_value, 42.0)
@@ -148,7 +148,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     summary = tf.Summary()
     summary.ParseFromString(summary_str)
     values = summary.value
-    self.assertEqual(len(values), 3)
+    self.assertLen(values, 3)
     tags = sorted(v.tag for v in values)
     expected = sorted("outer/inner/image/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
@@ -170,7 +170,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     summary = tf.Summary()
     summary.ParseFromString(summary_str)
     values = summary.value
-    self.assertEqual(len(values), 3)
+    self.assertLen(values, 3)
     tags = sorted(v.tag for v in values)
     expected = sorted(
         "family/outer/family/inner/image/{}".format(i) for i in range(3))
@@ -199,7 +199,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
       return
     summary = tf.Summary()
     summary.ParseFromString(summary_str)
-    self.assertEqual(len(summary.value), 1)
+    self.assertLen(summary.value, 1)
     self.assertEqual(summary.value[0].tag, "outer/inner")
 
   @parameterized.named_parameters({
@@ -218,7 +218,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
       summary_str = s.run(summ_op)
     summary = tf.Summary()
     summary.ParseFromString(summary_str)
-    self.assertEqual(len(summary.value), 1)
+    self.assertLen(summary.value, 1)
     self.assertEqual(summary.value[0].tag, "family/outer/family/inner")
 
   @parameterized.named_parameters({
@@ -245,7 +245,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     summary = tf.Summary()
     summary.ParseFromString(summary_str)
     values = summary.value
-    self.assertEqual(len(values), 3)
+    self.assertLen(values, 3)
     tags = sorted(v.tag for v in values)
     expected = sorted("outer/inner/audio/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
@@ -268,7 +268,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     summary = tf.Summary()
     summary.ParseFromString(summary_str)
     values = summary.value
-    self.assertEqual(len(values), 3)
+    self.assertLen(values, 3)
     tags = sorted(v.tag for v in values)
     expected = sorted(
         "family/outer/family/inner/audio/{}".format(i) for i in range(3))
