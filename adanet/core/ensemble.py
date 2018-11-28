@@ -617,7 +617,7 @@ class _EnsembleBuilder(object):
     ensemble_loss = adanet_weighted_ensemble_spec.loss
     adanet_loss = None
     eval_metric_ops = {}
-    if mode != tf.estimator.ModeKeys.PREDICT:
+    if mode == tf.estimator.ModeKeys.EVAL:
       adanet_loss = ensemble_loss + ensemble_complexity_regularization
       metric_fn = functools.partial(
           _call_metric_fn,
@@ -641,6 +641,9 @@ class _EnsembleBuilder(object):
           metric_fn=metric_fn)
       eval_metric_ops["architecture/adanet/ensembles"] = (
           _architecture_as_metric(weighted_subnetworks))
+
+    if mode == tf.estimator.ModeKeys.TRAIN:
+      adanet_loss = ensemble_loss + ensemble_complexity_regularization
       with summary.current_scope():
         summary.scalar("loss/adanet/adanet_weighted_ensemble",
                        adanet_weighted_ensemble_spec.loss)

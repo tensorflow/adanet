@@ -314,6 +314,11 @@ class _ScopedSummary(Summary):
     return summary
 
   def merge_all(self):
-    """Returns a merged summary op."""
+    """Returns the list of summaries added using this _ScopedSummary.
 
-    return tf.summary.merge_all(key=self._collection_name())
+    Note: this is an abuse of the tf.summary.merge_all API since it is expected
+    to return a summary op with all summaries merged. However, ScopedSummary is
+    only used in the internal implementation, so this should be OK.
+    """
+
+    return tf.get_collection(key=self._collection_name())

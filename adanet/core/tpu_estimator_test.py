@@ -19,6 +19,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import contextlib
+import os
+
 from adanet.core import testing_utils as tu
 from adanet.core.subnetwork import Builder
 from adanet.core.subnetwork import Report
@@ -27,6 +30,8 @@ from adanet.core.subnetwork import Subnetwork
 from adanet.core.tpu_estimator import TPUEstimator
 from distutils.version import LooseVersion
 import tensorflow as tf
+
+from tensorflow.contrib.tpu.python.tpu import tpu_function
 
 
 class _DNNBuilder(Builder):
@@ -119,6 +124,34 @@ class _DNNBuilder(Builder):
         })
 
 
+# TODO: remove this function and actually test on TPU once
+# adanet.TPUEstimator supports running on TPU.
+@contextlib.contextmanager
+def fake_run_on_tpu():
+  original_number_of_shards_fn = tpu_function.TpuContext.number_of_shards
+  tpu_function.TpuContext.number_of_shards = 1
+  try:
+    yield
+  finally:
+    tpu_function.TpuContext.number_of_shards = original_number_of_shards_fn
+
+
+def _summaries_exist(dir_path):
+  """Returns whether the given dir contains non-empty tf.Summaries."""
+
+  tf.summary.FileWriterCache.clear()
+  filenames = os.path.join(dir_path, "events*")
+  event_paths = tf.gfile.Glob(filenames)
+  if not event_paths:
+    raise ValueError("Path {!r} not found.".format(filenames))
+
+  for last_event in tf.train.summary_iterator(event_paths[-1]):
+    summary = last_event.summary
+    if summary and summary.value:
+      return True
+  return False
+
+
 class TPUEstimatorTest(tu.AdanetTestCase):
 
   def setUp(self):
@@ -176,6 +209,25 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     self.assertEqual(max_steps, eval_results["global_step"])
     for prediction in predictions:
       self.assertIsNotNone(prediction["predictions"])
+
+  def test_tpu_estimator_summaries(self):
+    config = tf.contrib.tpu.RunConfig(tf_random_seed=42)
+    estimator = TPUEstimator(
+        head=tu.head(),
+        subnetwork_generator=SimpleGenerator([_DNNBuilder("dnn")]),
+        max_iteration_steps=200,
+        model_dir=self.test_subdirectory,
+        config=config)
+    train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
+
+    with fake_run_on_tpu():
+      estimator.train(input_fn=train_input_fn, max_steps=3)
+    estimator.evaluate(input_fn=train_input_fn, steps=3)
+
+    self.assertFalse(
+        _summaries_exist(self.test_subdirectory + "/candidate/t0_dnn"))
+    self.assertTrue(
+        _summaries_exist(self.test_subdirectory + "/candidate/t0_dnn/eval"))
 
 
 if __name__ == "__main__":

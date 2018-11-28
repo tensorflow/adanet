@@ -1,4 +1,4 @@
-"""An AdaNet estimator implementation which can run on TPUs.
+"""An AdaNet estimator implementation which can run on TPU.
 
 Copyright 2018 The AdaNet Authors. All Rights Reserved.
 
@@ -21,14 +21,59 @@ from __future__ import print_function
 
 from adanet.core.ensemble import MixtureWeightType
 from adanet.core.estimator import Estimator
+from adanet.core.summary import _ScopedSummary
 import six
 import tensorflow as tf
+from tensorflow.contrib.tpu.python.tpu import tpu_function
+from tensorflow.python import summary
+
+
+# TODO: support summaries on TPU during training.
+def _rewire_summaries():
+  """Rewire Tensorflow summaries to be no-ops when running on TPU.
+
+  Summaries are not currently supported on TPU.
+  """
+
+  def tpu_no_op(fn):
+
+    def _fn(*args, **kwargs):
+      if tpu_function.get_tpu_context().number_of_shards:
+        return None
+      return fn(*args, **kwargs)
+
+    return _fn
+
+  summary.audio = tpu_no_op(summary.audio)
+  summary.histogram = tpu_no_op(summary.histogram)
+  summary.image = tpu_no_op(summary.image)
+  summary.scalar = tpu_no_op(summary.scalar)
+  summary.tensor_summary = tpu_no_op(summary.tensor_summary)
+  summary.text = tpu_no_op(summary.text)
+
+  tf.summary.audio = tpu_no_op(tf.summary.audio)
+  tf.summary.histogram = tpu_no_op(tf.summary.histogram)
+  tf.summary.image = tpu_no_op(tf.summary.image)
+  tf.summary.scalar = tpu_no_op(tf.summary.scalar)
+  tf.summary.tensor_summary = tpu_no_op(tf.summary.tensor_summary)
+  tf.summary.text = tpu_no_op(tf.summary.text)
+
+  _ScopedSummary.audio = tpu_no_op(_ScopedSummary.audio)
+  _ScopedSummary.histogram = tpu_no_op(_ScopedSummary.histogram)
+  _ScopedSummary.image = tpu_no_op(_ScopedSummary.image)
+  _ScopedSummary.scalar = tpu_no_op(_ScopedSummary.scalar)
+
+
+# Rewire summaries to be no-ops when running on TPU.
+_rewire_summaries()
 
 
 # TODO: No TPU support is currently implemented. This Estimator
 # will simply run on CPU/GPU if used.
 class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
-  """An adanet.Estimator capable of running on TPUs.
+  """An adanet.Estimator capable of running on TPU.
+
+  If running on TPU, all summary calls are rewired to be no-ops during training.
 
   WARNING: this API is highly experimental, unstable, and can change  without
   warning.
@@ -97,7 +142,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
       }
       # TODO: wrapping eval_metric_ops and scaffold in lambdas is a hack
       # to get TPUEstimator to work when use_tpu=False. This will not work when
-      # we actually start using TPUs.
+      # we actually start using TPU.
       eval_metrics = (lambda: estimator_spec.eval_metric_ops, ())
       scaffold_fn = lambda: estimator_spec.scaffold
       return tf.contrib.tpu.TPUEstimatorSpec(

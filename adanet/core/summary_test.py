@@ -320,8 +320,8 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
 
     with self.test_session() as sess:
       for scoped_summary in [scoped_summary0, scoped_summary1, scoped_summary2]:
-        merge_op = scoped_summary.merge_all()
-        summary.ParseFromString(sess.run(merge_op))
+        summaries = scoped_summary.merge_all()
+        summary.ParseFromString(sess.run(tf.summary.merge(summaries)))
         self.assertEqual(["c0", "c1"], [s.tag for s in summary.value])
         self.assertEqual([0, 1], [s.simple_value for s in summary.value])
 

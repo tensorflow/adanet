@@ -212,7 +212,7 @@ class _IterationBuilder(object):
         summaries.append(previous_ensemble_summary)
 
         # Generate subnetwork reports.
-        if mode != tf.estimator.ModeKeys.PREDICT:
+        if mode == tf.estimator.ModeKeys.EVAL:
           subnetwork_report = subnetwork.Report(
               hparams={},
               attributes={},

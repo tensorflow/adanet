@@ -387,7 +387,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
           use_bias=True)
 
 
-def _make_metrics(sess, metric_fn):
+def _make_metrics(sess, metric_fn, mode=tf.estimator.ModeKeys.EVAL):
   head = tf.contrib.estimator.binary_classification_head(
       loss_reduction=tf.losses.Reduction.SUM)
   builder = _EnsembleBuilder(
@@ -406,7 +406,7 @@ def _make_metrics(sess, metric_fn):
       iteration_step=1,
       summary=_FakeSummary(),
       features=features,
-      mode=tf.estimator.ModeKeys.EVAL,
+      mode=mode,
       labels=labels)
   sess.run((tf.global_variables_initializer(),
             tf.local_variables_initializer()))
@@ -414,7 +414,31 @@ def _make_metrics(sess, metric_fn):
   return {k: metrics[k][1] for k in metrics}
 
 
-class EnsembleBuilderMetricFnTest(tf.test.TestCase):
+class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
+
+  @parameterized.named_parameters({
+      "testcase_name": "mode_train",
+      "mode": tf.estimator.ModeKeys.TRAIN,
+  }, {
+      "testcase_name": "mode_predict",
+      "mode": tf.estimator.ModeKeys.PREDICT,
+  })
+  def test_only_adds_metrics_when_evaluating(self, mode):
+    """Ensures that metrics are only added during evaluation.
+
+    Adding metrics during training will break when running on TPU.
+
+    Args:
+      mode: The mode with which to run the test.
+    """
+
+    def metric_fn(features):
+      return {"mean_x": tf.metrics.mean(features["x"])}
+
+    with self.test_session() as sess:
+      metrics = _make_metrics(sess, metric_fn, mode)
+
+    self.assertEmpty(metrics)
 
   def test_should_add_metrics(self):
 
