@@ -53,10 +53,12 @@ class WeightedSubnetwork(
     Args:
       name: String name of `subnetwork` as defined by its `subnetwork.Builder`.
       iteration_number: Integer iteration when the subnetwork was created.
-      weight: The weight `Tensor` to apply to this subnetwork. The AdaNet paper
-        refers to this weight as 'w' in Equations (4), (5), and (6).
-      logits: The output `Tensor` after the matrix multiplication of `weight`
-        and the subnetwork's `last_layer`. The weight's shape is [batch_size,
+      weight: The weight `Tensor` or dict of string to weight `Tensor` (for
+        multi-head) to apply to this subnetwork. The AdaNet paper refers to this
+        weight as 'w' in Equations (4), (5), and (6).
+      logits: The output `Tensor` or dict of string to weight `Tensor` (for
+        multi-head) after the matrix multiplication of `weight` and the
+        subnetwork's `last_layer`. The output's shape is [batch_size,
         logits_dimension]. It is equivalent to a linear logits layer in a neural
         network.
       subnetwork: The `adanet.Subnetwork` to weight.
@@ -75,11 +77,8 @@ class WeightedSubnetwork(
 
 
 class Ensemble(
-    collections.namedtuple("Ensemble", [
-        "weighted_subnetworks",
-        "bias",
-        "logits",
-    ])):
+    collections.namedtuple("Ensemble",
+                           ["weighted_subnetworks", "bias", "logits"])):
   """An AdaNet ensemble.
 
   An ensemble is a collection of subnetworks which forms a neural network
@@ -119,9 +118,7 @@ class _EnsembleSpec(
         "predictions",
         "loss",
         "adanet_loss",
-        "complexity_regularized_loss",
         "train_op",
-        "complexity_regularization",
         "eval_metric_ops",
         "export_outputs",
     ])):
@@ -133,9 +130,7 @@ class _EnsembleSpec(
               predictions,
               loss=None,
               adanet_loss=None,
-              complexity_regularized_loss=None,
               train_op=None,
-              complexity_regularization=None,
               eval_metric_ops=None,
               export_outputs=None):
     """Creates an `EnsembleSpec` instance.
@@ -150,11 +145,7 @@ class _EnsembleSpec(
         either scalar, or with shape `[1]`. The AdaNet algorithm aims to
         minimize this objective which balances training loss with the total
         complexity of the subnetworks in the ensemble.
-      complexity_regularized_loss: Loss `Tensor` as defined by F(w,u) in
-        Equation (5). Must be either scalar, or with shape `[1]`.
       train_op: Op for the training step.
-      complexity_regularization: Complexity regularization `Tensor` of the
-        weighted-L1 penalty regularization term in F(w) in Equation (4).
       eval_metric_ops: Dict of metric results keyed by name. The values of the
         dict are the results of calling a metric function, namely a
         `(metric_tensor, update_op)` tuple. `metric_tensor` should be evaluated
@@ -177,9 +168,7 @@ class _EnsembleSpec(
         predictions=predictions,
         loss=loss,
         adanet_loss=adanet_loss,
-        complexity_regularized_loss=complexity_regularized_loss,
         train_op=train_op,
-        complexity_regularization=complexity_regularization,
         eval_metric_ops=eval_metric_ops,
         export_outputs=export_outputs)
 
@@ -250,6 +239,12 @@ def _add_eval_metric_ops(eval_metric_ops, group_name, estimator_spec,
   for metric in sorted(metric_ops):
     eval_metric_ops["{metric}/adanet/{group_name}".format(
         metric=metric, group_name=group_name)] = metric_ops[metric]
+
+
+def _get_value(target, key):
+  if isinstance(target, dict):
+    return target[key]
+  return target
 
 
 @contextlib.contextmanager
@@ -361,8 +356,9 @@ class _EnsembleBuilder(object):
             given `Head`.
           * features: Input `dict` of `Tensor` objects created by `input_fn`
             which is given to `estimator.evaluate` as an argument.
-          * labels:  Labels `Tensor` or dict of `Tensor` created by `input_fn`
-            which is given to `estimator.evaluate` as an argument.
+          * labels:  Labels `Tensor` or dict of `Tensor` (for multi-head)
+            created by `input_fn` which is given to `estimator.evaluate` as an
+            argument.
         - Returns: Dict of metric results keyed by name. Final metrics are a
           union of this and `Head's` existing metrics. If there is a name
           conflict between this and `estimator`s existing metrics, this will
@@ -427,7 +423,8 @@ class _EnsembleBuilder(object):
       summary: A `_ScopedSummary` instance for recording ensemble summaries.
       features: Input `dict` of `Tensor` objects.
       mode: Estimator's `ModeKeys`.
-      labels: Labels `Tensor`, or `dict` of same. Can be None during inference.
+      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
+        (for multi-head). Can be `None`.
 
     Returns:
       An new `EnsembleSpec` instance with the `Subnetwork` appended.
@@ -457,24 +454,9 @@ class _EnsembleBuilder(object):
                     weighted_subnetwork.name,
                     weighted_subnetwork.iteration_number,
                     weighted_subnetwork.subnetwork,
-                    self._head.logits_dimension,
                     num_subnetworks,
                     weight_initializer=weight_initializer))
           subnetwork_index += 1
-        if len(previous_subnetworks) == len(ensemble.weighted_subnetworks):
-          bias = self._create_bias(
-              self._head.logits_dimension,
-              prior=tf.contrib.framework.load_variable(self._checkpoint_dir,
-                                                       ensemble.bias.op.name))
-        else:
-          bias = self._create_bias(self._head.logits_dimension)
-          tf.logging.info(
-              "Builder '%s' is using a subset of the subnetworks "
-              "from the previous ensemble, so its ensemble's bias "
-              "term will not be warm started with the previous "
-              "ensemble's bias.", subnetwork_builder.name)
-      else:
-        bias = self._create_bias(self._head.logits_dimension)
 
       ensemble_scope = tf.get_variable_scope()
 
@@ -502,9 +484,22 @@ class _EnsembleBuilder(object):
             subnetwork = build_subnetwork()
           var_list = tf.trainable_variables()
         weighted_subnetworks.append(
-            self._build_weighted_subnetwork(
-                subnetwork_builder.name, iteration_number, subnetwork,
-                self._head.logits_dimension, num_subnetworks))
+            self._build_weighted_subnetwork(subnetwork_builder.name,
+                                            iteration_number, subnetwork,
+                                            num_subnetworks))
+      if ensemble:
+        if len(previous_subnetworks) == len(ensemble.weighted_subnetworks):
+          bias = self._create_bias_term(
+              weighted_subnetworks, prior=ensemble.bias)
+        else:
+          bias = self._create_bias_term(weighted_subnetworks)
+          tf.logging.info(
+              "Builder '%s' is using a subset of the subnetworks "
+              "from the previous ensemble, so its ensemble's bias "
+              "term will not be warm started with the previous "
+              "ensemble's bias.", subnetwork_builder.name)
+      else:
+        bias = self._create_bias_term(weighted_subnetworks)
 
       return self._build_ensemble_spec(
           name=ensemble_name,
@@ -539,12 +534,14 @@ class _EnsembleBuilder(object):
       weighted_subnetworks: List of `WeightedSubnetwork` instances that form
         this ensemble. Ordered from first to most recent.
       summary: A `_ScopedSummary` instance for recording ensemble summaries.
-      bias: `Tensor` bias vector for the ensemble logits.
+      bias: Bias term `Tensor` or dict of string to `Tensor` (for multi-head)
+        for the AdaNet-weighted ensemble logits.
       features: Input `dict` of `Tensor` objects.
       mode: Estimator `ModeKeys` indicating training, evaluation, or inference.
       iteration_step: Integer `Tensor` representing the step since the beginning
         of the current iteration, as opposed to the global step.
-      labels: Labels `Tensor`, or `dict` of same. Can be None during inference.
+      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
+        (for multi-head).
       subnetwork_builder: A `adanet.Builder` instance which defines how to train
         the subnetwork and ensemble mixture weights.
       var_list: Optional list or tuple of `Variable` objects to update to
@@ -556,32 +553,9 @@ class _EnsembleBuilder(object):
       An `_EnsembleSpec` instance.
     """
 
-    subnetwork_logits = []
-    ensemble_complexity_regularization = 0
-    total_weight_l1_norms = 0
-    weights = []
-    for weighted_subnetwork in weighted_subnetworks:
-      weight_l1_norm = tf.norm(weighted_subnetwork.weight, ord=1)
-      total_weight_l1_norms += weight_l1_norm
-      ensemble_complexity_regularization += self._complexity_regularization(
-          weight_l1_norm, weighted_subnetwork.subnetwork.complexity)
-      subnetwork_logits.append(weighted_subnetwork.logits)
-      weights.append(weight_l1_norm)
-
-    with tf.variable_scope("logits"):
-      ensemble_logits = bias
-      for logits in subnetwork_logits:
-        ensemble_logits = tf.add(ensemble_logits, logits)
-
-    with summary.current_scope():
-      summary.histogram("mixture_weights/adanet/adanet_weighted_ensemble",
-                        weights)
-      for iteration, weight in enumerate(weights):
-        scope = "adanet/adanet_weighted_ensemble/subnetwork_{}".format(
-            iteration)
-        summary.scalar("mixture_weight_norms/{}".format(scope), weight)
-        fraction = weight / total_weight_l1_norms
-        summary.scalar("mixture_weight_fractions/{}".format(scope), fraction)
+    ensemble_logits, ensemble_complexity_regularization = (
+        self._adanet_weighted_ensemble_logits(weighted_subnetworks, bias,
+                                              summary))
 
     # The AdaNet-weighted ensemble.
     adanet_weighted_ensemble_spec = self._head.create_estimator_spec(
@@ -595,13 +569,10 @@ class _EnsembleBuilder(object):
     # It is practically free to compute, requiring no additional training, and
     # tends to generalize very well. However the AdaNet-weighted ensemble
     # should perform at least as well given the correct hyperparameters.
-    uniform_average_ensemble_logits = tf.add_n([
-        wwl.subnetwork.logits for wwl in weighted_subnetworks
-    ]) / len(weighted_subnetworks)
     uniform_average_ensemble_spec = self._head.create_estimator_spec(
         features=features,
         mode=mode,
-        logits=uniform_average_ensemble_logits,
+        logits=self._uniform_average_ensemble_logits(weighted_subnetworks),
         labels=labels,
         train_op_fn=lambda _: tf.no_op())
 
@@ -617,8 +588,15 @@ class _EnsembleBuilder(object):
     ensemble_loss = adanet_weighted_ensemble_spec.loss
     adanet_loss = None
     eval_metric_ops = {}
+    if mode != tf.estimator.ModeKeys.PREDICT:
+      adanet_loss = ensemble_loss
+      if isinstance(ensemble_complexity_regularization, dict):
+        for key in sorted(ensemble_complexity_regularization):
+          adanet_loss += ensemble_complexity_regularization[key]
+      else:
+        adanet_loss += ensemble_complexity_regularization
+
     if mode == tf.estimator.ModeKeys.EVAL:
-      adanet_loss = ensemble_loss + ensemble_complexity_regularization
       metric_fn = functools.partial(
           _call_metric_fn,
           metric_fn=self._metric_fn,
@@ -643,7 +621,6 @@ class _EnsembleBuilder(object):
           _architecture_as_metric(weighted_subnetworks))
 
     if mode == tf.estimator.ModeKeys.TRAIN:
-      adanet_loss = ensemble_loss + ensemble_complexity_regularization
       with summary.current_scope():
         summary.scalar("loss/adanet/adanet_weighted_ensemble",
                        adanet_weighted_ensemble_spec.loss)
@@ -651,6 +628,7 @@ class _EnsembleBuilder(object):
         summary.scalar("loss/adanet/uniform_average_ensemble",
                        uniform_average_ensemble_spec.loss)
 
+    # Create train ops for training subnetworks and learning mixture weights.
     train_op = None
     if mode == tf.estimator.ModeKeys.TRAIN and subnetwork_builder:
       ensemble_scope = tf.get_variable_scope()
@@ -702,7 +680,6 @@ class _EnsembleBuilder(object):
         loss=ensemble_loss,
         adanet_loss=adanet_loss,
         train_op=train_op,
-        complexity_regularization=ensemble_complexity_regularization,
         eval_metric_ops=eval_metric_ops,
         export_outputs=adanet_weighted_ensemble_spec.export_outputs)
 
@@ -733,7 +710,6 @@ class _EnsembleBuilder(object):
                                  name,
                                  iteration_number,
                                  subnetwork,
-                                 logits_dimension,
                                  num_subnetworks,
                                  weight_initializer=None):
     """Builds an `WeightedSubnetwork`.
@@ -742,10 +718,8 @@ class _EnsembleBuilder(object):
       name: String name of `subnetwork`.
       iteration_number: Integer iteration when the subnetwork was created.
       subnetwork: The `Subnetwork` to weight.
-      logits_dimension: The number of outputs from the logits.
       num_subnetworks: The number of subnetworks in the ensemble.
-      weight_initializer: Initializer for the weight variable. Can be a
-        `Constant` prior weight to use for warm-starting.
+      weight_initializer: Initializer for the weight variable.
 
     Returns:
       A `WeightedSubnetwork` instance.
@@ -755,14 +729,36 @@ class _EnsembleBuilder(object):
         not match and requiring a SCALAR or VECTOR mixture weight.
     """
 
+    if isinstance(subnetwork.last_layer, dict):
+      logits, weight = {}, {}
+      for key in sorted(subnetwork.last_layer):
+        logits[key], weight[key] = self._build_weighted_subnetwork_helper(
+            subnetwork, num_subnetworks, weight_initializer, key)
+    else:
+      logits, weight = self._build_weighted_subnetwork_helper(
+          subnetwork, num_subnetworks, weight_initializer)
+
+    return WeightedSubnetwork(
+        name=name,
+        iteration_number=iteration_number,
+        subnetwork=subnetwork,
+        logits=logits,
+        weight=weight)
+
+  def _build_weighted_subnetwork_helper(self,
+                                        subnetwork,
+                                        num_subnetworks,
+                                        weight_initializer=None,
+                                        key=None):
+    """Returns the logits and weight of the `WeightedSubnetwork` for key."""
+
     # Treat subnetworks as if their weights are frozen, and ensure that
     # mixture weight gradients do not propagate through.
-    last_layer = tf.stop_gradient(subnetwork.last_layer)
-
+    last_layer = tf.stop_gradient(_get_value(subnetwork.last_layer, key))
+    logits = tf.stop_gradient(_get_value(subnetwork.logits, key))
     weight_shape = None
-    static_shape = last_layer.get_shape().as_list()
-    last_layer_size = static_shape[-1]
-    ndims = len(static_shape)
+    last_layer_size = last_layer.get_shape().as_list()[-1]
+    logits_size = logits.get_shape().as_list()[-1]
     batch_size = tf.shape(last_layer)[0]
 
     if weight_initializer is None:
@@ -771,13 +767,13 @@ class _EnsembleBuilder(object):
       if self._mixture_weight_type == MixtureWeightType.SCALAR:
         weight_shape = []
       if self._mixture_weight_type == MixtureWeightType.VECTOR:
-        weight_shape = [logits_dimension]
+        weight_shape = [logits_size]
       if self._mixture_weight_type == MixtureWeightType.MATRIX:
-        weight_shape = [last_layer_size, logits_dimension]
+        weight_shape = [last_layer_size, logits_size]
 
-    with tf.variable_scope("logits"):
-      # Mark as not trainable to not add to the TRAINABLE_VARIABLES collection.
-      # Training is handled explicitly with var_lists.
+    with tf.variable_scope("{}logits".format(key + "_" if key else "")):
+      # Mark as not trainable to not add to the TRAINABLE_VARIABLES
+      # collection. Training is handled explicitly with var_lists.
       weight = tf.get_variable(
           name="mixture_weight",
           shape=weight_shape,
@@ -785,6 +781,7 @@ class _EnsembleBuilder(object):
           trainable=False)
       if self._mixture_weight_type == MixtureWeightType.MATRIX:
         # TODO: Add Unit tests for the ndims == 3 path.
+        ndims = len(last_layer.get_shape().as_list())
         if ndims > 3:
           raise NotImplementedError(
               "Last Layer with more than 3 dimensions are not supported with "
@@ -800,18 +797,12 @@ class _EnsembleBuilder(object):
           last_layer = tf.reshape(last_layer, [-1, last_layer_size])
         logits = tf.matmul(last_layer, weight)
         if ndims == 3:
-          logits = tf.reshape(logits, [batch_size, -1, logits_dimension])
+          logits = tf.reshape(logits, [batch_size, -1, logits_size])
       else:
-        logits = tf.multiply(subnetwork.logits, weight)
+        logits = tf.multiply(_get_value(subnetwork.logits, key), weight)
+    return logits, weight
 
-    return WeightedSubnetwork(
-        name=name,
-        iteration_number=iteration_number,
-        subnetwork=subnetwork,
-        logits=logits,
-        weight=weight)
-
-  def _create_bias(self, logits_dimension, prior=None):
+  def _create_bias_term(self, weighted_subnetworks, prior=None):
     """Returns a bias term vector.
 
     If `use_bias` is set, then it returns a trainable bias variable initialized
@@ -819,18 +810,140 @@ class _EnsembleBuilder(object):
     a zero constant bias.
 
     Args:
-      logits_dimension: The number of outputs from the logits.
-      prior: Prior for the bias variable for warm-starting.
+      weighted_subnetworks: List of `WeightedSubnetwork` instances that form
+        this ensemble. Ordered from first to most recent.
+      prior: Prior bias term `Tensor` of dict of string to `Tensor` (for multi-
+        head) for warm-starting the bias term variable.
 
     Returns:
-      A bias term `Tensor`.
+      A bias term `Tensor` or dict of string to bias term `Tensor` (for multi-
+        head).
     """
+
+    if not isinstance(weighted_subnetworks[0].subnetwork.logits, dict):
+      return self._create_bias_term_helper(weighted_subnetworks, prior)
+    bias_terms = {}
+    for key in sorted(weighted_subnetworks[0].subnetwork.logits):
+      bias_terms[key] = self._create_bias_term_helper(weighted_subnetworks,
+                                                      prior, key)
+    return bias_terms
+
+  def _create_bias_term_helper(self, weighted_subnetworks, prior, key=None):
+    """Returns a bias term for weights with the given key."""
 
     shape = None
     if prior is None:
       prior = tf.zeros_initializer()
+      logits = _get_value(weighted_subnetworks[0].subnetwork.logits, key)
+      logits_dimension = logits.get_shape().as_list()[-1]
       shape = logits_dimension
+    else:
+      prior = tf.contrib.framework.load_variable(self._checkpoint_dir,
+                                                 _get_value(prior, key).op.name)
     # Mark as not trainable to not add to the TRAINABLE_VARIABLES collection.
     # Training is handled explicitly with var_lists.
     return tf.get_variable(
-        name="bias", shape=shape, initializer=prior, trainable=False)
+        name="{}bias".format(key + "_" if key else ""),
+        shape=shape,
+        initializer=prior,
+        trainable=False)
+
+  def _adanet_weighted_ensemble_logits(self, weighted_subnetworks, bias,
+                                       summary):
+    """Computes the AdaNet weighted ensemble logits.
+
+    If `use_bias` is set, then it returns a trainable bias variable initialized
+    to zero, or warm-started with the given prior. Otherwise it returns
+    a zero constant bias.
+
+    Args:
+      weighted_subnetworks: List of `WeightedSubnetwork` instances that form
+        this ensemble. Ordered from first to most recent.
+      bias: Bias term `Tensor` or dict of string to `Tensor` (for multi-head)
+        for the AdaNet-weighted ensemble logits.
+      summary: A `_ScopedSummary` instance for recording ensemble summaries.
+
+    Returns:
+      A two-tuple of:
+       1. Ensemble logits `Tensor` or dict of string to logits `Tensor` (for
+         multi-head).
+       2. Ensemble complexity regularization
+    """
+
+    if not isinstance(weighted_subnetworks[0].subnetwork.logits, dict):
+      return self._adanet_weighted_ensemble_logits_helper(
+          weighted_subnetworks, bias, summary)
+    logits, ensemble_complexity_regularization = {}, {}
+    for key in sorted(weighted_subnetworks[0].subnetwork.logits):
+      logits[key], ensemble_complexity_regularization[key] = (
+          self._adanet_weighted_ensemble_logits_helper(weighted_subnetworks,
+                                                       bias, summary, key))
+    return logits, ensemble_complexity_regularization
+
+  def _adanet_weighted_ensemble_logits_helper(self,
+                                              weighted_subnetworks,
+                                              bias,
+                                              summary,
+                                              key=None):
+    """Returns the AdaNet ensemble logits and regularization term for key."""
+
+    subnetwork_logits = []
+    ensemble_complexity_regularization = 0
+    total_weight_l1_norms = 0
+    weights = []
+    for weighted_subnetwork in weighted_subnetworks:
+      weight_l1_norm = tf.norm(
+          _get_value(weighted_subnetwork.weight, key), ord=1)
+      total_weight_l1_norms += weight_l1_norm
+      ensemble_complexity_regularization += self._complexity_regularization(
+          weight_l1_norm, weighted_subnetwork.subnetwork.complexity)
+      subnetwork_logits.append(_get_value(weighted_subnetwork.logits, key))
+      weights.append(weight_l1_norm)
+
+    with tf.variable_scope("{}logits".format(key + "_" if key else "")):
+      ensemble_logits = _get_value(bias, key)
+      for logits in subnetwork_logits:
+        ensemble_logits = tf.add(ensemble_logits, logits)
+
+    with summary.current_scope():
+      summary.scalar(
+          "complexity_regularization/adanet/adanet_weighted_ensemble",
+          ensemble_complexity_regularization)
+      summary.histogram("mixture_weights/adanet/adanet_weighted_ensemble",
+                        weights)
+      for iteration, weight in enumerate(weights):
+        scope = "adanet/adanet_weighted_ensemble/subnetwork_{}".format(
+            iteration)
+        summary.scalar("mixture_weight_norms/{}".format(scope), weight)
+        fraction = weight / total_weight_l1_norms
+        summary.scalar("mixture_weight_fractions/{}".format(scope), fraction)
+    return ensemble_logits, ensemble_complexity_regularization
+
+  def _uniform_average_ensemble_logits(self, weighted_subnetworks):
+    """Computes the uniform average ensemble logits.
+
+    Args:
+      weighted_subnetworks: List of `WeightedSubnetwork` instances that form
+        this ensemble. Ordered from first to most recent.
+
+    Returns:
+      Ensemble logits `Tensor` or dict of string to logits `Tensor` (for
+         multi-head).
+    """
+
+    if not isinstance(weighted_subnetworks[0].subnetwork.logits, dict):
+      return self._uniform_average_ensemble_logits_helper(weighted_subnetworks)
+    logits = {}
+    for key in sorted(weighted_subnetworks[0].subnetwork.logits):
+      logits[key] = self._uniform_average_ensemble_logits_helper(
+          weighted_subnetworks, key)
+    return logits
+
+  def _uniform_average_ensemble_logits_helper(self,
+                                              weighted_subnetworks,
+                                              key=None):
+    """Returns logits for the baseline ensemble for the given key."""
+
+    return tf.add_n([
+        _get_value(wwl.subnetwork.logits, key) for wwl in weighted_subnetworks
+    ]) / len(weighted_subnetworks)

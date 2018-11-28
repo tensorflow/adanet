@@ -54,7 +54,6 @@ def dummy_ensemble_spec(name,
                         bias=0.,
                         loss=None,
                         adanet_loss=None,
-                        complexity_regularized_loss=None,
                         eval_metric_ops=None,
                         dict_predictions=False,
                         export_output_key=None,
@@ -70,8 +69,6 @@ def dummy_ensemble_spec(name,
       distribution.
     adanet_loss: Float AdaNet loss to return. When None, it's picked from a
       random distribution.
-    complexity_regularized_loss: Float complexity regularized loss to return.
-      When None, it's picked from a random distribution.
     eval_metric_ops: Optional dictionary of metric ops.
     dict_predictions: Boolean whether to return predictions as a dictionary of
       `Tensor` or just a single float `Tensor`.
@@ -91,11 +88,6 @@ def dummy_ensemble_spec(name,
     adanet_loss = dummy_tensor([], random_seed * 2)
   else:
     adanet_loss = tf.convert_to_tensor(adanet_loss)
-
-  if complexity_regularized_loss is None:
-    complexity_regularized_loss = dummy_tensor([], random_seed * 2)
-  elif not isinstance(complexity_regularized_loss, tf.Tensor):
-    complexity_regularized_loss = tf.constant(complexity_regularized_loss)
 
   logits = dummy_tensor([], random_seed * 3)
   if dict_predictions:
@@ -130,8 +122,6 @@ def dummy_ensemble_spec(name,
       predictions=predictions,
       loss=loss,
       adanet_loss=adanet_loss,
-      complexity_regularized_loss=complexity_regularized_loss,
-      complexity_regularization=1,
       eval_metric_ops=eval_metric_ops,
       train_op=train_op,
       export_outputs=export_outputs)

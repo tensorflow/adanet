@@ -850,9 +850,7 @@ class _HeadEnsembleBuilder(object):
         predictions=estimator_spec.predictions,
         loss=None,
         adanet_loss=.1,
-        complexity_regularized_loss=None,
         train_op=None,
-        complexity_regularization=None,
         eval_metric_ops=None,
         export_outputs=estimator_spec.export_outputs)
 

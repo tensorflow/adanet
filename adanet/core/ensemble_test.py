@@ -151,14 +151,12 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.016], [.117]],
       "want_loss": 1.338,
       "want_adanet_loss": 1.338,
-      "want_complexity_regularization": 0.,
       "want_mixture_weight_vars": 1,
   }, {
       "testcase_name": "no_previous_ensemble_prune_all",
       "want_logits": [[.016], [.117]],
       "want_loss": 1.338,
       "want_adanet_loss": 1.338,
-      "want_complexity_regularization": 0.,
       "want_mixture_weight_vars": 1,
       "subnetwork_builder_class": _BuilderPrunerAll
   }, {
@@ -166,7 +164,6 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.016], [.117]],
       "want_loss": 1.338,
       "want_adanet_loss": 1.338,
-      "want_complexity_regularization": 0.,
       "want_mixture_weight_vars": 1,
       "subnetwork_builder_class": _BuilderPrunerLeaveOne
   }, {
@@ -177,7 +174,6 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.580], [.914]],
       "want_loss": 1.362,
       "want_adanet_loss": 1.362,
-      "want_complexity_regularization": 0.,
       "want_mixture_weight_vars": 1,
   }, {
       "testcase_name": "default_mixture_weight_initializer_vector",
@@ -187,7 +183,6 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.580], [.914]],
       "want_loss": 1.362,
       "want_adanet_loss": 1.362,
-      "want_complexity_regularization": 0.,
       "want_mixture_weight_vars": 1,
   }, {
       "testcase_name": "default_mixture_weight_initializer_matrix",
@@ -196,7 +191,6 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.016], [.117]],
       "want_loss": 1.338,
       "want_adanet_loss": 1.338,
-      "want_complexity_regularization": 0.,
       "want_mixture_weight_vars": 1,
   }, {
       "testcase_name": "default_mixture_weight_initializer_matrix_on_logits",
@@ -206,7 +200,6 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.030], [.047]],
       "want_loss": 1.378,
       "want_adanet_loss": 1.378,
-      "want_complexity_regularization": 0.,
       "want_mixture_weight_vars": 1,
   }, {
       "testcase_name": "no_previous_ensemble_use_bias",
@@ -214,20 +207,17 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[0.013], [0.113]],
       "want_loss": 1.338,
       "want_adanet_loss": 1.338,
-      "want_complexity_regularization": 0.,
       "want_mixture_weight_vars": 2,
   }, {
       "testcase_name": "no_previous_ensemble_predict_mode",
       "mode": tf.estimator.ModeKeys.PREDICT,
       "want_logits": [[0.], [0.]],
-      "want_complexity_regularization": 0.,
   }, {
       "testcase_name": "no_previous_ensemble_lambda",
       "adanet_lambda": .01,
       "want_logits": [[.014], [.110]],
       "want_loss": 1.340,
       "want_adanet_loss": 1.343,
-      "want_complexity_regularization": .003,
       "want_mixture_weight_vars": 1,
   }, {
       "testcase_name": "no_previous_ensemble_beta",
@@ -235,7 +225,6 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.006], [.082]],
       "want_loss": 1.349,
       "want_adanet_loss": 1.360,
-      "want_complexity_regularization": .012,
       "want_mixture_weight_vars": 1,
   }, {
       "testcase_name": "no_previous_ensemble_lambda_and_beta",
@@ -244,13 +233,11 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.004], [.076]],
       "want_loss": 1.351,
       "want_adanet_loss": 1.364,
-      "want_complexity_regularization": .013,
       "want_mixture_weight_vars": 1,
   })
   def test_append_new_subnetwork(
       self,
       want_logits,
-      want_complexity_regularization,
       want_loss=None,
       want_adanet_loss=None,
       want_mixture_weight_vars=None,
@@ -365,10 +352,6 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       else:
         self.assertAlmostEqual(0., sess.run(ensemble_spec.ensemble.bias))
 
-      self.assertAlmostEqual(
-          want_complexity_regularization,
-          sess.run(ensemble_spec.complexity_regularization),
-          places=3)
       self.assertAlmostEqual(want_loss, sess.run(ensemble_spec.loss), places=3)
       self.assertAlmostEqual(
           want_adanet_loss, sess.run(ensemble_spec.adanet_loss), places=3)

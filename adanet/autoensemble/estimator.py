@@ -25,14 +25,26 @@ from adanet.core.subnetwork import Generator
 from adanet.core.subnetwork import Subnetwork
 import tensorflow as tf
 
+from tensorflow.python.estimator.canned import prediction_keys
+
+
+def _default_logits(estimator_spec):
+  if isinstance(estimator_spec.predictions, dict):
+    pred_keys = prediction_keys.PredictionKeys
+    if pred_keys.LOGITS in estimator_spec.predictions:
+      return estimator_spec.predictions[pred_keys.LOGITS]
+    if pred_keys.PREDICTIONS in estimator_spec.predictions:
+      return estimator_spec.predictions[pred_keys.PREDICTIONS]
+  return estimator_spec.predictions
+
 
 class _BuilderFromEstimator(Builder):
   """An `adanet.Builder` from a `tf.estimator.Estimator`."""
 
-  def __init__(self, estimator, index, logits_key):
+  def __init__(self, estimator, index, logits_fn):
     self._estimator = estimator
     self._index = index
-    self._logits_key = logits_key
+    self._logits_fn = logits_fn
 
   @property
   def name(self):
@@ -56,15 +68,12 @@ class _BuilderFromEstimator(Builder):
         labels=labels,
         mode=mode,
         config=self._estimator.config)
+    logits = self._logits_fn(estimator_spec=estimator_spec)
 
     self._subnetwork_train_op = estimator_spec.train_op
 
     # TODO: Replace with variance complexity measure.
     complexity = tf.constant(0.)
-    if isinstance(estimator_spec.predictions, dict):
-      logits = estimator_spec.predictions[self._logits_key]
-    else:
-      logits = estimator_spec.predictions
     return Subnetwork(
         logits=logits,
         last_layer=logits,
@@ -87,9 +96,9 @@ class _BuilderFromEstimator(Builder):
 class _GeneratorFromCandidatePool(Generator):
   """An `adanet.Generator` from a pool of `Estimator` and `Model` instances."""
 
-  def __init__(self, candidate_pool, logits_key):
+  def __init__(self, candidate_pool, logits_fn):
     self._candidate_pool = candidate_pool
-    self._logits_key = logits_key
+    self._logits_fn = logits_fn
 
   def generate_candidates(self, previous_ensemble, iteration_number,
                           previous_ensemble_reports, all_reports):
@@ -100,7 +109,7 @@ class _GeneratorFromCandidatePool(Generator):
       if isinstance(candidate, tf.estimator.Estimator):
         builders.append(
             _BuilderFromEstimator(
-                candidate, index=i, logits_key=self._logits_key))
+                candidate, index=i, logits_fn=self._logits_fn))
         continue
     return builders
 
@@ -165,7 +174,7 @@ class AutoEnsembleEstimator(Estimator):
                head,
                candidate_pool,
                max_iteration_steps,
-               logits_key="logits",
+               logits_fn=None,
                adanet_lambda=0.,
                evaluator=None,
                metric_fn=None,
@@ -185,8 +194,15 @@ class AutoEnsembleEstimator(Estimator):
       max_iteration_steps: Total number of steps for which to train candidates
         per iteration. If `OutOfRange` or `StopIteration` occurs in the middle,
         training stops before `max_iteration_steps` steps.
-      logits_key: String key for accessing `tf.estimator.Estimator` logits which
-        are present in its `model_fn`'s `EstimatorSpec` predictions dictionary.
+      logits_fn: A function which should obey the following signature:
+        - Args: can only have following argument:
+          * estimator_spec: The candidate's `tf.estimator.EstimatorSpec`.
+        - Returns: Logits `Tensor` or dict of string to logits `Tensor` (for
+          multi-head) for the candidate subnetwork extracted from the given
+          `estimator_spec`.
+        When `None`, it will default to returning `estimator_spec.predictions`
+        when they are a `Tensor` or the `Tensor` for the key 'logits' when they
+        are a dict of string to `Tensor`.
       adanet_lambda: See `adanet.Estimator`.
       evaluator:  See `adanet.Estimator`.
       metric_fn:  See `adanet.Estimator`.
@@ -210,8 +226,10 @@ class AutoEnsembleEstimator(Estimator):
       raise ValueError("Elements in candidate_pool must have type "
                        "tf.estimator.Estimator but got {}".format(
                            candidate.__class__))
+    if logits_fn is None:
+      logits_fn = _default_logits
     subnetwork_generator = _GeneratorFromCandidatePool(candidate_pool,
-                                                       logits_key)
+                                                       logits_fn)
     super(AutoEnsembleEstimator, self).__init__(
         head=head,
         subnetwork_generator=subnetwork_generator,

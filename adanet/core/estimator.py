@@ -289,8 +289,9 @@ class Estimator(tf.estimator.Estimator):
             given `head`.
           * features: Input `dict` of `Tensor` objects created by `input_fn`
             which is given to `estimator.evaluate` as an argument.
-          * labels:  Labels `Tensor` or dict of `Tensor` created by `input_fn`
-            which is given to `estimator.evaluate` as an argument.
+          * labels:  Labels `Tensor` or dict of `Tensor` (for multi-head)
+            created by `input_fn` which is given to `estimator.evaluate` as an
+            argument.
         - Returns: Dict of metric results keyed by name. Final metrics are a
           union of this and `head's` existing metrics. If there is a name
           conflict between this and `head`s existing metrics, this will override
@@ -902,7 +903,8 @@ class Estimator(tf.estimator.Estimator):
       features: Dictionary of `Tensor` objects keyed by feature name.
       mode: Defines whether this is training, evaluation or prediction. See
         `ModeKeys`.
-      labels: `Tensor` of labels.
+      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
+        (for multi-head). Can be `None`.
 
     Returns:
       An `EnsembleSpec` instance for the given architecture.
@@ -1032,7 +1034,8 @@ class Estimator(tf.estimator.Estimator):
 
     Args:
       features: Dictionary of `Tensor` objects keyed by feature name.
-      labels: `Tensor` of labels.
+      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
+        (for multi-head). Can be `None`.
       mode: Defines whether this is training, evaluation or prediction. See
         `ModeKeys`.
       params: A dict of parameters.

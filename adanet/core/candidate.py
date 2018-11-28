@@ -147,9 +147,6 @@ class _CandidateBuilder(object):
           adanet_loss = adanet_loss.read_value()
 
       with summary.current_scope():
-        summary.scalar(
-            "complexity_regularization/adanet/adanet_weighted_ensemble",
-            ensemble_spec.complexity_regularization)
         summary.scalar("adanet_loss/adanet/adanet_weighted_ensemble",
                        adanet_loss)
       return _Candidate(

@@ -814,6 +814,154 @@ class EstimatorKerasLayersTest(tu.AdanetTestCase):
         serving_input_receiver_fn=serving_input_fn)
 
 
+class MultiHeadBuilder(Builder):
+  """Builds a subnetwork for AdaNet that uses dict labels."""
+
+  def __init__(self, learning_rate=.001, split_logits=False, seed=42):
+    """Initializes a `LabelsDictBuilder`.
+
+    Args:
+      learning_rate: The float learning rate to use.
+      split_logits: Whether to return a dict of logits or a single concatenated
+        logits `Tensor`.
+      seed: The random seed.
+
+    Returns:
+      An instance of `MultiHeadBuilder`.
+    """
+    self._learning_rate = learning_rate
+    self._split_logits = split_logits
+    self._seed = seed
+
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
+    """See `adanet.subnetwork.Builder`."""
+
+    seed = self._seed
+    if previous_ensemble:
+      seed += len(previous_ensemble.weighted_subnetworks)
+    kernel_initializer = tf.keras.initializers.he_normal(seed=seed)
+    x = features["x"]
+    logits = tf.layers.dense(
+        x,
+        units=logits_dimension,
+        activation=None,
+        kernel_initializer=kernel_initializer)
+    if self._split_logits:
+      # Return different logits, one for each head.
+      logits1, logits2 = tf.split(logits, [1, 1], 1)
+      logits = {
+          "head1": logits1,
+          "head2": logits2,
+      }
+
+    complexity = tf.constant(1)
+    return Subnetwork(
+        last_layer=logits,
+        logits=logits,
+        complexity=complexity,
+        persisted_tensors={})
+
+  def build_subnetwork_train_op(self,
+                                subnetwork,
+                                loss,
+                                var_list,
+                                labels,
+                                iteration_step,
+                                summary,
+                                previous_ensemble=None):
+    optimizer = tf.train.GradientDescentOptimizer(self._learning_rate)
+    return optimizer.minimize(loss=loss, var_list=var_list)
+
+  def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
+                                     iteration_step, summary):
+    optimizer = tf.train.GradientDescentOptimizer(self._learning_rate)
+    return optimizer.minimize(loss=loss, var_list=var_list)
+
+  @property
+  def name(self):
+    return "multi_head"
+
+
+class EstimatorMultiHeadTest(tu.AdanetTestCase):
+
+  @parameterized.named_parameters({
+      "testcase_name": "concatenated_logits",
+      "builders": [MultiHeadBuilder()],
+      "want_loss": 3.218,
+  }, {
+      "testcase_name": "split_logits",
+      "builders": [MultiHeadBuilder(split_logits=True)],
+      "want_loss": 3.224,
+  })
+  def test_lifecycle(self, builders, want_loss):
+    """Train entire estimator lifecycle using XOR dataset."""
+
+    run_config = tf.estimator.RunConfig(tf_random_seed=42)
+
+    xor_features = [[1., 0., 1., 0.], [0., 0., 0., 0.], [0., 1., 0., 1.],
+                    [1., 1., 1., 1.]]
+    xor_labels = [[1.], [0.], [1.], [0.]]
+
+    def train_input_fn():
+      return {
+          "x": tf.constant(xor_features)
+      }, {
+          "head1": tf.constant(xor_labels),
+          "head2": tf.constant(xor_labels)
+      }
+
+    estimator = Estimator(
+        head=tf.contrib.estimator.multi_head(heads=[
+            tf.contrib.estimator.regression_head(
+                name="head1",
+                loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+            tf.contrib.estimator.regression_head(
+                name="head2",
+                loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+        ]),
+        subnetwork_generator=SimpleGenerator(builders),
+        max_iteration_steps=3,
+        evaluator=Evaluator(input_fn=train_input_fn, steps=1),
+        model_dir=self.test_subdirectory,
+        config=run_config)
+
+    # Train.
+    estimator.train(input_fn=train_input_fn, max_steps=9)
+
+    # Evaluate.
+    eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
+    self.assertAlmostEqual(want_loss, eval_results["loss"], places=3)
+
+    # Predict.
+    predictions = estimator.predict(
+        input_fn=tu.dataset_input_fn(features=[0., 0., 0., 0.], labels=None))
+    for prediction in predictions:
+      self.assertIsNotNone(prediction[("head1", "predictions")])
+      self.assertIsNotNone(prediction[("head2", "predictions")])
+
+    # Export SavedModel.
+    def serving_input_fn():
+      """Input fn for serving export, starting from serialized example."""
+      serialized_example = tf.placeholder(
+          dtype=tf.string, shape=(None), name="serialized_example")
+      return tf.estimator.export.ServingInputReceiver(
+          features={"x": tf.constant([[0., 0., 0., 0.]], name="serving_x")},
+          receiver_tensors=serialized_example)
+
+    export_saved_model_fn = getattr(estimator, "export_saved_model", None)
+    if not callable(export_saved_model_fn):
+      export_saved_model_fn = estimator.export_savedmodel
+    export_saved_model_fn(
+        export_dir_base=self.test_subdirectory,
+        serving_input_receiver_fn=serving_input_fn)
+
+
 class EstimatorCallingModelFnDirectlyTest(tu.AdanetTestCase):
   """Tests b/112108745. Warn users not to call model_fn directly."""
 

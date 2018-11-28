@@ -49,24 +49,26 @@ class Subnetwork(
     """Creates a validated `Subnetwork` instance.
 
     Args:
-      last_layer: A `Tensor` output of the last layer of the subnetwork, i.e the
-        layer before the logits layer. When the mixture weight type is `MATRIX`,
-        the AdaNet algorithm takes care of computing ensemble mixture weights
-        matrices (one per subnetwork) that multiply the various last layers of
-        the ensemble's subnetworks, and regularize them using their subnetwork's
-        complexity. This field is represented by 'h' in the AdaNet paper.
-      logits: logits `Tensor` for training the subnetwork. NOTE: These logits
-        are not used in the ensemble's outputs if the mixture weight type is
-        `MATRIX`, instead AdaNet learns its own logits (mixture weights) from
-        the subnetwork's `last_layers` with complexity regularization. The
-        logits are used in the ensemble only when the mixture weights type is
-        `SCALAR` or `VECTOR`. Even though the logits are not used in the
-        ensemble in some cases, they should always be supplied as adanet uses
-        the logits to train the subnetworks.
-      complexity: A scalar representing the complexity of the subnetwork's
-        architecture. It is used for choosing the best subnetwork at each
-        iteration, and for regularizing the weighted outputs of more complex
-        subnetworks.
+      last_layer: `Tensor` output or dict of string to `Tensor` outputs (for
+        multi-head) of the last layer of the subnetwork, i.e the layer before
+        the logits layer. When the mixture weight type is `MATRIX`, the AdaNet
+        algorithm takes care of computing ensemble mixture weights matrices (one
+        per subnetwork) that multiply the various last layers of the ensemble's
+        subnetworks, and regularize them using their subnetwork's complexity.
+        This field is represented by 'h' in the AdaNet paper.
+      logits: `Tensor` logits or dict of string to `Tensor` logits (for
+        multi-head) for training the subnetwork. NOTE: These logits are not used
+        in the ensemble's outputs if the mixture weight type is `MATRIX`,
+        instead AdaNet learns its own logits (mixture weights) from the
+        subnetwork's `last_layers` with complexity regularization. The logits
+        are used in the ensemble only when the mixture weights type is `SCALAR`
+        or `VECTOR`. Even though the logits are not used in the ensemble in some
+        cases, they should always be supplied as adanet uses the logits to train
+        the subnetworks.
+      complexity: A scalar `Tensor` representing the complexity of the
+        subnetwork's architecture. It is used for choosing the best subnetwork
+        at each iteration, and for regularizing the weighted outputs of more
+        complex subnetworks.
       persisted_tensors: Nested dictionary of string to `Tensor` to persist
         across iterations. At the end of an iteration, the `Tensors` will be
         available to subnetworks in the next iterations, whereas others that are
@@ -80,15 +82,21 @@ class Subnetwork(
     Raises:
       ValueError: If last_layer is None.
       ValueError: If logits is None.
+      ValueError: If logits is a dict but last_layer is not.
+      ValueError: If last_layer is a dict but logits is not.
       ValueError: If complexity is None.
-      ValueError: If persited_tensors is not a dictionary.
-      ValueError: If persited_tensors contains an empty nested dictionary.
+      ValueError: If persisted_tensors is not a dictionary.
+      ValueError: If persisted_tensors contains an empty nested dictionary.
     """
 
     if last_layer is None:
       raise ValueError("last_layer not provided")
     if logits is None:
       raise ValueError("logits not provided")
+    if isinstance(logits, dict) and not isinstance(last_layer, dict):
+      raise ValueError("if logits is a dict last_layer must also be a dict")
+    if isinstance(last_layer, dict) and not isinstance(logits, dict):
+      raise ValueError("if last_layer is a dict logits must also be a dict")
     if complexity is None:
       raise ValueError("complexity not provided")
     if not isinstance(persisted_tensors, dict):
@@ -139,7 +147,8 @@ class Builder(object):
 
     Args:
       features: Input `dict` of `Tensor` objects.
-      labels: Labels `Tensor`. Can be `None`.
+      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
+        (for multi-head). Can be `None`.
       logits_dimension: Size of the last dimension of the logits `Tensor`.
         Typically, logits have for shape `[batch_size, logits_dimension]`.
       training: A python boolean indicating whether the graph is in training
@@ -174,7 +183,8 @@ class Builder(object):
       loss: A `Tensor` containing the subnetwork's loss to minimize.
       var_list: List of subnetwork `tf.Variable` parameters to update as part of
         the training operation.
-      labels: Labels `Tensor`.
+      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
+        (for multi-head).
       iteration_step: Integer `Tensor` representing the step since the beginning
         of the current iteration, as opposed to the global step.
       summary: An `adanet.Summary` for scoping summaries to individual
@@ -208,7 +218,8 @@ class Builder(object):
         become part of the training operation.
       logits: The ensemble's logits `Tensor` from applying the mixture weights
         and bias to the ensemble's subnetworks.
-      labels: Labels `Tensor`.
+      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
+        (for multi-head).
       iteration_step: Integer `Tensor` representing the step since the beginning
         of the current iteration, as opposed to the global step.
       summary: An `adanet.Summary` for scoping summaries to individual

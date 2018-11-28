@@ -75,6 +75,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
       dnn_estimator_fn = tf.estimator.DNNEstimator
     else:
       dnn_estimator_fn = tf.contrib.estimator.DNNEstimator
+
     estimator = AutoEnsembleEstimator(
         head=head,
         candidate_pool=[
@@ -87,7 +88,6 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
                 optimizer=optimizer,
                 hidden_units=[3]),
         ],
-        logits_key="predictions",
         max_iteration_steps=4,
         force_grow=True,
         model_dir=self.test_subdirectory,

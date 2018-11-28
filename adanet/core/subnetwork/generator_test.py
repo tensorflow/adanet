@@ -69,6 +69,12 @@ class SubnetworkTest(parameterized.TestCase, tf.test.TestCase):
       "complexity": dummy_tensor(),
       "persisted_tensors": {},
   }, {
+      "testcase_name": "dict_logits_and_last_layer",
+      "last_layer": {"head1": dummy_tensor()},
+      "logits": {"head1": dummy_tensor()},
+      "complexity": dummy_tensor(),
+      "persisted_tensors": {},
+  }, {
       "testcase_name": "persisted_tensors",
       "last_layer": dummy_tensor(),
       "logits": dummy_tensor(),
@@ -159,6 +165,18 @@ class SubnetworkTest(parameterized.TestCase, tf.test.TestCase):
               },
           },
       },
+  }, {
+      "testcase_name": "only_dict_logits",
+      "last_layer": dummy_tensor(),
+      "logits": {"head": dummy_tensor()},
+      "complexity": dummy_tensor(),
+      "persisted_tensors": {},
+  }, {
+      "testcase_name": "only_dict_last_layer",
+      "last_layer": {"head": dummy_tensor()},
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
+      "persisted_tensors": {},
   })
   def test_new_errors(self, last_layer, logits, complexity, persisted_tensors):
     with self.test_session():
