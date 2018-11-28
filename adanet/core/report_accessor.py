@@ -209,8 +209,12 @@ class _ReportAccessor(object):
     # https://github.com/tensorflow/tensorflow/blob/r1.7/tensorflow/python/lib/io/tf_record.py#L96
     previous_iterations = []
     if tf.gfile.Exists(self._full_filepath):
-      previous_iterations = list(
-          tf.python_io.tf_record_iterator(self._full_filepath))
+      try:
+        tf_record_iterator = tf.compat.v1.io.tf_record_iterator
+      except AttributeError:
+        tf_record_iterator = tf.python_io.tf_record_iterator
+
+      previous_iterations = list(tf_record_iterator(self._full_filepath))
     with tf.python_io.TFRecordWriter(self._full_filepath) as writer:
       for prev_iteration_pb_string in previous_iterations:
         writer.write(prev_iteration_pb_string)
@@ -234,6 +238,10 @@ class _ReportAccessor(object):
     """Returns an Iterable of adanet.IterationReport protos."""
 
     if tf.gfile.Exists(self._full_filepath):
+      try:
+        tf_record_iterator = tf.compat.v1.io.tf_record_iterator
+      except AttributeError:
+        tf_record_iterator = tf.python_io.tf_record_iterator
       return map(_parse_iteration_report_proto,
-                 tf.python_io.tf_record_iterator(self._full_filepath))
+                 tf_record_iterator(self._full_filepath))
     return []
