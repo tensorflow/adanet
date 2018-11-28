@@ -72,6 +72,7 @@ py_test(
         ":testing_utils",
         ":tpu_estimator",
         "//adanet/core/subnetwork",
+        "@absl_py//absl/testing:parameterized",
     ],
 )
 

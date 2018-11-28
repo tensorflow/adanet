@@ -32,7 +32,7 @@ import tensorflow as tf
 class _Iteration(
     collections.namedtuple("_Iteration", [
         "number", "candidates", "estimator_spec", "best_candidate_index",
-        "summaries", "is_over", "subnetwork_reports", "step"
+        "summaries", "is_over_fn", "subnetwork_reports", "step"
     ])):
   """An AdaNet iteration.
 
@@ -44,7 +44,7 @@ class _Iteration(
   """
 
   def __new__(cls, number, candidates, estimator_spec, best_candidate_index,
-              summaries, is_over, subnetwork_reports, step):
+              summaries, is_over_fn, subnetwork_reports, step):
     """Creates a validated `_Iteration` instance.
 
     Args:
@@ -58,7 +58,7 @@ class _Iteration(
       estimator_spec: `EstimatorSpec` instance.
       best_candidate_index: Int `Tensor` indicating the best candidate's index.
       summaries: List of `_ScopedSummary` instances for each candidate.
-      is_over: Boolean `Tensor` indicating if iteration is over.
+      is_over_fn: A fn()->Boolean `Variable` indicating if iteration is over.
       subnetwork_reports: Dict mapping string names to `subnetwork.Report`s, one
         per candidate.
       step: Integer `Tensor` representing the step since the beginning of the
@@ -89,9 +89,19 @@ class _Iteration(
         estimator_spec=estimator_spec,
         best_candidate_index=best_candidate_index,
         summaries=summaries,
-        is_over=is_over,
+        is_over_fn=is_over_fn,
         subnetwork_reports=subnetwork_reports,
         step=step)
+
+
+def is_over_var():
+  var = tf.get_variable(
+      "is_over_var",
+      shape=[],
+      initializer=tf.zeros_initializer(),
+      trainable=False,
+      dtype=tf.bool)
+  return var
 
 
 class _IterationBuilder(object):
@@ -274,11 +284,16 @@ class _IterationBuilder(object):
           candidates, best_candidate_index, mode)
       best_export_outputs = self._best_export_outputs(
           candidates, best_candidate_index, mode, best_predictions)
+      # Hooks on TPU cannot depend on any graph `Tensors`. Instead the value of
+      # `is_over` is stored in a `Variable` that can later be retrieved from
+      # inside a training hook.
+      is_over_var_fn = tf.make_template("is_over_var_fn", is_over_var)
       estimator_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           predictions=best_predictions,
           loss=best_loss,
-          train_op=self._create_train_op(candidates, mode, iteration_step),
+          train_op=self._create_train_op(candidates, mode, iteration_step,
+                                         is_over_var_fn),
           eval_metric_ops=best_eval_metric_ops,
           export_outputs=best_export_outputs)
 
@@ -288,22 +303,31 @@ class _IterationBuilder(object):
           estimator_spec=estimator_spec,
           best_candidate_index=best_candidate_index,
           summaries=summaries,
-          is_over=self._is_over(candidates),
+          is_over_fn=is_over_var_fn,
           subnetwork_reports=subnetwork_reports,
           step=iteration_step_tensor)
 
-  def _is_over(self, candidates):
-    """The iteration is over once all candidates are done training."""
+  def _is_over(self, candidates, is_over_var_fn):
+    """Assings whether the iteration is over to the is_over_var.
+
+    The iteration is over once all candidates are done training.
+
+    Args:
+      candidates: List of `_Candidate` instances to train.
+      is_over_var_fn: A fn()->tf.Variable which returns the is_over_var.
+
+    Returns:
+      An op which assigns whether the iteration is over to the is_over_var.
+    """
 
     with tf.variable_scope("is_over"):
-      if len(candidates) == 1:
-        return tf.logical_not(candidates[0].is_training)
       is_over = True
       for candidate in candidates:
         is_over = tf.logical_and(is_over, tf.logical_not(candidate.is_training))
-      return is_over
+      var = is_over_var_fn()
+      return tf.assign(var, is_over)
 
-  def _create_train_op(self, candidates, mode, step):
+  def _create_train_op(self, candidates, mode, step, is_over_var_fn):
     """Returns the train op for this set of candidates.
 
     This train op combines the train ops from all the candidates into a single
@@ -317,19 +341,21 @@ class _IterationBuilder(object):
         op is only non-None during `TRAIN`. See `ModeKeys`.
       step: Integer `Variable` for the current step of the iteration, as opposed
         to the global step.
+      is_over_var_fn: A fn()->tf.Variable which returns the is_over_var.
 
     Returns:
       A `Tensor` train op.
     """
 
     if mode != tf.estimator.ModeKeys.TRAIN:
-      return None
+      return tf.no_op()
     with tf.variable_scope("train_op"):
       train_ops = []
       for candidate in candidates:
         if candidate.ensemble_spec.train_op is not None:
           # The train op of a previous ensemble is None even during `TRAIN`.
           train_ops.append(candidate.ensemble_spec.train_op)
+      train_ops.append(self._is_over(candidates, is_over_var_fn))
       with tf.control_dependencies(train_ops):
         # AdaNet is responsible for incrementing the global step, not the
         # candidates it trains. Incrementing the global step and iteration step
@@ -475,7 +501,8 @@ class _IterationBuilder(object):
       return candidates[0].ensemble_spec.loss
     with tf.variable_scope("best_loss"):
       losses = [c.ensemble_spec.loss for c in candidates]
-      return tf.stack(losses)[best_candidate_index]
+      loss = tf.slice(tf.stack(losses), [best_candidate_index], [1])
+      return tf.reshape(loss, [])
 
   def _best_export_outputs(self, candidates, best_candidate_index, mode,
                            best_predictions):

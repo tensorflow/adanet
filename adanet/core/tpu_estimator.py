@@ -68,8 +68,6 @@ def _rewire_summaries():
 _rewire_summaries()
 
 
-# TODO: No TPU support is currently implemented. This Estimator
-# will simply run on CPU/GPU if used.
 class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
   """An adanet.Estimator capable of running on TPU.
 
@@ -99,8 +97,14 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                model_dir=None,
                report_dir=None,
                config=None,
-               train_batch_size=None):
+               use_tpu=True,
+               batch_size=None):
     """Initializes a `TPUEstimator`. See base classes for details."""
+
+    if not use_tpu:
+      tf.logging.warning(
+          'This adanet.TPUEstimator is meant to be used for running on TPU. '
+          'If you want to run on CPU/GPU, use adanet.Estimator instead.')
 
     super(TPUEstimator, self).__init__(
         head=head,
@@ -122,28 +126,32 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         model_dir=model_dir,
         report_dir=report_dir,
         config=config if config else tf.contrib.tpu.RunConfig(),
-        use_tpu=False,
+        use_tpu=use_tpu,
         eval_on_tpu=False,
         export_to_tpu=False,
-        train_batch_size=train_batch_size if train_batch_size else 0)
+        train_batch_size=batch_size or 0)
+
+  def _call_adanet_model_fn(self, input_fn, mode, params):
+    """See the `Estimator` base class for details."""
+
+    # Fakes TPU shard context before calling through to the parent to supress
+    # warnings by CrossShardOptimizer when running on TPU. Warnings are issued
+    # when `_adanet_model_fn` is called directly on CPU during the bookkeeping
+    # phase. Since we rebuild the graph each time `_adanet_model_fn` is called,
+    # this has no adverse effects.
+    with tpu_function.tpu_shard_context(0):
+      super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode, params)
 
   def _adanet_model_fn(self, features, labels, mode, params):
     """See the `Estimator` base class for details."""
 
     estimator_spec = super(TPUEstimator, self)._adanet_model_fn(
         features, labels, mode, params)
-    if mode != tf.estimator.ModeKeys.TRAIN:
-      return estimator_spec
-    else:
+    if 'use_tpu' in params and mode == tf.estimator.ModeKeys.TRAIN:
       kwargs = {
           key: value
           for key, value in six.iteritems(estimator_spec._asdict())
           if key not in ('eval_metric_ops', 'scaffold', 'training_chief_hooks')
       }
-      # TODO: wrapping eval_metric_ops and scaffold in lambdas is a hack
-      # to get TPUEstimator to work when use_tpu=False. This will not work when
-      # we actually start using TPU.
-      eval_metrics = (lambda: estimator_spec.eval_metric_ops, ())
-      scaffold_fn = lambda: estimator_spec.scaffold
-      return tf.contrib.tpu.TPUEstimatorSpec(
-          eval_metrics=eval_metrics, scaffold_fn=scaffold_fn, **kwargs)
+      estimator_spec = tf.contrib.tpu.TPUEstimatorSpec(**kwargs)
+    return estimator_spec

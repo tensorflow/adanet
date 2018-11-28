@@ -57,7 +57,7 @@ class _StopAfterTrainingHook(tf.train.SessionRunHook):
     """See `SessionRunHook`."""
 
     del run_context  # Unused
-    return tf.train.SessionRunArgs(self._iteration.is_over)
+    return tf.train.SessionRunArgs(self._iteration.is_over_fn())
 
   def after_run(self, run_context, run_values):
     """See `SessionRunHook`."""
@@ -654,7 +654,7 @@ class Estimator(tf.estimator.Estimator):
                                                      tf.GraphKeys.GLOBAL_STEP)
 
     checkpoint_path = os.path.join(self.model_dir, "increment.ckpt")
-    with tf.Session() as sess:
+    with tf.Session(target=self.config.master) as sess:
       init = tf.group(tf.global_variables_initializer(),
                       tf.local_variables_initializer(), tf.tables_initializer())
       sess.run(init)

@@ -49,7 +49,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
       "candidates": [_dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
-      "is_over": True,
+      "is_over_fn": lambda: True,
   }, {
       "testcase_name": "two_candidates",
       "number": 0,
@@ -57,47 +57,42 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
                      _dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
-      "is_over": True,
+      "is_over_fn": lambda: True,
   }, {
       "testcase_name": "positive_number",
       "number": 1,
       "candidates": [_dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
-      "is_over": True,
+      "is_over_fn": lambda: True,
   }, {
       "testcase_name": "false_is_over",
       "number": 1,
       "candidates": [_dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
-      "is_over": False,
+      "is_over_fn": lambda: False,
   }, {
       "testcase_name": "zero_best_predictions",
       "number": 1,
       "candidates": [_dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
-      "is_over": True,
+      "is_over_fn": lambda: True,
   }, {
       "testcase_name": "zero_best_loss",
       "number": 1,
       "candidates": [_dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
-      "is_over": True,
+      "is_over_fn": lambda: True,
   }, {
-      "testcase_name":
-          "pass_subnetwork_report",
-      "number":
-          1,
+      "testcase_name": "pass_subnetwork_report",
+      "number": 1,
       "candidates": [_dummy_candidate()],
-      "estimator_spec":
-          tu.dummy_estimator_spec(),
-      "best_candidate_index":
-          0,
-      "is_over":
-          True,
+      "estimator_spec": tu.dummy_estimator_spec(),
+      "best_candidate_index": 0,
+      "is_over_fn": lambda: True,
       "subnetwork_reports_fn": lambda: {
           "foo": SubnetworkReport(
               hparams={"dropout": 1.0},
@@ -110,7 +105,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
                candidates,
                estimator_spec,
                best_candidate_index,
-               is_over,
+               is_over_fn,
                subnetwork_reports_fn=None,
                step=0):
     if subnetwork_reports_fn is None:
@@ -124,14 +119,14 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
           estimator_spec=estimator_spec,
           best_candidate_index=best_candidate_index,
           summaries=[],
-          is_over=is_over,
+          is_over_fn=is_over_fn,
           subnetwork_reports=subnetwork_reports,
           step=step)
       self.assertEqual(iteration.number, number)
       self.assertEqual(iteration.candidates, candidates)
       self.assertEqual(iteration.estimator_spec, estimator_spec)
       self.assertEqual(iteration.best_candidate_index, best_candidate_index)
-      self.assertEqual(iteration.is_over, is_over)
+      self.assertEqual(iteration.is_over_fn(), is_over_fn())
       self.assertEqual(iteration.subnetwork_reports, subnetwork_reports)
       self.assertEqual(iteration.step, step)
 
@@ -171,7 +166,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
                       candidates=lambda: [_dummy_candidate()],
                       estimator_spec=tu.dummy_estimator_spec(),
                       best_candidate_index=0,
-                      is_over=True,
+                      is_over_fn=lambda: True,
                       subnetwork_reports=lambda: [],
                       step=0):
     with self.test_session():
@@ -182,7 +177,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
             estimator_spec=estimator_spec,
             best_candidate_index=best_candidate_index,
             summaries=[],
-            is_over=is_over,
+            is_over_fn=is_over_fn,
             subnetwork_reports=subnetwork_reports(),
             step=step)
 
@@ -746,7 +741,6 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           set(want_eval_metric_ops), set(estimator_spec.eval_metric_ops.keys()))
       self.assertEqual(want_best_candidate_index,
                        sess.run(iteration.best_candidate_index))
-      self.assertEqual(want_is_over, sess.run(iteration.is_over))
 
       if mode == tf.estimator.ModeKeys.PREDICT:
         self.assertIsNotNone(estimator_spec.export_outputs)
@@ -754,7 +748,8 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
             want_export_outputs,
             sess.run(_export_output_tensors(estimator_spec.export_outputs)),
             atol=1e-3)
-        self.assertIsNone(iteration.estimator_spec.train_op)
+        self.assertEqual(iteration.estimator_spec.train_op.type,
+                         tf.no_op().type)
         self.assertIsNone(iteration.estimator_spec.loss)
         self.assertIsNotNone(want_export_outputs)
         return
@@ -764,6 +759,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
       self.assertIsNone(iteration.estimator_spec.export_outputs)
       if mode == tf.estimator.ModeKeys.TRAIN:
         sess.run(iteration.estimator_spec.train_op)
+        self.assertEqual(want_is_over, sess.run(iteration.is_over_fn()))
         self.assertEqual(1, sess.run(global_step))
         self.assertEqual(1, sess.run(iteration.step))
 

@@ -22,6 +22,7 @@ from __future__ import print_function
 import contextlib
 import os
 
+from absl.testing import parameterized
 from adanet.core import testing_utils as tu
 from adanet.core.subnetwork import Builder
 from adanet.core.subnetwork import Report
@@ -42,12 +43,14 @@ class _DNNBuilder(Builder):
                learning_rate=.001,
                mixture_weight_learning_rate=.001,
                layer_size=1,
-               seed=13):
+               seed=13,
+               use_tpu=False):
     self._name = name
     self._learning_rate = learning_rate
     self._mixture_weight_learning_rate = mixture_weight_learning_rate
     self._layer_size = layer_size
     self._seed = seed
+    self._use_tpu = use_tpu
 
   @property
   def name(self):
@@ -112,6 +115,8 @@ class _DNNBuilder(Builder):
                                      iteration_step, summary):
     optimizer = tf.train.GradientDescentOptimizer(
         learning_rate=self._mixture_weight_learning_rate)
+    if self._use_tpu:
+      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
     return optimizer.minimize(loss, var_list=var_list)
 
   def build_subnetwork_report(self):
@@ -124,10 +129,10 @@ class _DNNBuilder(Builder):
         })
 
 
-# TODO: remove this function and actually test on TPU once
-# adanet.TPUEstimator supports running on TPU.
 @contextlib.contextmanager
 def fake_run_on_tpu():
+  """Fakes TPU existence when running TPU tests on CPU/GPU."""
+
   original_number_of_shards_fn = tpu_function.TpuContext.number_of_shards
   tpu_function.TpuContext.number_of_shards = 1
   try:
@@ -160,16 +165,25 @@ class TPUEstimatorTest(tu.AdanetTestCase):
       self.skipTest("TPUEstimatorSpec does not support `training_hooks`"
                     "TF v1.11.0.")
 
-  def test_tpu_estimator_simple_lifecycle(self):
-    config = tf.contrib.tpu.RunConfig(tf_random_seed=42)
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "not_use_tpu",
+          "use_tpu": False,
+      },
+  )
+  def test_tpu_estimator_simple_lifecycle(self, use_tpu):
+    config = tf.contrib.tpu.RunConfig(master="", tf_random_seed=42)
     estimator = TPUEstimator(
         head=tu.head(),
-        subnetwork_generator=SimpleGenerator([_DNNBuilder("dnn")]),
+        subnetwork_generator=SimpleGenerator(
+            [_DNNBuilder("dnn", use_tpu=use_tpu)]),
         max_iteration_steps=200,
         mixture_weight_initializer=tf.zeros_initializer(),
         use_bias=True,
         model_dir=self.test_subdirectory,
-        config=config)
+        config=config,
+        use_tpu=use_tpu,
+        batch_size=64 if use_tpu else 0)
     max_steps = 300
 
     xor_features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
@@ -185,9 +199,12 @@ class TPUEstimatorTest(tu.AdanetTestCase):
         input_fn=train_input_fn, steps=10, hooks=None)
     tf.logging.info("%s", eval_results)
 
-    # Predict.
-    predictions = estimator.predict(
-        input_fn=tu.dataset_input_fn(features=[0., 0.], labels=None))
+    # TODO: inference on TPU is not currently supported.
+    if use_tpu:
+      predictions = []
+    else:
+      predictions = estimator.predict(
+          input_fn=tu.dataset_input_fn(features=[0., 0.], labels=None))
 
     # Export SavedModel.
     def serving_input_fn():
@@ -205,7 +222,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
         export_dir_base=estimator.model_dir,
         serving_input_receiver_fn=serving_input_fn)
 
-    self.assertAlmostEqual(0.32416, eval_results["loss"], places=5)
+    self.assertAlmostEqual(0.32416, eval_results["loss"], places=4)
     self.assertEqual(max_steps, eval_results["global_step"])
     for prediction in predictions:
       self.assertIsNotNone(prediction["predictions"])
@@ -217,7 +234,8 @@ class TPUEstimatorTest(tu.AdanetTestCase):
         subnetwork_generator=SimpleGenerator([_DNNBuilder("dnn")]),
         max_iteration_steps=200,
         model_dir=self.test_subdirectory,
-        config=config)
+        config=config,
+        use_tpu=False)
     train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
 
     with fake_run_on_tpu():
