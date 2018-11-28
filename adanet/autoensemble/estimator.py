@@ -124,7 +124,7 @@ class AutoEnsembleEstimator(Estimator):
   categorical_feature_b_emb = embedding_column(
       categorical_column=categorical_feature_b, ...)
 
-  head = tf.contrib.estimator.multi_label_head(n_classes=3)
+  head = tf.contrib.estimator.multi_class_head(n_classes=3)
 
   # Learn to ensemble linear and DNN models.
   estimator = adanet.AutoEnsembleEstimator(

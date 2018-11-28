@@ -8,13 +8,60 @@
   <img src="https://tensorflow.github.io/adanet/images/adanet_tangram_logo.png" alt="adanet_tangram_logo"><br><br>
 </div>
 
-**AdaNet** is a lightweight and scalable TensorFlow AutoML framework for training and deploying adaptive neural networks using the *AdaNet* algorithm [[Cortes et al. ICML 2017](https://arxiv.org/abs/1607.01097)]. *AdaNet* combines several learned subnetworks in order to mitigate the complexity inherent in designing effective neural networks.
+**AdaNet** is a lightweight TensorFlow-based framework for automatically learning high-quality models with minimal expert intervention. AdaNet builds on recent AutoML efforts to be fast and flexible while providing learning guarantees. Importantly, AdaNet provides a general framework for not only learning a neural network architecture, but also for learning to ensemble to obtain even better models.
 
-<div align="center">
-  <img src="https://tensorflow.github.io/adanet/images/adanet_animation.gif" alt="adanet_tangram_logo" style="max-height: 450px;"><br><br>
+This project is based on the _AdaNet algorithm_, presented in “[AdaNet: Adaptive Structural Learning of Artificial Neural Networks](http://proceedings.mlr.press/v70/cortes17a.html)” at [ICML 2017](https://icml.cc/Conferences/2017), for learning the structure of a neural network as an ensemble of subnetworks.
+
+AdaNet has the following goals:
+
+* _Ease of use_: Provide familiar APIs for easily training, evaluating, and serving models.
+* _Speed_: Scale with available compute with distributed training on CPU and GPU (TPU support coming soon).
+* _Flexibility_: Provide an extensible API for defining new subnetworks for different tasks.
+* _Learning guarantees_: Optimize an objective that offers theoretical learning guarantees.
+
+The following animation shows AdaNet adaptively growing an ensemble of neural networks. At each iteration, it measures the ensemble loss for each candidate, and selects the best one to move onto the next iteration. At subsequent iterations, the blue subnetworks are frozen, and only yellow subnetworks are trained:
+
+<div align="center" style="max-width: 450px; display: block; margin: 0 auto;">
+  <img src="https://tensorflow.github.io/adanet/images/adanet_animation.gif" alt="adanet_tangram_logo"><br><br>
 </div>
 
+AdaNet was first announced on the Google AI research blog: "[Introducing AdaNet: Fast and Flexible AutoML with Learning Guarantees](https://ai.googleblog.com/2018/10/introducing-adanet-fast-and-flexible.html)".
+
 This is not an official Google product.
+
+## Example
+
+A simple example of learning to ensemble linear and neural network models:
+
+```python
+import adanet
+import tensorflow
+
+# Define the model head for computing loss and evaluation metrics.
+head = tf.contrib.estimator.multi_class_head(n_classes=10)
+
+# Feature columns define how to process examples.
+feature_columns = ...
+
+# Learn to ensemble linear and neural network models.
+estimator = adanet.AutoEnsembleEstimator(
+    head=head,
+    candidate_pool=[
+        tf.estimator.LinearEstimator(
+            head=head,
+            feature_columns=feature_columns,
+            optimizer=tf.train.FtrlOptimizer(...)),
+        tf.estimator.DNNEstimator(
+            head=head,
+            feature_columns=feature_columns,
+            optimizer=tf.train.ProximalAdagradOptimizer(...),
+            hidden_units=[1000, 500, 100])],
+    max_iteration_steps=50)
+
+estimator.train(input_fn=train_input_fn, steps=100)
+metrics = estimator.evaluate(input_fn=eval_input_fn)
+predictions = estimator.predict(input_fn=predict_input_fn)
+```
 
 ## Getting Started
 
