@@ -14,9 +14,9 @@ This project is based on the _AdaNet algorithm_, presented in “[AdaNet: Adapti
 
 AdaNet has the following goals:
 
-* _Ease of use_: Provide familiar APIs for easily training, evaluating, and serving models.
-* _Speed_: Scale with available compute with distributed training on CPU and GPU (TPU support coming soon).
-* _Flexibility_: Provide an extensible API for defining new subnetworks for different tasks.
+* _Ease of use_: Provide familiar APIs (e.g. Keras, Estimator) for training, evaluating, and serving models.
+* _Speed_: Scale with available compute and quickly produce high quality models.
+* _Flexibility_: Allow researchers and practitioners to extend AdaNet to novel subnetwork architectures, search spaces, and tasks.
 * _Learning guarantees_: Optimize an objective that offers theoretical learning guarantees.
 
 The following animation shows AdaNet adaptively growing an ensemble of neural networks. At each iteration, it measures the ensemble loss for each candidate, and selects the best one to move onto the next iteration. At subsequent iterations, the blue subnetworks are frozen, and only yellow subnetworks are trained:
@@ -29,13 +29,26 @@ AdaNet was first announced on the Google AI research blog: "[Introducing AdaNet:
 
 This is not an official Google product.
 
+## Features
+
+AdaNet provides the following AutoML features:
+
+ * Adaptive neural architecture search and ensemble learning in a single train call.
+ * Regression, binary and multi-class classification, and multi-head task support.
+ * A [`tf.estimator.Estimator`](https://www.tensorflow.org/guide/estimators) API for training, evaluation, prediction, and serving models.
+ * The [`adanet.AutoEnsembleEstimator`](https://github.com/tensorflow/adanet/blob/master/adanet/autoensemble/estimator.py) for learning to ensemble user-defined `tf.estimator.Estimators`.
+ * The ability to define subnetworks that change structure over time using [`tf.keras.layers`](https://www.tensorflow.org/guide/keras#functional_api) via the [`adanet.subnetwork` API](https://github.com/tensorflow/adanet/blob/master/adanet/core/subnetwork/generator.py).
+ * CPU and GPU support (TPU coming soon).
+ * [Distributed multi-server training](https://cloud.google.com/blog/products/gcp/easy-distributed-training-with-tensorflow-using-tfestimatortrain-and-evaluate-on-cloud-ml-engine).
+ * TensorBoard integration.
+
 ## Example
 
 A simple example of learning to ensemble linear and neural network models:
 
 ```python
 import adanet
-import tensorflow
+import tensorflow as tf
 
 # Define the model head for computing loss and evaluation metrics.
 head = tf.contrib.estimator.multi_class_head(n_classes=10)
@@ -87,14 +100,14 @@ You can use the [pip package manager](https://pip.pypa.io/en/stable/installing/)
 $ pip install adanet
 ```
 
-## Installing from source
+## Installing from Source
 
 To install from source first you'll need to install `bazel` following their [installation instructions](https://docs.bazel.build/versions/master/install.html).
 
-Next clone `adanet` and `cd` into its root directory:
+Next clone the `adanet` repository:
 
 ```shell
-$ git clone https://github.com/tensorflow/adanet && cd adanet
+$ git clone https://github.com/tensorflow/adanet
 ```
 
 From the `adanet` root directory run the tests:
@@ -104,7 +117,7 @@ $ cd adanet
 $ bazel test -c opt //...
 ```
 
-Once you have verified that everything works well, install `adanet` as a [ pip package ](./adanet/pip_package/PIP.md).
+Once you have verified that the tests have passed, install `adanet` from source as a [ pip package ](./adanet/pip_package/PIP.md).
 
 You are now ready to experiment with `adanet`.
 
