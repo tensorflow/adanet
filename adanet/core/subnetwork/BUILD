@@ -18,6 +18,8 @@ py_library(
 py_library(
     name = "generator",
     srcs = ["generator.py"],
+    deps = [
+    ],
 )
 
 py_test(

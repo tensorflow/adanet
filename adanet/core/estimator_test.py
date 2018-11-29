@@ -120,7 +120,8 @@ class _DNNBuilder(Builder):
         last_layer=last_layer if self._return_penultimate_layer else logits,
         logits=logits,
         complexity=3,
-        persisted_tensors=persisted_tensors)
+        persisted_tensors=persisted_tensors,
+        shared=persisted_tensors)
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):

@@ -15,6 +15,7 @@ limitations under the License.
 
 # Current version (0.4.0-dev)
  * Under development.
+ * Add `shared` field to `adanet.Subnetwork` to deprecate, replace, and be more flexible than `persisted_tensors`.
  * Officially support multi-head learning with or without dict labels.
  * Rebuild the ensemble across iterations in Python without a frozen graph. This allows users to share more than `Tensors` between iterations including Python primitives, objects, and lambdas for greater flexibility. Eliminating reliance on a `MetaGraphDef` proto also eliminates I/O allowing for faster training, and better future-proofing.
  * Allow users to pass custom eval metrics when constructing an `adanet.Estimator`.

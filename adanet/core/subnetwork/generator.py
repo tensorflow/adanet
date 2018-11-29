@@ -22,6 +22,8 @@ from __future__ import print_function
 import abc
 import collections
 
+from tensorflow.python.util import deprecation
+
 
 def _validate_nested_persisted_tensors(persisted_tensors):
   """Raises a ValueError when a nested dict is empty in persisted_tensors."""
@@ -37,7 +39,7 @@ def _validate_nested_persisted_tensors(persisted_tensors):
 class Subnetwork(
     collections.namedtuple(
         "Subnetwork",
-        ["last_layer", "logits", "complexity", "persisted_tensors"])):
+        ["last_layer", "logits", "complexity", "persisted_tensors", "shared"])):
   """An AdaNet subnetwork.
 
   In the AdaNet paper, an `adanet.Subnetwork` is are called a 'subnetwork',
@@ -45,7 +47,15 @@ class Subnetwork(
   ensemble.
   """
 
-  def __new__(cls, last_layer, logits, complexity, persisted_tensors):
+  @deprecation.deprecated_args(
+      None, "`persisted_tensors` is deprecated, please use `shared` instead.",
+      "persisted_tensors")
+  def __new__(cls,
+              last_layer,
+              logits,
+              complexity,
+              persisted_tensors=None,
+              shared=None):
     """Creates a validated `Subnetwork` instance.
 
     Args:
@@ -58,23 +68,25 @@ class Subnetwork(
         This field is represented by 'h' in the AdaNet paper.
       logits: `Tensor` logits or dict of string to `Tensor` logits (for
         multi-head) for training the subnetwork. NOTE: These logits are not used
-        in the ensemble's outputs if the mixture weight type is `MATRIX`,
-        instead AdaNet learns its own logits (mixture weights) from the
-        subnetwork's `last_layers` with complexity regularization. The logits
-        are used in the ensemble only when the mixture weights type is `SCALAR`
-        or `VECTOR`. Even though the logits are not used in the ensemble in some
-        cases, they should always be supplied as adanet uses the logits to train
-        the subnetworks.
+          in the ensemble's outputs if the mixture weight type is `MATRIX`,
+          instead AdaNet learns its own logits (mixture weights) from the
+          subnetwork's `last_layers` with complexity regularization. The logits
+          are used in the ensemble only when the mixture weights type is
+          `SCALAR` or `VECTOR`. Even though the logits are not used in the
+          ensemble in some cases, they should always be supplied as adanet uses
+          the logits to train the subnetworks.
       complexity: A scalar `Tensor` representing the complexity of the
         subnetwork's architecture. It is used for choosing the best subnetwork
         at each iteration, and for regularizing the weighted outputs of more
         complex subnetworks.
-      persisted_tensors: Nested dictionary of string to `Tensor` to persist
-        across iterations. At the end of an iteration, the `Tensors` will be
-        available to subnetworks in the next iterations, whereas others that are
-        not part of the `Subnetwork` will be pruned. This allows later
-        `Subnetworks` to dynamically build upon arbitrary `Tensors` from
-        previous `Subnetworks`.
+      persisted_tensors: DEPRECATED: see `shared`. Optional nested dictionary of
+        string to `Tensor` to persist across iterations. At the end of an
+        iteration, the `Tensors` will be available to subnetworks in the next
+        iterations, whereas others that are not part of the `Subnetwork` will be
+        pruned. This allows later `Subnetworks` to dynamically build upon
+        arbitrary `Tensors` from previous `Subnetworks`.
+      shared: Optional Python object, primitive, or function to share with
+        subnetworks within the same iteration or in future iterations.
 
     Returns:
       A validated `Subnetwork` object.
@@ -85,7 +97,7 @@ class Subnetwork(
       ValueError: If logits is a dict but last_layer is not.
       ValueError: If last_layer is a dict but logits is not.
       ValueError: If complexity is None.
-      ValueError: If persisted_tensors is not a dictionary.
+      ValueError: If persisted_tensors is present but not a dictionary.
       ValueError: If persisted_tensors contains an empty nested dictionary.
     """
 
@@ -99,15 +111,17 @@ class Subnetwork(
       raise ValueError("if last_layer is a dict logits must also be a dict")
     if complexity is None:
       raise ValueError("complexity not provided")
-    if not isinstance(persisted_tensors, dict):
-      raise ValueError("persisted_tensors must be a dict")
-    _validate_nested_persisted_tensors(persisted_tensors)
+    if persisted_tensors is not None:
+      if not isinstance(persisted_tensors, dict):
+        raise ValueError("persisted_tensors must be a dict")
+      _validate_nested_persisted_tensors(persisted_tensors)
     return super(Subnetwork, cls).__new__(
         cls,
         last_layer=last_layer,
         logits=logits,
         complexity=complexity,
-        persisted_tensors=persisted_tensors)
+        persisted_tensors=persisted_tensors,
+        shared=shared)
 
 
 class Builder(object):

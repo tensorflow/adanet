@@ -63,6 +63,11 @@ class FakeSubnetwork(Builder):
 class SubnetworkTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.named_parameters({
+      "testcase_name": "no_persisted_tensors_nor_shared",
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
+  }, {
       "testcase_name": "empty_persisted_tensors",
       "last_layer": dummy_tensor(),
       "logits": dummy_tensor(),
@@ -70,8 +75,12 @@ class SubnetworkTest(parameterized.TestCase, tf.test.TestCase):
       "persisted_tensors": {},
   }, {
       "testcase_name": "dict_logits_and_last_layer",
-      "last_layer": {"head1": dummy_tensor()},
-      "logits": {"head1": dummy_tensor()},
+      "last_layer": {
+          "head1": dummy_tensor()
+      },
+      "logits": {
+          "head1": dummy_tensor()
+      },
       "complexity": dummy_tensor(),
       "persisted_tensors": {},
   }, {
@@ -96,14 +105,45 @@ class SubnetworkTest(parameterized.TestCase, tf.test.TestCase):
               },
           },
       },
+  }, {
+      "testcase_name": "shared_primitive",
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
+      "shared": 1,
+  }, {
+      "testcase_name": "shared_dict",
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
+      "shared": {},
+  }, {
+      "testcase_name": "shared_lambda",
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
+      "shared": lambda x: x,
+  }, {
+      "testcase_name": "shared_object",
+      "last_layer": dummy_tensor(),
+      "logits": dummy_tensor(),
+      "complexity": dummy_tensor(),
+      "shared": dummy_tensor(),
   })
-  def test_new(self, last_layer, logits, complexity, persisted_tensors):
+  def test_new(self,
+               last_layer,
+               logits,
+               complexity,
+               persisted_tensors=None,
+               shared=None):
     with self.test_session():
-      got = Subnetwork(last_layer, logits, complexity, persisted_tensors)
+      got = Subnetwork(last_layer, logits, complexity, persisted_tensors,
+                       shared)
       self.assertEqual(got.last_layer, last_layer)
       self.assertEqual(got.logits, logits)
       self.assertEqual(got.complexity, complexity)
       self.assertEqual(got.persisted_tensors, persisted_tensors)
+      self.assertEqual(got.shared, shared)
 
   @parameterized.named_parameters({
       "testcase_name": "none_last_layer",
@@ -123,12 +163,6 @@ class SubnetworkTest(parameterized.TestCase, tf.test.TestCase):
       "logits": dummy_tensor(),
       "complexity": None,
       "persisted_tensors": {},
-  }, {
-      "testcase_name": "none_persisted_tensors",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "persisted_tensors": None,
   }, {
       "testcase_name": "empty_list_persisted_tensors",
       "last_layer": dummy_tensor(),
@@ -168,12 +202,16 @@ class SubnetworkTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name": "only_dict_logits",
       "last_layer": dummy_tensor(),
-      "logits": {"head": dummy_tensor()},
+      "logits": {
+          "head": dummy_tensor()
+      },
       "complexity": dummy_tensor(),
       "persisted_tensors": {},
   }, {
       "testcase_name": "only_dict_last_layer",
-      "last_layer": {"head": dummy_tensor()},
+      "last_layer": {
+          "head": dummy_tensor()
+      },
       "logits": dummy_tensor(),
       "complexity": dummy_tensor(),
       "persisted_tensors": {},
