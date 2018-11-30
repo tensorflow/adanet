@@ -19,6 +19,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import functools
+
 from adanet.core.ensemble import MixtureWeightType
 from adanet.core.estimator import Estimator
 from adanet.core.summary import _ScopedSummary
@@ -140,6 +142,9 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
     # phase. Since we rebuild the graph each time `_adanet_model_fn` is called,
     # this has no adverse effects.
     with tpu_function.tpu_shard_context(0):
+      # Bind params to input_fn since the parent's input_fn is not expected to
+      # have any arguments.
+      input_fn = functools.partial(input_fn, params)
       super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode, params)
 
   def _adanet_model_fn(self, features, labels, mode, params):
