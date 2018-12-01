@@ -123,6 +123,7 @@ class AutoEnsembleEstimator(Estimator):
   Example:
 
   ```python
+
   numeric_feature = numeric_column(...)
   categorical_column_a = categorical_column_with_hash_bucket(...)
   categorical_column_b = categorical_column_with_hash_bucket(...)
@@ -167,6 +168,7 @@ class AutoEnsembleEstimator(Estimator):
   estimator.train(input_fn=input_fn_train, steps=100)
   metrics = estimator.evaluate(input_fn=input_fn_eval, steps=10)
   predictions = estimator.predict(input_fn=input_fn_predict)
+
   ```
   """
 

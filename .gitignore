@@ -25,3 +25,7 @@ dist/
 
 # Other
 *.DS_Store
+
+# GitHub pages
+doctrees/
+.buildinfo

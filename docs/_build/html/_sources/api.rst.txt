@@ -1,0 +1,22 @@
+The adanet API reference
+=============================
+
+.. automodule:: adanet
+  :members:
+
+.. autoclass:: adanet.Estimator
+  :members:
+
+
+The “subnetwork” module
+-----------------------
+
+.. automodule:: adanet.subnetwork
+  :members:
+
+..
+   The “subnetwork” module
+   -----------------------
+
+   .. automodule:: adanet.core.subnetwork
+     :members:
