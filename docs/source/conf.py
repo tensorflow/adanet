@@ -19,18 +19,17 @@
 
 # -- Project information -----------------------------------------------------
 
-# import adanet
 import os
 import sys
 
-sys.path.append(os.path.abspath('../adanet'))
+# sys.path.append(os.path.abspath('../../adanet'))
 
 project = u'adanet'
-copyright = u'2018, Charles Weill and Javier Gonzalvo'
-author = u'Charles Weill and Javier Gonzalvo'
+copyright = u'2018, AdaNet Authors'
+author = u'Charles Weill'
 
 # The short X.Y version
-version = u''
+version = u'0.4.0'
 # The full version, including alpha/beta/rc tags
 release = u'[0.4.0]'
 
@@ -49,6 +48,7 @@ extensions = [
     'sphinx.ext.doctest',
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
+    'sphinx.ext.napoleon',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -139,7 +139,7 @@ latex_elements = {
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
     (master_doc, 'adanet.tex', u'adanet Documentation',
-     u'Charles Weill and Javier Gonzalvo', 'manual'),
+     u'Charles Weill', 'manual'),
 ]
 
 
@@ -184,3 +184,16 @@ epub_exclude_files = ['search.html']
 
 
 # -- Extension configuration -------------------------------------------------
+
+# Napoleon settings
+napoleon_google_docstring = True
+napoleon_numpy_docstring = True
+napoleon_include_init_with_doc = True
+napoleon_include_private_with_doc = False
+napoleon_include_special_with_doc = True
+napoleon_use_admonition_for_examples = False
+napoleon_use_admonition_for_notes = False
+napoleon_use_admonition_for_references = False
+napoleon_use_ivar = False
+napoleon_use_param = True
+napoleon_use_rtype = True

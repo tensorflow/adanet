@@ -120,56 +120,93 @@ class AutoEnsembleEstimator(Estimator):
   This `Estimator` learns to automatically ensemble models from a candidate
   pool using the Adanet algorithm.
 
-  Example:
+  .. code-block:: python
 
-  ```python
+      # A simple example of learning to ensemble linear and neural network
+      # models.
 
-  numeric_feature = numeric_column(...)
-  categorical_column_a = categorical_column_with_hash_bucket(...)
-  categorical_column_b = categorical_column_with_hash_bucket(...)
+      import adanet
+      import tensorflow as tf
 
-  categorical_feature_a_x_categorical_feature_b = crossed_column(...)
-  categorical_feature_a_emb = embedding_column(
-      categorical_column=categorical_feature_a, ...)
-  categorical_feature_b_emb = embedding_column(
-      categorical_column=categorical_feature_b, ...)
+      numeric_feature = numeric_column(...)
+      categorical_column_a = categorical_column_with_hash_bucket(...)
+      categorical_column_b = categorical_column_with_hash_bucket(...)
 
-  head = tf.contrib.estimator.multi_class_head(n_classes=3)
+      categorical_feature_a_x_categorical_feature_b = crossed_column(...)
+      categorical_feature_a_emb = embedding_column(
+          categorical_column=categorical_feature_a, ...)
+      categorical_feature_b_emb = embedding_column(
+          categorical_column=categorical_feature_b, ...)
 
-  # Learn to ensemble linear and DNN models.
-  estimator = adanet.AutoEnsembleEstimator(
-      head=head,
-      candidate_pool=[
-          tf.estimator.LinearEstimator(
-              head=head,
-              feature_columns=[categorical_feature_a_x_categorical_feature_b],
-              optimizer=tf.train.FtrlOptimizer(...)),
-          tf.estimator.DNNEstimator(
-              head=head,
-              feature_columns=[
-                  categorical_feature_a_emb, categorical_feature_b_emb,
-                  numeric_feature],
-              optimizer=tf.train.ProximalAdagradOptimizer(...),
-              hidden_units=[1000, 500, 100])],
-      max_iteration_steps=50)
+      head = tf.contrib.estimator.multi_class_head(n_classes=3)
 
-  # Input builders
-  def input_fn_train:
-    # Returns tf.data.Dataset of (x, y) tuple where y represents label's class
-    # index.
-    pass
-  def input_fn_eval:
-    # Returns tf.data.Dataset of (x, y) tuple where y represents label's class
-    # index.
-    pass
-  def input_fn_predict:
-    # Returns tf.data.Dataset of (x, None) tuple.
-    pass
-  estimator.train(input_fn=input_fn_train, steps=100)
-  metrics = estimator.evaluate(input_fn=input_fn_eval, steps=10)
-  predictions = estimator.predict(input_fn=input_fn_predict)
+      # Learn to ensemble linear and DNN models.
+      estimator = adanet.AutoEnsembleEstimator(
+          head=head,
+          candidate_pool=[
+              tf.estimator.LinearEstimator(
+                  head=head,
+                  feature_columns=[categorical_feature_a_x_categorical_feature_b],
+                  optimizer=tf.train.FtrlOptimizer(...)),
+              tf.estimator.DNNEstimator(
+                  head=head,
+                  feature_columns=[
+                      categorical_feature_a_emb, categorical_feature_b_emb,
+                      numeric_feature],
+                  optimizer=tf.train.ProximalAdagradOptimizer(...),
+                  hidden_units=[1000, 500, 100])],
+          max_iteration_steps=50)
 
-  ```
+      # Input builders
+      def input_fn_train:
+        # Returns tf.data.Dataset of (x, y) tuple where y represents label's
+        # class index.
+        pass
+      def input_fn_eval:
+        # Returns tf.data.Dataset of (x, y) tuple where y represents label's
+        # class index.
+        pass
+      def input_fn_predict:
+        # Returns tf.data.Dataset of (x, None) tuple.
+        pass
+      estimator.train(input_fn=input_fn_train, steps=100)
+      metrics = estimator.evaluate(input_fn=input_fn_eval, steps=10)
+      predictions = estimator.predict(input_fn=input_fn_predict)
+
+  Args:
+    head: A `tf.contrib.estimator.Head` instance for computing loss and
+      evaluation metrics for every candidate.
+    candidate_pool: List of `tf.estimator.Estimator` objects that are candidates
+      to ensemble at each iteration. The order does not directly affect which
+      candidates will be included in the final ensemble.
+    max_iteration_steps: Total number of steps for which to train candidates per
+      iteration. If `OutOfRange` or `StopIteration` occurs in the middle,
+      training stops before `max_iteration_steps` steps.
+    logits_fn: A function for fetching the subnetwork logits from a
+      `tf.estimator.EstimatorSpec`, which should obey the following signature:
+        - `Args`:
+          Can only have following argument:
+        - estimator_spec: The candidate's `tf.estimator.EstimatorSpec`.
+        - `Returns`: Logits `Tensor` or dict of string to logits `Tensor` (for
+          multi-head) for the candidate subnetwork extracted from the given
+          `estimator_spec`. When `None`, it will default to returning
+          `estimator_spec.predictions` when they are a `Tensor` or the `Tensor`
+          for the key 'logits' when they are a dict of string to `Tensor`.
+    adanet_lambda: See `adanet.Estimator`.
+    evaluator:  See `adanet.Estimator`.
+    metric_fn:  See `adanet.Estimator`.
+    force_grow:  See `adanet.Estimator`.
+    adanet_loss_decay: See `adanet.Estimator`.
+    worker_wait_timeout_secs: See `adanet.Estimator`.
+    model_dir: See `adanet.Estimator`.
+    config: See `adanet.Estimator`.
+
+  Returns:
+    An `AutoEnsembleEstimator` instance.
+
+  Raises:
+    ValueError: If any of the candidates in `candidate_pool` are not
+      `tf.estimator.Estimator` instances.
   """
 
   def __init__(self,
@@ -185,43 +222,6 @@ class AutoEnsembleEstimator(Estimator):
                worker_wait_timeout_secs=7200,
                model_dir=None,
                config=None):
-    """Initializes an `AutoEnsembleEstimator`.
-
-    Args:
-      head: A `tf.contrib.estimator.Head` instance for computing loss and
-        evaluation metrics for every candidate.
-      candidate_pool: List of `tf.estimator.Estimator` objects that are
-        candidates to ensemble at each iteration. The order does not directly
-        affect which candidates will be included in the final ensemble.
-      max_iteration_steps: Total number of steps for which to train candidates
-        per iteration. If `OutOfRange` or `StopIteration` occurs in the middle,
-        training stops before `max_iteration_steps` steps.
-      logits_fn: A function which should obey the following signature:
-        - Args: can only have following argument:
-          * estimator_spec: The candidate's `tf.estimator.EstimatorSpec`.
-        - Returns: Logits `Tensor` or dict of string to logits `Tensor` (for
-          multi-head) for the candidate subnetwork extracted from the given
-          `estimator_spec`.
-        When `None`, it will default to returning `estimator_spec.predictions`
-        when they are a `Tensor` or the `Tensor` for the key 'logits' when they
-        are a dict of string to `Tensor`.
-      adanet_lambda: See `adanet.Estimator`.
-      evaluator:  See `adanet.Estimator`.
-      metric_fn:  See `adanet.Estimator`.
-      force_grow:  See `adanet.Estimator`.
-      adanet_loss_decay: See `adanet.Estimator`.
-      worker_wait_timeout_secs: See `adanet.Estimator`.
-      model_dir: See `adanet.Estimator`.
-      config: See `adanet.Estimator`.
-
-    Returns:
-      An `AutoEnsembleEstimator` instance.
-
-    Raises:
-      ValueError: If any of the candidates in `candidate_pool` are not
-        `tf.estimator.Estimator` instances.
-    """
-
     for candidate in candidate_pool:
       if isinstance(candidate, tf.estimator.Estimator):
         continue

@@ -166,10 +166,11 @@ class Estimator(tf.estimator.Estimator):
 
   Equation (4):
 
-    F(w) = 1/m * sum_{i = 1 to m}(Phi(1 - y_i * sum_{j = 1 to N}(w_j * h_j)))
-           + sum_{j = 1 to N}(Gamma_j * |w_j|)
+  .. math:: F(w) = \\frac{1}{m} \sum_{i=1}^{m} \Phi \
+  \left(\sum_{j=1}^{N}w_jh_j(x_i), y_i \\right) + \sum_{j=1}^{N} \
+  \left(\lambda r(h_j) + \\beta \\right) |w_j|
 
-    where Gamma_j = lambda * r_j + beta, with lambda >= 0 and beta >= 0.
+  with :math:`\lambda >= 0` and :math:`\\beta >= 0`.
 
   This implementation uses an `adanet.subnetwork.Generator` as its weak learning
   algorithm for generating candidate subnetworks. These are trained in parallel
@@ -231,30 +232,30 @@ class Estimator(tf.estimator.Estimator):
         training stops before `max_iteration_steps` steps.
       mixture_weight_type: The `adanet.MixtureWeightType` defining which mixture
         weight type to learn in the linear combination of subnetwork outputs.
-        * `SCALAR`: creates a rank 0 tensor mixture weight . It performs an
-          element- wise multiplication with its subnetwork's logits. This
-          mixture weight is the simplest to learn, the quickest to train, and
-          most likely to generalize well.
-        * `VECTOR`:  creates a tensor with shape [k] where k is the ensemble's
-          logits dimension as defined by `head`. It is similar to `SCALAR` in
-          that it performs an element-wise multiplication with its subnetwork's
-          logits, but is more flexible in learning a subnetworks's preferences
-          per class.
-        * `MATRIX`: creates a tensor of shape [a, b] where a is the number of
-          outputs from the subnetwork's `last_layer` and b is the number of
-          outputs from the ensemble's `logits`. This weight matrix-multiplies
-          the subnetwork's `last_layer`. This mixture weight offers the most
-          flexibility and expressivity, allowing subnetworks to have outputs of
-          different dimensionalities. However, it also has the most trainable
-          parameters (a*b), and is therefore the most sensitive to learning
-          rates and regularization.
+         - `SCALAR`: creates a rank 0 tensor mixture weight . It performs an
+           element- wise multiplication with its subnetwork's logits. This
+           mixture weight is the simplest to learn, the quickest to train, and
+           most likely to generalize well.
+         - `VECTOR`:  creates a tensor with shape [k] where k is the ensemble's
+           logits dimension as defined by `head`. It is similar to `SCALAR` in
+           that it performs an element-wise multiplication with its subnetwork's
+           logits, but is more flexible in learning a subnetworks's preferences
+           per class.
+         - `MATRIX`: creates a tensor of shape [a, b] where a is the number of
+           outputs from the subnetwork's `last_layer` and b is the number of
+           outputs from the ensemble's `logits`. This weight matrix-multiplies
+           the subnetwork's `last_layer`. This mixture weight offers the most
+           flexibility and expressivity, allowing subnetworks to have outputs of
+           different dimensionalities. However, it also has the most trainable
+           parameters (a*b), and is therefore the most sensitive to learning
+           rates and regularization.
       mixture_weight_initializer: The initializer for mixture_weights. When
         `None`, the default is different according to `mixture_weight_type`:
-        * `SCALAR`: initializes to 1/N where N is the number of subnetworks in
-          the ensemble giving a uniform average.
-        * `VECTOR`: initializes each entry to 1/N where N is the number of
-          subnetworks in the ensemble giving a uniform average.
-        * `MATRIX`: uses `tf.zeros_initializer`.
+         - `SCALAR`: initializes to 1/N where N is the number of subnetworks in
+           the ensemble giving a uniform average.
+         - `VECTOR`: initializes each entry to 1/N where N is the number of
+           subnetworks in the ensemble giving a uniform average.
+         - `MATRIX`: uses `tf.zeros_initializer`.
       warm_start_mixture_weights: Whether, at the beginning of an iteration, to
         initialize the mixture weights of the subnetworks from the previous
         ensemble to their learned value at the previous iteration, as opposed to
@@ -283,20 +284,23 @@ class Estimator(tf.estimator.Estimator):
       use_bias: Whether to add a bias term to the ensemble's logits. Adding a
         bias allows the ensemble to learn a shift in the data, often leading to
         more stable training and better predictions.
-      metric_fn: A function which should obey the following signature:
-        - Args: can only have following three arguments in any order:
-          * predictions: Predictions `Tensor` or dict of `Tensor` created by
+      metric_fn: A function for adding custom evaluation metrics, which should
+        obey the following signature:
+         - `Args`:
+           Can only have the following three arguments in any order:
+          - `predictions`: Predictions `Tensor` or dict of `Tensor` created by
             given `head`.
-          * features: Input `dict` of `Tensor` objects created by `input_fn`
+          - `features`: Input `dict` of `Tensor` objects created by `input_fn`
             which is given to `estimator.evaluate` as an argument.
-          * labels:  Labels `Tensor` or dict of `Tensor` (for multi-head)
+          - `labels`:  Labels `Tensor` or dict of `Tensor` (for multi-head)
             created by `input_fn` which is given to `estimator.evaluate` as an
             argument.
-        - Returns: Dict of metric results keyed by name. Final metrics are a
-          union of this and `head's` existing metrics. If there is a name
-          conflict between this and `head`s existing metrics, this will override
-          the existing one. The values of the dict are the results of calling a
-          metric function, namely a `(metric_tensor, update_op)` tuple.
+         - `Returns`: Dict of metric results keyed by name. Final metrics are a
+           union of this and `head's` existing metrics. If there is a name
+           conflict between this and `head`s existing metrics, this will
+           override the existing one. The values of the dict are the results of
+           calling a metric function, namely a `(metric_tensor, update_op)`
+           tuple.
       force_grow: Boolean override that forces the ensemble to grow by one
         subnetwork at the end of each iteration. Normally at the end of each
         iteration, AdaNet selects the best candidate ensemble according to its
@@ -446,8 +450,6 @@ class Estimator(tf.estimator.Estimator):
             steps=None,
             max_steps=None,
             saving_listeners=None):
-    """See `tf.estimator.Estimator` train."""
-
     if (steps is not None) and (max_steps is not None):
       raise ValueError("Can not provide both steps and max_steps.")
     if steps is not None and steps <= 0:
@@ -548,8 +550,6 @@ class Estimator(tf.estimator.Estimator):
                hooks=None,
                checkpoint_path=None,
                name=None):
-    """See `tf.estimator.Estimator` evaluate."""
-
     if not checkpoint_path:
       checkpoint_path = tf.train.latest_checkpoint(self.model_dir)
 

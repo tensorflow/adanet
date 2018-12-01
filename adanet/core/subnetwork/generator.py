@@ -45,6 +45,47 @@ class Subnetwork(
   In the AdaNet paper, an `adanet.Subnetwork` is are called a 'subnetwork',
   and indicated by 'h'. A collection of weighted subnetworks form an AdaNet
   ensemble.
+
+  Args:
+    last_layer: `Tensor` output or dict of string to `Tensor` outputs (for
+      multi-head) of the last layer of the subnetwork, i.e the layer before the
+      logits layer. When the mixture weight type is `MATRIX`, the AdaNet
+      algorithm takes care of computing ensemble mixture weights matrices (one
+      per subnetwork) that multiply the various last layers of the ensemble's
+      subnetworks, and regularize them using their subnetwork's complexity. This
+      field is represented by 'h' in the AdaNet paper.
+    logits: `Tensor` logits or dict of string to `Tensor` logits (for
+      multi-head) for training the subnetwork. These logits are not used in the
+      ensemble's outputs if the mixture weight type is `MATRIX`, instead AdaNet
+      learns its own logits (mixture weights) from the subnetwork's
+      `last_layers` with complexity regularization. The logits are used in the
+      ensemble only when the mixture weights type is `SCALAR` or `VECTOR`. Even
+      though the logits are not used in the ensemble in some cases, they should
+      always be supplied as adanet uses the logits to train the subnetworks.
+    complexity: A scalar `Tensor` representing the complexity of the
+      subnetwork's architecture. It is used for choosing the best subnetwork at
+      each iteration, and for regularizing the weighted outputs of more complex
+      subnetworks.
+    persisted_tensors: DEPRECATED: see `shared`. Optional nested dictionary of
+      string to `Tensor` to persist across iterations. At the end of an
+      iteration, the `Tensors` will be available to subnetworks in the next
+      iterations, whereas others that are not part of the `Subnetwork` will be
+      pruned. This allows later `Subnetworks` to dynamically build upon
+      arbitrary `Tensors` from previous `Subnetworks`.
+    shared: Optional Python object, primitive, or function to share with
+      subnetworks within the same iteration or in future iterations.
+
+  Returns:
+    A validated `Subnetwork` object.
+
+  Raises:
+    ValueError: If last_layer is None.
+    ValueError: If logits is None.
+    ValueError: If logits is a dict but last_layer is not.
+    ValueError: If last_layer is a dict but logits is not.
+    ValueError: If complexity is None.
+    ValueError: If persisted_tensors is present but not a dictionary.
+    ValueError: If persisted_tensors contains an empty nested dictionary.
   """
 
   @deprecation.deprecated_args(
@@ -56,51 +97,6 @@ class Subnetwork(
               complexity,
               persisted_tensors=None,
               shared=None):
-    """Creates a validated `Subnetwork` instance.
-
-    Args:
-      last_layer: `Tensor` output or dict of string to `Tensor` outputs (for
-        multi-head) of the last layer of the subnetwork, i.e the layer before
-        the logits layer. When the mixture weight type is `MATRIX`, the AdaNet
-        algorithm takes care of computing ensemble mixture weights matrices (one
-        per subnetwork) that multiply the various last layers of the ensemble's
-        subnetworks, and regularize them using their subnetwork's complexity.
-        This field is represented by 'h' in the AdaNet paper.
-      logits: `Tensor` logits or dict of string to `Tensor` logits (for
-        multi-head) for training the subnetwork. NOTE: These logits are not used
-          in the ensemble's outputs if the mixture weight type is `MATRIX`,
-          instead AdaNet learns its own logits (mixture weights) from the
-          subnetwork's `last_layers` with complexity regularization. The logits
-          are used in the ensemble only when the mixture weights type is
-          `SCALAR` or `VECTOR`. Even though the logits are not used in the
-          ensemble in some cases, they should always be supplied as adanet uses
-          the logits to train the subnetworks.
-      complexity: A scalar `Tensor` representing the complexity of the
-        subnetwork's architecture. It is used for choosing the best subnetwork
-        at each iteration, and for regularizing the weighted outputs of more
-        complex subnetworks.
-      persisted_tensors: DEPRECATED: see `shared`. Optional nested dictionary of
-        string to `Tensor` to persist across iterations. At the end of an
-        iteration, the `Tensors` will be available to subnetworks in the next
-        iterations, whereas others that are not part of the `Subnetwork` will be
-        pruned. This allows later `Subnetworks` to dynamically build upon
-        arbitrary `Tensors` from previous `Subnetworks`.
-      shared: Optional Python object, primitive, or function to share with
-        subnetworks within the same iteration or in future iterations.
-
-    Returns:
-      A validated `Subnetwork` object.
-
-    Raises:
-      ValueError: If last_layer is None.
-      ValueError: If logits is None.
-      ValueError: If logits is a dict but last_layer is not.
-      ValueError: If last_layer is a dict but logits is not.
-      ValueError: If complexity is None.
-      ValueError: If persisted_tensors is present but not a dictionary.
-      ValueError: If persisted_tensors contains an empty nested dictionary.
-    """
-
     if last_layer is None:
       raise ValueError("last_layer not provided")
     if logits is None:
