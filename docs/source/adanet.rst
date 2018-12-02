@@ -35,3 +35,57 @@ High-level APIs for training, evaluating, predicting, and serving AdaNet model.
     :members:
     :show-inheritance:
     :inherited-members:
+
+Ensembles
+---------------
+
+Collections representing learned combinations of subnetworks.
+
+:hidden:`MixtureWeightType`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: MixtureWeightType
+    :members:
+
+:hidden:`WeightedSubnetwork`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: WeightedSubnetwork
+    :members:
+
+:hidden:`Ensemble`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: Ensemble
+    :members:
+
+Evaluator
+---------------
+
+Measures :class:`adanet.Ensemble` performance on a given dataset.
+
+:hidden:`Evaluator`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: Evaluator
+    :members:
+
+Summary
+---------------
+
+Extends :mod:`tf.summary` to power AdaNet's TensorBoard integration.
+
+:hidden:`Summary`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: Summary
+    :members:
+
+ReportMaterializer
+---------------
+
+:hidden:`ReportMaterializer`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: ReportMaterializer
+    :members:

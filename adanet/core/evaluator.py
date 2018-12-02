@@ -25,22 +25,20 @@ import tensorflow as tf
 
 
 class Evaluator(object):
-  """An Evaluator evaluates candidates."""
+  """Evaluates candidate ensemble performance.
+
+  Args:
+    input_fn: Input function returning a tuple of: features - Dictionary of
+      string feature name to `Tensor`. labels - `Tensor` of labels.
+    steps: Number of steps for which to evaluate the ensembles. If an
+      `OutOfRangeError` occurs, evaluation stops. If set to None, will iterate
+      the dataset until all inputs are exhausted.
+
+  Returns:
+    An :class:`adanet.Evaluator` instance.
+  """
 
   def __init__(self, input_fn, steps=None):
-    """Initializes an `Evaluator` instance.
-
-    Args:
-      input_fn: Input function returning a tuple of: features - Dictionary of
-        string feature name to `Tensor`. labels - `Tensor` of labels.
-      steps: Number of steps for which to evaluate the ensembles. If an
-        `OutOfRangeError` occurs, evaluation stops. If set to None, will iterate
-        the dataset until all inputs are exhausted.
-
-    Returns:
-      An `Evaluator` instance.
-    """
-
     self._input_fn = input_fn
     self._steps = steps
     super(Evaluator, self).__init__()

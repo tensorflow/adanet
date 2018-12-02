@@ -8,12 +8,16 @@ adanet.subnetwork
 .. automodule:: adanet.subnetwork
 .. currentmodule:: adanet.subnetwork
 
+Generators
+---------------
+
+Interfaces and containers for defining subnetworks, search spaces, and search algorithms.
+
 :hidden:`Subnetwork`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: Subnetwork
     :members:
-    :show-inheritance:
 
 :hidden:`Builder`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -28,3 +32,20 @@ adanet.subnetwork
 .. autoclass:: Generator
     :members:
     :show-inheritance:
+
+Reports
+---------------
+
+Containers for metadata about trained subnetworks.
+
+:hidden:`Report`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: Report
+    :members:
+
+:hidden:`MaterializedReport`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: MaterializedReport
+    :members:

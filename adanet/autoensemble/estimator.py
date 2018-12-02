@@ -39,7 +39,7 @@ def _default_logits(estimator_spec):
 
 
 class _BuilderFromEstimator(Builder):
-  """An `adanet.Builder` from a `tf.estimator.Estimator`."""
+  """An `adanet.Builder` from a :class:`tf.estimator.Estimator`."""
 
   def __init__(self, estimator, index, logits_fn):
     self._estimator = estimator
@@ -48,15 +48,11 @@ class _BuilderFromEstimator(Builder):
 
   @property
   def name(self):
-    """See `adanet.subnetwork.Builder`."""
-
     return "{class_name}{index}".format(
         class_name=self._estimator.__class__.__name__, index=self._index)
 
   def build_subnetwork(self, features, labels, logits_dimension, training,
                        iteration_step, summary, previous_ensemble):
-    """See `adanet.subnetwork.Builder`."""
-
     model_fn = self._estimator.model_fn
 
     # We don't need an EVAL mode since AdaNet takes care of evaluation for us.
@@ -82,14 +78,10 @@ class _BuilderFromEstimator(Builder):
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
-    """See `adanet.subnetwork.Builder`."""
-
     return self._subnetwork_train_op
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
                                      iteration_step, summary):
-    """See `adanet.subnetwork.Builder`."""
-
     return tf.no_op()
 
 
@@ -102,8 +94,6 @@ class _GeneratorFromCandidatePool(Generator):
 
   def generate_candidates(self, previous_ensemble, iteration_number,
                           previous_ensemble_reports, all_reports):
-    """See `adanet.subnetwork.Generator`."""
-
     builders = []
     for i, candidate in enumerate(self._candidate_pool):
       if isinstance(candidate, tf.estimator.Estimator):
@@ -115,10 +105,10 @@ class _GeneratorFromCandidatePool(Generator):
 
 
 class AutoEnsembleEstimator(Estimator):
-  """An Estimator that learns to ensemble models.
+  """A :class:`tf.estimator.Estimator` that learns to ensemble models.
 
-  This `Estimator` learns to automatically ensemble models from a candidate
-  pool using the Adanet algorithm.
+  Specifically, it learns to ensemble models from a candidate pool using the
+  Adanet algorithm.
 
   .. code-block:: python
 
@@ -174,39 +164,41 @@ class AutoEnsembleEstimator(Estimator):
       predictions = estimator.predict(input_fn=input_fn_predict)
 
   Args:
-    head: A `tf.contrib.estimator.Head` instance for computing loss and
+    head: A :class:`tf.contrib.estimator.Head` instance for computing loss and
       evaluation metrics for every candidate.
-    candidate_pool: List of `tf.estimator.Estimator` objects that are candidates
-      to ensemble at each iteration. The order does not directly affect which
-      candidates will be included in the final ensemble.
+    candidate_pool: List of :class:`tf.estimator.Estimator` objects that are
+      candidates to ensemble at each iteration. The order does not directly
+      affect which candidates will be included in the final ensemble.
     max_iteration_steps: Total number of steps for which to train candidates per
       iteration. If `OutOfRange` or `StopIteration` occurs in the middle,
       training stops before `max_iteration_steps` steps.
     logits_fn: A function for fetching the subnetwork logits from a
-      `tf.estimator.EstimatorSpec`, which should obey the following signature:
+      :class:`tf.estimator.EstimatorSpec`, which should obey the following
+      signature:
         - `Args`:
           Can only have following argument:
-        - estimator_spec: The candidate's `tf.estimator.EstimatorSpec`.
-        - `Returns`: Logits `Tensor` or dict of string to logits `Tensor` (for
-          multi-head) for the candidate subnetwork extracted from the given
-          `estimator_spec`. When `None`, it will default to returning
-          `estimator_spec.predictions` when they are a `Tensor` or the `Tensor`
-          for the key 'logits' when they are a dict of string to `Tensor`.
-    adanet_lambda: See `adanet.Estimator`.
-    evaluator:  See `adanet.Estimator`.
-    metric_fn:  See `adanet.Estimator`.
-    force_grow:  See `adanet.Estimator`.
-    adanet_loss_decay: See `adanet.Estimator`.
-    worker_wait_timeout_secs: See `adanet.Estimator`.
-    model_dir: See `adanet.Estimator`.
-    config: See `adanet.Estimator`.
+        - estimator_spec: The candidate's :class:`tf.estimator.EstimatorSpec`.
+        - `Returns`: Logits :class:`tf.Tensor` or dict of string to logits
+          :class:`tf.Tensor` (for multi-head) for the candidate subnetwork
+          extracted from the given `estimator_spec`. When `None`, it will
+          default to returning `estimator_spec.predictions` when they are a
+          :class:`tf.Tensor` or the :class:`tf.Tensor` for the key 'logits' when
+          they are a dict of string to :class:`tf.Tensor`.
+    adanet_lambda: See :class:`adanet.Estimator`.
+    evaluator:  See :class:`adanet.Estimator`.
+    metric_fn:  See :class:`adanet.Estimator`.
+    force_grow:  See :class:`adanet.Estimator`.
+    adanet_loss_decay: See :class:`adanet.Estimator`.
+    worker_wait_timeout_secs: See :class:`adanet.Estimator`.
+    model_dir: See :class:`adanet.Estimator`.
+    config: See :class:`adanet.Estimator`.
 
   Returns:
-    An `AutoEnsembleEstimator` instance.
+    An :class:`adanet.AutoEnsembleEstimator` instance.
 
   Raises:
     ValueError: If any of the candidates in `candidate_pool` are not
-      `tf.estimator.Estimator` instances.
+      :class:`tf.estimator.Estimator` instances.
   """
 
   def __init__(self,

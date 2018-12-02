@@ -26,7 +26,7 @@ import sys
 
 project = u'adanet'
 copyright = u'2018, AdaNet Authors'
-author = u'Charles Weill'
+author = u'AdaNet Authors'
 
 # The short X.Y version
 version = u'0.4.0'
@@ -46,9 +46,10 @@ release = u'[0.4.0]'
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.doctest',
+    'sphinx.ext.intersphinx',
     'sphinx.ext.mathjax',
-    'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
+    'sphinx.ext.viewcode',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -139,7 +140,7 @@ latex_elements = {
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
     (master_doc, 'adanet.tex', u'adanet Documentation',
-     u'Charles Weill', 'manual'),
+     u'AdaNet Authors', 'manual'),
 ]
 
 

@@ -20,3 +20,5 @@ from __future__ import division
 from __future__ import print_function
 
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
+
+__all__ = ["AutoEnsembleEstimator"]

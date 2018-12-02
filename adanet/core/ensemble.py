@@ -40,6 +40,23 @@ class WeightedSubnetwork(
   A weighted subnetwork is a weight 'w' applied to a subnetwork's last layer
   'u'. The results is the weighted subnetwork's logits, regularized by its
   complexity.
+
+  Args:
+    name: String name of `subnetwork` as defined by its
+      :class:`adanet.subnetwork.Builder`.
+    iteration_number: Integer iteration when the subnetwork was created.
+    weight: The weight :class:`tf.Tensor` or dict of string to weight
+      :class:`tf.Tensor` (for multi-head) to apply to this subnetwork. The
+      AdaNet paper refers to this weight as 'w' in Equations (4), (5), and (6).
+    logits: The output :class:`tf.Tensor` or dict of string to weight
+      :class:`tf.Tensor` (for multi-head) after the matrix multiplication of
+      `weight` and the subnetwork's :meth:`last_layer`. The output's shape is
+      [batch_size, logits_dimension]. It is equivalent to a linear logits layer
+      in a neural network.
+    subnetwork: The :class:`adanet.subnetwork.Subnetwork` to weight.
+
+  Returns:
+    An :class:`adanet.WeightedSubnetwork` object.
   """
 
   def __new__(cls,
@@ -48,24 +65,6 @@ class WeightedSubnetwork(
               weight=None,
               logits=None,
               subnetwork=None):
-    """Creates a `WeightedSubnetwork` instance.
-
-    Args:
-      name: String name of `subnetwork` as defined by its `subnetwork.Builder`.
-      iteration_number: Integer iteration when the subnetwork was created.
-      weight: The weight `Tensor` or dict of string to weight `Tensor` (for
-        multi-head) to apply to this subnetwork. The AdaNet paper refers to this
-        weight as 'w' in Equations (4), (5), and (6).
-      logits: The output `Tensor` or dict of string to weight `Tensor` (for
-        multi-head) after the matrix multiplication of `weight` and the
-        subnetwork's `last_layer`. The output's shape is [batch_size,
-        logits_dimension]. It is equivalent to a linear logits layer in a neural
-        network.
-      subnetwork: The `adanet.Subnetwork` to weight.
-
-    Returns:
-      A `WeightedSubnetwork` object.
-    """
 
     return super(WeightedSubnetwork, cls).__new__(
         cls,
@@ -85,23 +84,17 @@ class Ensemble(
   through the weighted sum of their outputs. It is represented by 'f' throughout
   the AdaNet paper. Its component subnetworks' weights are complexity
   regularized (Gamma) as defined in Equation (4).
+
+  Args:
+    weighted_subnetworks: List of :class:`adanet.WeightedSubnetwork` instances that form this ensemble. Ordered from first to most recent.
+    bias: Bias term :class:`tf.Tensor` or dict of string to bias term :class:`tf.Tensor` (for multi-head) for the ensemble's logits.
+    logits: Logits :class:`tf.Tensor` or dict of string to logits :class:`tf.Tensor` (for multi-head). The result of the function 'f' as defined in Section 5.1 which is the sum of the logits of all :class:`adanet.WeightedSubnetwork` instances in ensemble.
+
+  Returns:
+    An :class:`adanet.Ensemble` instance.
   """
 
   def __new__(cls, weighted_subnetworks, bias, logits):
-    """Creates an `Ensemble` instance.
-
-    Args:
-      weighted_subnetworks: List of `WeightedSubnetwork` instances that form
-        this ensemble. Ordered from first to most recent.
-      bias: `Tensor` bias vector for the ensemble logits.
-      logits: Logits `Tensor`. The result of the function 'f' as defined in
-        Section 5.1 which is the sum of the logits of all `WeightedSubnetwork`
-        instances in ensemble.
-
-    Returns:
-      An `Ensemble` object.
-    """
-
     # TODO: Make weighted_subnetworks property a tuple so that
     # `Ensemble` is immutable.
     return super(Ensemble, cls).__new__(
@@ -178,9 +171,9 @@ class MixtureWeightType(object):
 
   The following mixture weight types are defined:
 
-  * `SCALAR`: A rank 0 `Tensor` mixture weight.
-  * `VECTOR`: A rank 1 `Tensor` mixture weight.
-  * `MATRIX`: A rank 2 `Tensor` mixture weight.
+  * `SCALAR`: Produces a rank 0 `Tensor` mixture weight.
+  * `VECTOR`: Produces a rank 1 `Tensor` mixture weight.
+  * `MATRIX`: Produces a rank 2 `Tensor` mixture weight.
   """
 
   SCALAR = "scalar"
