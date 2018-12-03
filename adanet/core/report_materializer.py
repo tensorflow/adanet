@@ -26,26 +26,27 @@ import tensorflow as tf
 
 
 class ReportMaterializer(object):
-  """Materializes subnetwork.Report."""
+  """Materializes reports.
+
+  Specifically it materializes a subnetwork's :class:`adanet.subnetwork.Report`
+  instances into :class:`adanet.subnetwork.MaterializedReport` instances.
+
+  Requires an input function `input_fn` that returns a tuple of:
+
+  * features: Dictionary of string feature name to `Tensor`.
+  * labels: `Tensor` of labels.
+
+  Args:
+    input_fn: The input function.
+    steps: Number of steps for which to materialize the ensembles. If an
+      `OutOfRangeError` occurs, materialization stops. If set to None, will
+      iterate the dataset until all inputs are exhausted.
+
+  Returns:
+    A `ReportMaterializer` instance.
+  """
 
   def __init__(self, input_fn, steps=None):
-    """Initializes an `ReportMaterializer` instance.
-
-    Requires an input function `input_fn` that returns a tuple of:
-
-    * features: Dictionary of string feature name to `Tensor`.
-    * labels: `Tensor` of labels.
-
-    Args:
-      input_fn: The input function.
-      steps: Number of steps for which to materialize the ensembles. If an
-        `OutOfRangeError` occurs, materialization stops. If set to None, will
-        iterate the dataset until all inputs are exhausted.
-
-    Returns:
-      A `ReportMaterializer` instance.
-    """
-
     self._input_fn = input_fn
     self._steps = steps
     super(ReportMaterializer, self).__init__()

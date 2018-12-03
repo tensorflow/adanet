@@ -21,10 +21,19 @@ from __future__ import print_function
 
 import os
 
-from adanet.core import report_pb2 as report_proto
 from adanet.core import subnetwork
 import six
 import tensorflow as tf
+
+# Required for Sphinx to generate docs from source-only, because report_pb2
+# will not be found without building with Bazel.
+# pylint: disable=g-import-not-at-top
+try:
+  from adanet.core import report_pb2 as report_proto
+except ImportError:
+  tf.logging.warn(
+      "Failed to import report_pb2. ReportMaterializer will not work.")
+# pylint: enable=g-import-not-at-top
 
 
 def _parse_iteration_report_proto(iteration_pb_string):

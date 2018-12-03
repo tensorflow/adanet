@@ -146,7 +146,8 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
 
 
 class Estimator(tf.estimator.Estimator):
-  """The AdaNet algorithm implemented with the `tf.estimator.Estimator` API.
+  # pyformat: disable
+  r"""The AdaNet algorithm implemented as a :class:`tf.estimator.Estimator`.
 
   AdaNet is as defined in the paper: https://arxiv.org/abs/1607.01097.
 
@@ -166,14 +167,16 @@ class Estimator(tf.estimator.Estimator):
 
   Equation (4):
 
-    F(w) = 1/m * sum_{i = 1 to m}(Phi(1 - y_i * sum_{j = 1 to N}(w_j * h_j)))
-           + sum_{j = 1 to N}(Gamma_j * |w_j|)
+  .. math::
 
-    where Gamma_j = lambda * r_j + beta, with lambda >= 0 and beta >= 0.
+      F(w) = \frac{1}{m} \sum_{i=1}^{m} \Phi \left(\sum_{j=1}^{N}w_jh_j(x_i),
+      y_i \right) + \sum_{j=1}^{N} \left(\lambda r(h_j) + \beta \right) |w_j|
 
-  This implementation uses an `adanet.subnetwork.Generator` as its weak learning
-  algorithm for generating candidate subnetworks. These are trained in parallel
-  using a single graph per iteration. At the end of each iteration, the
+  with :math:`\lambda >= 0` and :math:`\beta >= 0`.
+
+  This implementation uses an :class:`adanet.subnetwork.Generator` as its weak
+  learning algorithm for generating candidate subnetworks. These are trained in
+  parallel using a single graph per iteration. At the end of each iteration, the
   estimator saves the sub-graph of the best subnetwork ensemble and its weights
   as a separate checkpoint. At the beginning of the next iteration, the
   estimator imports the previous iteration's frozen graph and adds ops for the
@@ -182,13 +185,138 @@ class Estimator(tf.estimator.Estimator):
   performance hit of reconstructing a graph between iterations), while having
   the flexibility of having a dynamic graph.
 
-  NOTE: Subclassing `tf.estimator.Estimator` is only necessary to work with
-  `tf.estimator.train_and_evaluate` which asserts that the estimator argument is
-  a `tf.estimator.Estimator` subclass. However, all training is delegated to a
-  separate `tf.estimator.Estimator` instance. It is responsible for supporting
-  both local and distributed training. As such, the AdaNet `Estimator` is only
-  responsible for bookkeeping across iterations.
+  NOTE: Subclassing :class:`tf.estimator.Estimator` is only necessary to work
+  with :meth:`tf.estimator.train_and_evaluate` which asserts that the estimator
+  argument is a :class:`tf.estimator.Estimator` subclass. However, all training
+  is delegated to a separate :class:`tf.estimator.Estimator` instance. It is
+  responsible for supporting both local and distributed training. As such, the
+  :class:`adanet.Estimator` is only responsible for bookkeeping across
+  iterations.
+
+  Args:
+    head: A :class:`tf.contrib.estimator.Head` instance for computing loss and
+      evaluation metrics for every candidate.
+    subnetwork_generator: The :class:`adanet.subnetwork.Generator` which defines
+      the candidate subnetworks to train and evaluate at every AdaNet iteration.
+    max_iteration_steps: Total number of steps for which to train candidates per
+      iteration. If :class:`OutOfRange` or :class:`StopIteration` occurs in the
+      middle, training stops before `max_iteration_steps` steps.
+    mixture_weight_type: The :class:`adanet.MixtureWeightType` defining which
+      mixture weight type to learn in the linear combination of subnetwork
+      outputs:
+        - :class:`SCALAR`: creates a rank 0 tensor mixture weight . It performs
+          an element- wise multiplication with its subnetwork's logits. This
+          mixture weight is the simplest to learn, the quickest to train, and
+          most likely to generalize well.
+        - :class:`VECTOR`:  creates a tensor with shape [k] where k is the
+          ensemble's logits dimension as defined by `head`. It is similar to
+          `SCALAR` in that it performs an element-wise multiplication with its
+          subnetwork's logits, but is more flexible in learning a subnetworks's
+          preferences per class.
+        - :class:`MATRIX`: creates a tensor of shape [a, b] where a is the
+          number of outputs from the subnetwork's `last_layer` and b is the
+          number of outputs from the ensemble's `logits`. This weight
+          matrix-multiplies the subnetwork's `last_layer`. This mixture weight
+          offers the most flexibility and expressivity, allowing subnetworks to
+          have outputs of different dimensionalities. However, it also has the
+          most trainable parameters (a*b), and is therefore the most sensitive
+          to learning rates and regularization.
+    mixture_weight_initializer: The initializer for mixture_weights. When
+      `None`, the default is different according to `mixture_weight_type`:
+        - :class:`SCALAR`: initializes to 1/N where N is the number of
+          subnetworks in the ensemble giving a uniform average.
+        - :class:`VECTOR`: initializes each entry to 1/N where N is the number
+          of subnetworks in the ensemble giving a uniform average.
+        - :class:`MATRIX`: uses :meth:`tf.zeros_initializer`.
+    warm_start_mixture_weights: Whether, at the beginning of an iteration, to
+      initialize the mixture weights of the subnetworks from the previous
+      ensemble to their learned value at the previous iteration, as opposed to
+      retraining them from scratch. Takes precedence over the value for
+      `mixture_weight_initializer` for subnetworks from previous iterations.
+    adanet_lambda: Float multiplier 'lambda' for applying L1 regularization to
+      subnetworks' mixture weights 'w' in the ensemble proportional to their
+      complexity. See Equation (4) in the AdaNet paper.
+    adanet_beta: Float L1 regularization multiplier 'beta' to apply equally to
+      all subnetworks' weights 'w' in the ensemble regardless of their
+      complexity. See Equation (4) in the AdaNet paper.
+    evaluator: An :class:`adanet.Evaluator` for candidate selection after all
+      subnetworks are done training. When `None`, candidate selection uses a
+      moving average of their :class:`adanet.Ensemble` AdaNet loss during
+      training instead. In order to use the *AdaNet algorithm* as described in
+      [Cortes et al., '17], the given :class:`adanet.Evaluator` must be created
+      with the same dataset partition used during training. Otherwise, this
+      framework will perform *AdaNet.HoldOut* which uses a holdout set for
+      candidate selection, but does not benefit from learning guarantees.
+    report_materializer: An :class:`adanet.ReportMaterializer`. Its reports are
+      made available to the `subnetwork_generator` at the next iteration, so
+      that it can adapt its search space. When `None`, the
+      `subnetwork_generator` :meth:`generate_candidates` method will receive
+      empty Lists for their `previous_ensemble_reports` and `all_reports`
+      arguments.
+    use_bias: Whether to add a bias term to the ensemble's logits. Adding a bias
+      allows the ensemble to learn a shift in the data, often leading to more
+      stable training and better predictions.
+    metric_fn: A function for adding custom evaluation metrics, which should
+      obey the following signature:
+        - `Args`:
+          Can only have the following three arguments in any order:
+          - `predictions`: Predictions `Tensor` or dict of `Tensor` created by
+            given `head`.
+          - `features`: Input `dict` of `Tensor` objects created by `input_fn`
+            which is given to `estimator.evaluate` as an argument.
+          - `labels`:  Labels `Tensor` or dict of `Tensor` (for multi-head)
+            created by `input_fn` which is given to `estimator.evaluate` as an
+            argument.
+        - `Returns`: Dict of metric results keyed by name. Final metrics are a
+          union of this and `head's` existing metrics. If there is a name
+          conflict between this and `head`s existing metrics, this will override
+          the existing one. The values of the dict are the results of calling a
+          metric function, namely a `(metric_tensor, update_op)` tuple.
+    force_grow: Boolean override that forces the ensemble to grow by one
+      subnetwork at the end of each iteration. Normally at the end of each
+      iteration, AdaNet selects the best candidate ensemble according to its
+      performance on the AdaNet objective. In some cases, the best ensemble is
+      the `previous_ensemble` as opposed to one that includes a newly trained
+      subnetwork. When `True`, the algorithm will not select the
+      `previous_ensemble` as the best candidate, and will ensure that after n
+      iterations the final ensemble is composed of n subnetworks.
+    replicate_ensemble_in_training: Whether to rebuild the frozen subnetworks of
+      the ensemble in training mode, which can change the outputs of the frozen
+      subnetworks in the ensemble. When `False` and during candidate training,
+      the frozen subnetworks in the ensemble are in prediction mode, so
+      training-only ops like dropout are not applied to them. When `True` and
+      training the candidates, the frozen subnetworks will be in training mode
+      as well, so they will apply training-only ops like dropout.  This argument
+      is useful for regularizing learning mixture weights, or for making
+      training-only side inputs available in subsequent iterations. For most
+      use-cases, this should be `False`.
+    adanet_loss_decay: Float decay for the exponential-moving-average of the
+      AdaNet objective throughout training. This moving average is a data-
+      driven way tracking the best candidate with only the training set.
+    worker_wait_timeout_secs: Float number of seconds for workers to wait for
+      chief to prepare the next iteration during distributed training. This is
+      needed to prevent workers waiting indefinitely for a chief that may have
+      crashed or been turned down. When the timeout is exceeded, the worker
+      exits the train loop. In situations where the chief job is much slower
+      than the worker jobs, this timeout should be increased.
+    model_dir: Directory to save model parameters, graph and etc. This can also
+      be used to load checkpoints from the directory into a estimator to
+      continue training a previously saved model.
+    report_dir: Directory where the `adanet.subnetwork.MaterializedReport`s
+      materialized by `report_materializer` would be saved. If
+      `report_materializer` is None, this will not save anything. If `None` or
+      empty string, defaults to "<model_dir>/report".
+    config: `RunConfig` object to configure the runtime settings.
+    **kwargs: Extra keyword args passed to the parent.
+
+  Returns:
+    An `Estimator` instance.
+
+  Raises:
+    ValueError: If `subnetwork_generator` is `None`.
+    ValueError: If `max_iteration_steps` is <= 0.
   """
+  # pyformat: enable
 
   class _Keys(object):
     CURRENT_ITERATION = "current_iteration"
@@ -219,129 +347,6 @@ class Estimator(tf.estimator.Estimator):
                report_dir=None,
                config=None,
                **kwargs):
-    """Initializes an `Estimator`.
-
-    Args:
-      head: A `tf.contrib.estimator.Head` instance for computing loss and
-        evaluation metrics for every candidate.
-      subnetwork_generator: The `adanet.subnetwork.Generator` which defines the
-        candidate subnetworks to train and evaluate at every AdaNet iteration.
-      max_iteration_steps: Total number of steps for which to train candidates
-        per iteration. If `OutOfRange` or `StopIteration` occurs in the middle,
-        training stops before `max_iteration_steps` steps.
-      mixture_weight_type: The `adanet.MixtureWeightType` defining which mixture
-        weight type to learn in the linear combination of subnetwork outputs.
-        * `SCALAR`: creates a rank 0 tensor mixture weight . It performs an
-          element- wise multiplication with its subnetwork's logits. This
-          mixture weight is the simplest to learn, the quickest to train, and
-          most likely to generalize well.
-        * `VECTOR`:  creates a tensor with shape [k] where k is the ensemble's
-          logits dimension as defined by `head`. It is similar to `SCALAR` in
-          that it performs an element-wise multiplication with its subnetwork's
-          logits, but is more flexible in learning a subnetworks's preferences
-          per class.
-        * `MATRIX`: creates a tensor of shape [a, b] where a is the number of
-          outputs from the subnetwork's `last_layer` and b is the number of
-          outputs from the ensemble's `logits`. This weight matrix-multiplies
-          the subnetwork's `last_layer`. This mixture weight offers the most
-          flexibility and expressivity, allowing subnetworks to have outputs of
-          different dimensionalities. However, it also has the most trainable
-          parameters (a*b), and is therefore the most sensitive to learning
-          rates and regularization.
-      mixture_weight_initializer: The initializer for mixture_weights. When
-        `None`, the default is different according to `mixture_weight_type`:
-        * `SCALAR`: initializes to 1/N where N is the number of subnetworks in
-          the ensemble giving a uniform average.
-        * `VECTOR`: initializes each entry to 1/N where N is the number of
-          subnetworks in the ensemble giving a uniform average.
-        * `MATRIX`: uses `tf.zeros_initializer`.
-      warm_start_mixture_weights: Whether, at the beginning of an iteration, to
-        initialize the mixture weights of the subnetworks from the previous
-        ensemble to their learned value at the previous iteration, as opposed to
-        retraining them from scratch. Takes precedence over the value for
-        `mixture_weight_initializer` for subnetworks from previous iterations.
-      adanet_lambda: Float multiplier 'lambda' for applying L1 regularization to
-        subnetworks' mixture weights 'w' in the ensemble proportional to their
-        complexity. See Equation (4) in the AdaNet paper.
-      adanet_beta: Float L1 regularization multiplier 'beta' to apply equally to
-        all subnetworks' weights 'w' in the ensemble regardless of their
-        complexity. See Equation (4) in the AdaNet paper.
-      evaluator: An `Evaluator` for candidate selection after all subnetworks
-        are done training. When `None`, candidate selection uses a moving
-        average of their `Ensemble`'s AdaNet loss during training instead. In
-        order to use the *AdaNet algorithm* as described in [Cortes et al.,
-        '17], the given `Evaluator` must be created with the same dataset
-        partition used during training. Otherwise, this framework will perform
-        *AdaNet.HoldOut* which uses a holdout set for candidate selection, but
-        does not benefit from learning guarantees.
-      report_materializer: A `ReportMaterializer` for materializing a
-        `Builder`'s `subnetwork.Reports` into `subnetwork.MaterializedReport`s.
-        These reports are made available to the Generator at the next iteration,
-        so that it can adapt its search space. When `None`, the Generators'
-        `generate_candidates` method will receive empty Lists for their
-        `previous_ensemble_reports` and `all_reports` arguments.
-      use_bias: Whether to add a bias term to the ensemble's logits. Adding a
-        bias allows the ensemble to learn a shift in the data, often leading to
-        more stable training and better predictions.
-      metric_fn: A function which should obey the following signature:
-        - Args: can only have following three arguments in any order:
-          * predictions: Predictions `Tensor` or dict of `Tensor` created by
-            given `head`.
-          * features: Input `dict` of `Tensor` objects created by `input_fn`
-            which is given to `estimator.evaluate` as an argument.
-          * labels:  Labels `Tensor` or dict of `Tensor` (for multi-head)
-            created by `input_fn` which is given to `estimator.evaluate` as an
-            argument.
-        - Returns: Dict of metric results keyed by name. Final metrics are a
-          union of this and `head's` existing metrics. If there is a name
-          conflict between this and `head`s existing metrics, this will override
-          the existing one. The values of the dict are the results of calling a
-          metric function, namely a `(metric_tensor, update_op)` tuple.
-      force_grow: Boolean override that forces the ensemble to grow by one
-        subnetwork at the end of each iteration. Normally at the end of each
-        iteration, AdaNet selects the best candidate ensemble according to its
-        performance on the AdaNet objective. In some cases, the best ensemble is
-        the `previous_ensemble` as opposed to one that includes a newly trained
-        subnetwork. When `True`, the algorithm will not select the
-        `previous_ensemble` as the best candidate, and will ensure that after n
-        iterations the final ensemble is composed of n subnetworks.
-      replicate_ensemble_in_training: Whether to rebuild the frozen subnetworks
-        of the ensemble in training mode, which can change the outputs of the
-        frozen subnetworks in the ensemble. When `False` and during candidate
-        training, the frozen subnetworks in the ensemble are in prediction mode,
-        so training-only ops like dropout are not applied to them. When `True`
-        and training the candidates, the frozen subnetworks will be in training
-        mode as well, so they will apply training-only ops like dropout.  This
-        argument is useful for regularizing learning mixture weights, or for
-        making training-only side inputs available in subsequent iterations. For
-        most use-cases, this should be `False`.
-      adanet_loss_decay: Float decay for the exponential-moving-average of the
-        AdaNet objective throughout training. This moving average is a data-
-        driven way tracking the best candidate with only the training set.
-      worker_wait_timeout_secs: Float number of seconds for workers to wait for
-        chief to prepare the next iteration during distributed training. This is
-        needed to prevent workers waiting indefinitely for a chief that may have
-        crashed or been turned down. When the timeout is exceeded, the worker
-        exits the train loop. In situations where the chief job is much slower
-        than the worker jobs, this timeout should be increased.
-      model_dir: Directory to save model parameters, graph and etc. This can
-        also be used to load checkpoints from the directory into a estimator to
-        continue training a previously saved model.
-      report_dir: Directory where the `adanet.subnetwork.MaterializedReport`s
-        materialized by `report_materializer` would be saved. If
-        `report_materializer` is None, this will not save anything. If `None` or
-        empty string, defaults to "<model_dir>/report".
-      config: `RunConfig` object to configure the runtime settings.
-      **kwargs: Extra keyword args passed to the parent.
-
-    Returns:
-      An `Estimator` instance.
-
-    Raises:
-      ValueError: If `subnetwork_generator` is `None`.
-      ValueError: If `max_iteration_steps` is <= 0.
-    """
-
     # TODO: Add argument to specify how many frozen graph
     # checkpoints to keep.
 
@@ -446,8 +451,6 @@ class Estimator(tf.estimator.Estimator):
             steps=None,
             max_steps=None,
             saving_listeners=None):
-    """See `tf.estimator.Estimator` train."""
-
     if (steps is not None) and (max_steps is not None):
       raise ValueError("Can not provide both steps and max_steps.")
     if steps is not None and steps <= 0:
@@ -548,8 +551,6 @@ class Estimator(tf.estimator.Estimator):
                hooks=None,
                checkpoint_path=None,
                name=None):
-    """See `tf.estimator.Estimator` evaluate."""
-
     if not checkpoint_path:
       checkpoint_path = tf.train.latest_checkpoint(self.model_dir)
 

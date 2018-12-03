@@ -70,9 +70,7 @@ class Summary(object):
     normalization algorithms:
 
     *  If the input values are all positive, they are rescaled so the largest
-    one
-      is 255.
-
+    one is 255.
     *  If any input value is negative, the values are shifted so input value 0.0
       is at 127.  They are then rescaled so that either the smallest value is 0,
       or the largest one is 255.

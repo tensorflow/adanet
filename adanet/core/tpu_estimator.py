@@ -101,8 +101,6 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                config=None,
                use_tpu=True,
                batch_size=None):
-    """Initializes a `TPUEstimator`. See base classes for details."""
-
     if not use_tpu:
       tf.logging.warning(
           'This adanet.TPUEstimator is meant to be used for running on TPU. '

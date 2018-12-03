@@ -40,12 +40,59 @@ class Subnetwork(
     collections.namedtuple(
         "Subnetwork",
         ["last_layer", "logits", "complexity", "persisted_tensors", "shared"])):
+  # pyformat: disable
   """An AdaNet subnetwork.
 
-  In the AdaNet paper, an `adanet.Subnetwork` is are called a 'subnetwork',
-  and indicated by 'h'. A collection of weighted subnetworks form an AdaNet
-  ensemble.
+  In the AdaNet paper, an :class:`adanet.subnetwork.Subnetwork` is are called a
+  'subnetwork', and indicated by 'h'. A collection of weighted subnetworks form
+  an AdaNet ensemble.
+
+  Args:
+    last_layer: :class:`tf.Tensor` output or dict of string to
+      :class:`tf.Tensor` outputs (for multi-head) of the last layer of the
+      subnetwork, i.e the layer before the logits layer. When the mixture weight
+      type is :class:`MATRIX`, the AdaNet algorithm takes care of computing
+      ensemble mixture weights matrices (one per subnetwork) that multiply the
+      various last layers of the ensemble's subnetworks, and regularize them
+      using their subnetwork's complexity. This field is represented by 'h' in
+      the AdaNet paper.
+    logits: :class:`tf.Tensor` logits or dict of string to :class:`tf.Tensor`
+      logits (for multi-head) for training the subnetwork. These logits are not
+      used in the ensemble's outputs if the mixture weight type is
+      :class:`MATRIX`, instead AdaNet learns its own logits (mixture weights)
+      from the subnetwork's `last_layers` with complexity regularization. The
+      logits are used in the ensemble only when the mixture weights type is
+      :class:`SCALAR` or :class:`VECTOR`. Even though the logits are not used
+      in the ensemble in some cases, they should always be supplied as adanet
+      uses the logits to train the subnetworks.
+    complexity: A scalar :class:`tf.Tensor` representing the complexity of the
+      subnetwork's architecture. It is used for choosing the best subnetwork at
+      each iteration, and for regularizing the weighted outputs of more complex
+      subnetworks.
+    persisted_tensors: DEPRECATED. See `shared`. Optional nested dictionary of
+      string to :class:`tf.Tensor` to persist across iterations. At the end of
+      an iteration, the :class:`tf.Tensor` instances will be available to
+      subnetworks in the next iterations, whereas others that are not part of
+      the `Subnetwork` will be pruned. This allows later
+      :class:`adanet.subnetwork.Subnetwork` instances to dynamically build
+      upon arbitrary :class:`tf.Tensors` from previous
+      :class:`adanet.subnetwork.Subnetwork` instances.
+    shared: Optional Python object(s), primitive(s), or function(s) to share
+      with subnetworks within the same iteration or in future iterations.
+
+  Returns:
+    A validated `Subnetwork` object.
+
+  Raises:
+    ValueError: If last_layer is None.
+    ValueError: If logits is None.
+    ValueError: If logits is a dict but last_layer is not.
+    ValueError: If last_layer is a dict but logits is not.
+    ValueError: If complexity is None.
+    ValueError: If persisted_tensors is present but not a dictionary.
+    ValueError: If persisted_tensors contains an empty nested dictionary.
   """
+  # pyformat: enable
 
   @deprecation.deprecated_args(
       None, "`persisted_tensors` is deprecated, please use `shared` instead.",
@@ -56,51 +103,6 @@ class Subnetwork(
               complexity,
               persisted_tensors=None,
               shared=None):
-    """Creates a validated `Subnetwork` instance.
-
-    Args:
-      last_layer: `Tensor` output or dict of string to `Tensor` outputs (for
-        multi-head) of the last layer of the subnetwork, i.e the layer before
-        the logits layer. When the mixture weight type is `MATRIX`, the AdaNet
-        algorithm takes care of computing ensemble mixture weights matrices (one
-        per subnetwork) that multiply the various last layers of the ensemble's
-        subnetworks, and regularize them using their subnetwork's complexity.
-        This field is represented by 'h' in the AdaNet paper.
-      logits: `Tensor` logits or dict of string to `Tensor` logits (for
-        multi-head) for training the subnetwork. NOTE: These logits are not used
-          in the ensemble's outputs if the mixture weight type is `MATRIX`,
-          instead AdaNet learns its own logits (mixture weights) from the
-          subnetwork's `last_layers` with complexity regularization. The logits
-          are used in the ensemble only when the mixture weights type is
-          `SCALAR` or `VECTOR`. Even though the logits are not used in the
-          ensemble in some cases, they should always be supplied as adanet uses
-          the logits to train the subnetworks.
-      complexity: A scalar `Tensor` representing the complexity of the
-        subnetwork's architecture. It is used for choosing the best subnetwork
-        at each iteration, and for regularizing the weighted outputs of more
-        complex subnetworks.
-      persisted_tensors: DEPRECATED: see `shared`. Optional nested dictionary of
-        string to `Tensor` to persist across iterations. At the end of an
-        iteration, the `Tensors` will be available to subnetworks in the next
-        iterations, whereas others that are not part of the `Subnetwork` will be
-        pruned. This allows later `Subnetworks` to dynamically build upon
-        arbitrary `Tensors` from previous `Subnetworks`.
-      shared: Optional Python object, primitive, or function to share with
-        subnetworks within the same iteration or in future iterations.
-
-    Returns:
-      A validated `Subnetwork` object.
-
-    Raises:
-      ValueError: If last_layer is None.
-      ValueError: If logits is None.
-      ValueError: If logits is a dict but last_layer is not.
-      ValueError: If last_layer is a dict but logits is not.
-      ValueError: If complexity is None.
-      ValueError: If persisted_tensors is present but not a dictionary.
-      ValueError: If persisted_tensors contains an empty nested dictionary.
-    """
-
     if last_layer is None:
       raise ValueError("last_layer not provided")
     if logits is None:
@@ -138,7 +140,7 @@ class Builder(object):
 
   @abc.abstractproperty
   def name(self):
-    """Returns the unique name of the ensemble to contain this subnetwork."""
+    """Returns the unique name of this subnetwork within an iteration."""
 
   @abc.abstractmethod
   def build_subnetwork(self,
@@ -149,61 +151,69 @@ class Builder(object):
                        iteration_step,
                        summary,
                        previous_ensemble=None):
+    # pyformat: disable
     """Returns the candidate `Subnetwork` to add to the ensemble.
 
-    This method will be called only once, before `build_subnetwork_train_op`
-    and `build_mixture_weights_train_op` are called. This method should
+    This method will be called only once, before
+    :meth:`build_subnetwork_train_op`
+    and :meth:`build_mixture_weights_train_op` are called. This method should
     construct the candidate subnetwork's graph operations and variables.
 
-    Accessing the global step via `tf.train.get_or_create_global_step()` or
-    `tf.train.get_global_step()` within this scope will return an incrementable
+    Accessing the global step via :meth:`tf.train.get_or_create_global_step()`
+    or
+    :meth:`tf.train.get_global_step()` within this scope will return an
+    incrementable
     iteration step since the beginning of the iteration.
 
     Args:
-      features: Input `dict` of `Tensor` objects.
-      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
-        (for multi-head). Can be `None`.
-      logits_dimension: Size of the last dimension of the logits `Tensor`.
-        Typically, logits have for shape `[batch_size, logits_dimension]`.
+      features: Input `dict` of :class:`tf.Tensor` objects.
+      labels: Labels :class:`tf.Tensor` or a dictionary of string label name to
+        :class:`tf.Tensor` (for multi-head). Can be `None`.
+      logits_dimension: Size of the last dimension of the logits
+        :class:`tf.Tensor`. Typically, logits have for shape `[batch_size,
+        logits_dimension]`.
       training: A python boolean indicating whether the graph is in training
         mode or prediction mode.
-      iteration_step: Integer `Tensor` representing the step since the beginning
-        of the current iteration, as opposed to the global step.
-      summary: An `adanet.Summary` for scoping summaries to individual
-        subnetworks in Tensorboard. Using `tf.summary` within this scope will
-        use this `adanet.Summary` under the hood.
-      previous_ensemble: The best `Ensemble` from iteration t-1. The created
-        subnetwork will extend the previous ensemble to form the `Ensemble` at
-        iteration t.
+      iteration_step: Integer :class:`tf.Tensor` representing the step since the
+        beginning of the current iteration, as opposed to the global step.
+      summary: An :class:`adanet.Summary` for scoping summaries to individual
+        subnetworks in Tensorboard. Using :meth:`tf.summary` within this scope
+        will use this :class:`adanet.Summary` under the hood.
+      previous_ensemble: The best :class:`adanet.Ensemble` from iteration t-1.
+        The created subnetwork will extend the previous ensemble to form the
+        :class:`adanet.Ensemble` at iteration t.
 
     Returns:
-      A `Subnetwork` instance.
+      An :class:`adanet.subnetwork.Subnetwork` instance.
     """
+    # pyformat: enable
 
   @abc.abstractmethod
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
     """Returns an op for training a new subnetwork.
 
-    This method will be called once after `build_subnetwork`.
+    This method will be called once after :meth:`build_subnetwork`.
 
-    Accessing the global step via `tf.train.get_or_create_global_step()` or
-    `tf.train.get_global_step()` within this scope will return an incrementable
+    Accessing the global step via :meth:`tf.train.get_or_create_global_step()`
+    or
+    :meth:`tf.train.get_global_step()` within this scope will return an
+    incrementable
     iteration step since the beginning of the iteration.
 
     Args:
       subnetwork: Newest subnetwork, that is not part of the
         `previous_ensemble`.
-      loss: A `Tensor` containing the subnetwork's loss to minimize.
-      var_list: List of subnetwork `tf.Variable` parameters to update as part of
-        the training operation.
-      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
-        (for multi-head).
-      iteration_step: Integer `Tensor` representing the step since the beginning
-        of the current iteration, as opposed to the global step.
-      summary: An `adanet.Summary` for scoping summaries to individual
+      loss: A :class:`tf.Tensor` containing the subnetwork's loss to minimize.
+      var_list: List of subnetwork :class:`tf.Variable` parameters to update as
+        part of the training operation.
+      labels: Labels :class:`tf.Tensor` or a dictionary of string label name to
+        :class:`tf.Tensor` (for multi-head).
+      iteration_step: Integer :class:`tf.Tensor` representing the step since the
+        beginning of the current iteration, as opposed to the global step.
+      summary: An :class:`adanet.Summary` for scoping summaries to individual
         subnetworks in Tensorboard. Using `tf.summary` within this scope will
-        use this `adanet.Summary` under the hood.
+        use this :class:`adanet.Summary` under the hood.
       previous_ensemble: The best `Ensemble` from iteration t-1. The created
         subnetwork will extend the previous ensemble to form the `Ensemble` at
         iteration t. Is None for iteration 0.
@@ -215,6 +225,7 @@ class Builder(object):
   @abc.abstractmethod
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
                                      iteration_step, summary):
+    # pyformat: disable
     """Returns an op for training the ensemble's mixture weights.
 
     Allows AdaNet to learn the mixture weights of each subnetwork
@@ -222,35 +233,36 @@ class Builder(object):
 
     This method will be called once after `build_subnetwork`.
 
-    Accessing the global step via `tf.train.get_or_create_global_step()` or
-    `tf.train.get_global_step()` within this scope will return an incrementable
-    iteration step since the beginning of the iteration.
+    Accessing the global step via :meth:`tf.train.get_or_create_global_step()`
+    or :meth:`tf.train.get_global_step()` within this scope will return an
+    incrementable iteration step since the beginning of the iteration.
 
     Args:
-      loss: A `Tensor` containing the ensemble's loss to minimize.
+      loss: A :class:`tf.Tensor` containing the ensemble's loss to minimize.
       var_list: List of ensemble mixture weight `tf.Variables` to update as
         become part of the training operation.
-      logits: The ensemble's logits `Tensor` from applying the mixture weights
-        and bias to the ensemble's subnetworks.
-      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
-        (for multi-head).
-      iteration_step: Integer `Tensor` representing the step since the beginning
-        of the current iteration, as opposed to the global step.
-      summary: An `adanet.Summary` for scoping summaries to individual
-        subnetworks in Tensorboard. Using `tf.summary` within this scope will
-        use this `adanet.Summary` under the hood.
+      logits: The ensemble's logits :class:`tf.Tensor` from applying the mixture
+        weights and bias to the ensemble's subnetworks.
+      labels: Labels :class:`tf.Tensor` or a dictionary of string label name to
+        :class:`tf.Tensor` (for multi-head).
+      iteration_step: Integer :class:`tf.Tensor` representing the step since the
+        beginning of the current iteration, as opposed to the global step.
+      summary: An :class:`adanet.Summary` for scoping summaries to individual
+        subnetworks in Tensorboard. Using :class:`tf.summary` within this scope
+        will use this :class:`adanet.Summary` under the hood.
 
     Returns:
       A train op.
     """
+    # pyformat: enable
 
   def build_subnetwork_report(self):
     """Returns a `subnetwork.Report` to materialize and record.
 
-    This method will be called once after `build_subnetwork`.
-    Do NOT depend on variables created in `build_subnetwork_train_op` or
-    `build_mixture_weights_train_op`, because they are not called before
-    `build_subnetwork_report` is called.
+    This method will be called once after :meth:`build_subnetwork`.
+    Do NOT depend on variables created in :meth:`build_subnetwork_train_op` or
+    :meth:`build_mixture_weights_train_op`, because they are not called before
+    :meth:`build_subnetwork_report` is called.
 
     If it returns None, AdaNet records the name and standard eval metrics.
     """
@@ -258,26 +270,28 @@ class Builder(object):
     return None
 
   def prune_previous_ensemble(self, previous_ensemble):
-    """Specifies which subnetworks to include in the candidate ensemble.
+    """Specifies which subnetworks from the previous ensemble to keep.
 
-    The current default implementation does not prune any subnetworks from
-    the ensemble.
+    The selected subnetworks from the previous ensemble will be kept in the
+    candidate ensemble that includes this subnetwork.
+
+    By default, none of the previous ensemble subnetworks are pruned.
 
     Args:
-      previous_ensemble: `Ensemble` object.
+      previous_ensemble: :class:`adanet.Ensemble` object.
 
     Returns:
-      List of integer indices of weighted_subnetworks to keep.
+      List of integer indices of `weighted_subnetworks` to keep.
     """
     return range(len(previous_ensemble.weighted_subnetworks))
 
 
 class Generator(object):
-  """Interface for a subnetwork builder generator.
+  """Interface for a candidate subnetwork generator.
 
   Given the ensemble of subnetworks at iteration t-1, this object is
-  responsible for generating the set of subnetworks for iteration t that
-  minimize Equation (6) in the paper.
+  responsible for generating the set of candidate subnetworks for iteration t
+  that minimize the objective as part of an ensemble.
   """
 
   __metaclass__ = abc.ABCMeta
@@ -285,52 +299,56 @@ class Generator(object):
   @abc.abstractmethod
   def generate_candidates(self, previous_ensemble, iteration_number,
                           previous_ensemble_reports, all_reports):
-    """Generates `adanet.Builders` to train at iteration t.
+    # pyformat: disable
+    """Generates :class:`adanet.subnetwork.Builder` instances for an iteration.
+
+    NOTE: Every call to :meth:`generate_candidates` must be deterministic for
+    the given arguments.
 
     Args:
-      previous_ensemble: The best `adanet.Ensemble` from iteration t-1.
+      previous_ensemble: The best :class:`adanet.Ensemble` from iteration t-1.
         DEPRECATED. We are transitioning away from the use of previous_ensemble
         in generate_candidates. New Generators should *not* use
         previous_ensemble in their implementation of generate_candidates --
         please only use iteration_number, previous_ensemble_reports and
         all_reports.
       iteration_number: Python integer AdaNet iteration t, starting from 0.
-      previous_ensemble_reports: List of `adanet.subnetwork.MaterializedReport`s
-        corresponding to the Builders composing `adanet.Ensemble` from iteration
-        t-1. The first element in the list corresponds to the Builder added in
-        the first iteration. If `ReportMaterializer` is not supplied to the
-        estimator, previous_ensemble_report is `None`.
-      all_reports: List of `adanet.subnetwork.MaterializedReport`s. If
-        `ReportMaterializer` is not supplied to the estimator, all_reports is
-        `None`. If `ReportMaterializer` is supplied to the estimator and t=0,
-        all_reports is an empty List. Otherwise, all_reports is a sequence of
-        Lists. Each element of the sequence is a List containing all the
-        `adanet.subnetwork.MaterializedReport`s in an AdaNet iteration, starting
-        from iteration 0, and ending at iteration t-1.
+      previous_ensemble_reports: List of
+        :class:`adanet.subnetwork.MaterializedReport` instances corresponding to
+        the Builders composing :class:`adanet.Ensemble` from iteration t-1. The
+        first element in the list corresponds to the Builder added in the
+        first iteration. If a :class:`adanet.subnetwork.MaterializedReport` is
+        not supplied to the estimator, previous_ensemble_report is `None`.
+      all_reports: List of :class:`adanet.subnetwork.MaterializedReport`
+        instances. If an :class:`adanet.subnetwork.ReportMaterializer` is not
+        supplied to the estimator, `all_reports` is `None`. If
+        :class:`adanet.subnetwork.ReportMaterializer` is supplied to the
+        estimator and t=0, `all_reports` is an empty List. Otherwise,
+        `all_reports` is a sequence of Lists. Each element of the sequence is a
+        List containing all the :class:`adanet.subnetwork.MaterializedReport`
+        instances in an AdaNet iteration, starting from iteration 0, and
+        ending at iteration t-1.
 
     Returns:
-      A list of `adanet.Builders`.
+      A list of :class:`adanet.subnetwork.Builder` instances.
     """
+    # pyformat: enable
 
 
 class SimpleGenerator(Generator):
-  """A generator that always returns the same `adanet.Builders`."""
+  """Always generates the given :class:`adanet.subnetwork.Builder` instances.
+
+  Args:
+    subnetwork_builders: List of :class:`adanet.subnetwork.Builder` instances to
+      return at each iteration when `generate_candidates` is called.
+
+  Returns:
+    A :class:`adanet.SimpleGenerator` instance.
+  """
 
   def __init__(self, subnetwork_builders):
-    """Creates a `adanet.Subnetwork` instance.
-
-    Args:
-      subnetwork_builders: List of `adanet.Builders` to return at each iteration
-        when `generate_candidates` is called.
-
-    Returns:
-      A `SimpleGenerator` instance.
-    """
-
     self._subnetwork_builders = subnetwork_builders
 
   def generate_candidates(self, previous_ensemble, iteration_number,
                           previous_ensemble_reports, all_reports):
-    """Returns the predefined set of `adanet.Builders`."""
-
     return self._subnetwork_builders
