@@ -308,7 +308,7 @@ class _IterationBuilder(object):
           step=iteration_step_tensor)
 
   def _is_over(self, candidates, is_over_var_fn):
-    """Assings whether the iteration is over to the is_over_var.
+    """Assigns whether the iteration is over to the is_over_var.
 
     The iteration is over once all candidates are done training.
 
