@@ -1,5 +1,6 @@
 # AdaNet
 
+[![Documentation Status](https://readthedocs.org/projects/adanet/badge/?version=latest)](https://adanet.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://badge.fury.io/py/adanet.svg)](https://badge.fury.io/py/adanet)
 [![Travis](https://travis-ci.org/tensorflow/adanet.svg?branch=master)](https://travis-ci.org/tensorflow/adanet)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/tensorflow/adanet/blob/master/LICENSE)
@@ -80,6 +81,7 @@ predictions = estimator.predict(input_fn=predict_input_fn)
 
 To get you started:
 
+- [API Documentation](https://adanet.readthedocs.io)
 - [Tutorials: for understanding the AdaNet algorithm and learning to use this package](./adanet/examples/tutorials)
 
 ## Requirements
