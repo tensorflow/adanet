@@ -47,6 +47,7 @@ class ReportMaterializer(object):
   """
 
   def __init__(self, input_fn, steps=None):
+    self._input_fn = input_fn
     self._steps = steps
     super(ReportMaterializer, self).__init__()
 
