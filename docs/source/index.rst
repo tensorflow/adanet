@@ -47,9 +47,6 @@ This is not an official Google product.
   adanet
   adanet.subnetwork
 
-
-
-
 Indices and tables
 ==================
 
