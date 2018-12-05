@@ -120,8 +120,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     export_dir_base = os.path.join(self.test_subdirectory, "export")
     estimator.export_saved_model(
         export_dir_base=export_dir_base,
-        serving_input_receiver_fn=serving_input_fn,
-        experimental_mode=tf.estimator.ModeKeys.PREDICT)
+        serving_input_receiver_fn=serving_input_fn)
 
 
 if __name__ == "__main__":
