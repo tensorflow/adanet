@@ -23,6 +23,7 @@ import abc
 import contextlib
 
 import tensorflow as tf
+from tensorflow.contrib.tpu.python.tpu import tpu_function
 from tensorflow.python.ops import summary_op_util
 
 
@@ -191,6 +192,11 @@ class _ScopedSummary(Summary):
     Returns:
       A `_ScopedSummary` instance.
     """
+    if tpu_function.get_tpu_context().number_of_shards:
+      tf.logging.log_first_n(
+          tf.logging.WARN,
+          "Scoped summaries will be skipped since they do not support TPU", 1)
+      skip_summary = True
 
     self._scope = scope
     self._additional_scope = None
