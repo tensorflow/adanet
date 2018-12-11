@@ -110,12 +110,12 @@ Next clone the `adanet` repository:
 
 ```shell
 $ git clone https://github.com/tensorflow/adanet
+$ cd adanet
 ```
 
 From the `adanet` root directory run the tests:
 
 ```shell
-$ cd adanet
 $ bazel test -c opt //...
 ```
 
@@ -126,6 +126,21 @@ You are now ready to experiment with `adanet`.
 ```python
 import adanet
 ```
+
+## Citing this Work
+
+If you use this AdaNet library for academic research, you are encouraged to cite the following:
+
+    @misc{weill2018adanet,
+      author    = {Charles Weill and Javier Gonzalvo and Vitaly Kuznetsov and
+        Scott Yang and Scott Yak and Hanna Mazzawi and Eugen Hotaj and
+        Ghassen Jerfel and Vladimir Macko and Mehryar Mohri and Corinna Cortes},
+      title     = {AdaNet: Fast and flexible AutoML with learning guarantees},
+      year      = {2018},
+      publisher = {GitHub},
+      journal = {GitHub repository},
+      howpublished = {\url{https://github.com/tensorflow/adanet}},
+    }
 
 ## License
 
