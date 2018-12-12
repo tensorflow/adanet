@@ -35,6 +35,8 @@ import numpy as np
 import six
 import tensorflow as tf
 
+from tensorflow.python.ops import resources
+
 
 class _StopAfterTrainingHook(tf.train.SessionRunHook):
   """Hook that requests stop once iteration is over."""
@@ -656,8 +658,10 @@ class Estimator(tf.estimator.Estimator):
 
     checkpoint_path = os.path.join(self.model_dir, "increment.ckpt")
     with tf.Session(target=self.config.master) as sess:
-      init = tf.group(tf.global_variables_initializer(),
-                      tf.local_variables_initializer(), tf.tables_initializer())
+      init = tf.group(
+          tf.global_variables_initializer(), tf.local_variables_initializer(),
+          tf.tables_initializer(),
+          resources.initialize_resources(resources.shared_resources()))
       sess.run(init)
       coord = tf.train.Coordinator()
       tf.train.start_queue_runners(sess=sess, coord=coord)
