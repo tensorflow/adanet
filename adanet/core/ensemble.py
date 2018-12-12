@@ -752,8 +752,8 @@ class _EnsembleBuilder(object):
 
     # Treat subnetworks as if their weights are frozen, and ensure that
     # mixture weight gradients do not propagate through.
-    last_layer = tf.stop_gradient(_get_value(subnetwork.last_layer, key))
-    logits = tf.stop_gradient(_get_value(subnetwork.logits, key))
+    last_layer = _get_value(subnetwork.last_layer, key)
+    logits = _get_value(subnetwork.logits, key)
     weight_shape = None
     last_layer_size = last_layer.get_shape().as_list()[-1]
     logits_size = logits.get_shape().as_list()[-1]
