@@ -36,6 +36,29 @@ def _validate_nested_persisted_tensors(persisted_tensors):
     _validate_nested_persisted_tensors(entry)
 
 
+class TrainOpSpec(
+    collections.namedtuple("TrainOpSpec",
+                           ["train_op", "chief_hooks", "hooks"])):
+  """A data structure for specifying training operations.
+
+  Args:
+    train_op: Op for the training step.
+    chief_hooks: Iterable of :class:`tf.train.SessionRunHook` objects to run on
+      the chief worker during training.
+    hooks: Iterable of :class:`tf.train.SessionRunHook` objects to run on all
+      workers during training.
+
+  Returns:
+    A :class:`adanet.subnetwork.TrainOpSpec` object.
+  """
+
+  def __new__(cls, train_op, chief_hooks=None, hooks=None):
+    # Make hooks immutable.
+    chief_hooks = tuple(chief_hooks) if chief_hooks else ()
+    hooks = tuple(hooks) if hooks else ()
+    return super(TrainOpSpec, cls).__new__(cls, train_op, chief_hooks, hooks)
+
+
 class Subnetwork(
     collections.namedtuple(
         "Subnetwork",
@@ -81,7 +104,7 @@ class Subnetwork(
       with subnetworks within the same iteration or in future iterations.
 
   Returns:
-    A validated `Subnetwork` object.
+    A validated :class:`adanet.subnetwork.Subnetwork` object.
 
   Raises:
     ValueError: If last_layer is None.
@@ -219,7 +242,7 @@ class Builder(object):
         iteration t. Is None for iteration 0.
 
     Returns:
-      A train op.
+      Either a train op or an :class:`adanet.subnetwork.TrainOpSpec`.
     """
 
   @abc.abstractmethod
@@ -252,7 +275,7 @@ class Builder(object):
         will use this :class:`adanet.Summary` under the hood.
 
     Returns:
-      A train op.
+      Either a train op or an :class:`adanet.subnetwork.TrainOpSpec`.
     """
     # pyformat: enable
 

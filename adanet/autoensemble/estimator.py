@@ -23,6 +23,7 @@ from adanet.core import Estimator
 from adanet.core.subnetwork import Builder
 from adanet.core.subnetwork import Generator
 from adanet.core.subnetwork import Subnetwork
+from adanet.core.subnetwork import TrainOpSpec
 import tensorflow as tf
 
 from tensorflow.python.estimator.canned import prediction_keys
@@ -66,7 +67,10 @@ class _BuilderFromEstimator(Builder):
         config=self._estimator.config)
     logits = self._logits_fn(estimator_spec=estimator_spec)
 
-    self._subnetwork_train_op = estimator_spec.train_op
+    self._subnetwork_train_op = TrainOpSpec(
+        estimator_spec.train_op,
+        chief_hooks=estimator_spec.training_chief_hooks,
+        hooks=estimator_spec.training_hooks)
 
     # TODO: Replace with variance complexity measure.
     complexity = tf.constant(0.)

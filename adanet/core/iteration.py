@@ -288,6 +288,14 @@ class _IterationBuilder(object):
       # `is_over` is stored in a `Variable` that can later be retrieved from
       # inside a training hook.
       is_over_var_fn = tf.make_template("is_over_var_fn", is_over_var)
+
+      training_chief_hooks, training_hooks = (), ()
+      for candidate in candidates:
+        spec = candidate.ensemble_spec
+        if not spec.subnetwork_train_op:
+          continue
+        training_chief_hooks += spec.subnetwork_train_op.chief_hooks or ()
+        training_hooks += spec.ensemble_train_op.hooks or ()
       estimator_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           predictions=best_predictions,
@@ -295,7 +303,9 @@ class _IterationBuilder(object):
           train_op=self._create_train_op(candidates, mode, iteration_step,
                                          is_over_var_fn),
           eval_metric_ops=best_eval_metric_ops,
-          export_outputs=best_export_outputs)
+          export_outputs=best_export_outputs,
+          training_chief_hooks=training_chief_hooks,
+          training_hooks=training_hooks)
 
       return _Iteration(
           number=iteration_number,
@@ -352,9 +362,10 @@ class _IterationBuilder(object):
     with tf.variable_scope("train_op"):
       train_ops = []
       for candidate in candidates:
-        if candidate.ensemble_spec.train_op is not None:
+        if candidate.ensemble_spec.subnetwork_train_op is not None:
           # The train op of a previous ensemble is None even during `TRAIN`.
-          train_ops.append(candidate.ensemble_spec.train_op)
+          train_ops.append(candidate.ensemble_spec.subnetwork_train_op.train_op)
+          train_ops.append(candidate.ensemble_spec.ensemble_train_op.train_op)
       train_ops.append(self._is_over(candidates, is_over_var_fn))
       with tf.control_dependencies(train_ops):
         # AdaNet is responsible for incrementing the global step, not the

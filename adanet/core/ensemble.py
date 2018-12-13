@@ -24,7 +24,9 @@ import contextlib
 import functools
 import inspect
 
+from adanet.core.subnetwork import TrainOpSpec
 import tensorflow as tf
+
 from tensorflow.python.summary import summary as summary_lib
 from tensorflow.python.training import training_util
 
@@ -116,7 +118,8 @@ class _EnsembleSpec(
         "predictions",
         "loss",
         "adanet_loss",
-        "train_op",
+        "subnetwork_train_op",
+        "ensemble_train_op",
         "eval_metric_ops",
         "export_outputs",
     ])):
@@ -128,7 +131,8 @@ class _EnsembleSpec(
               predictions,
               loss=None,
               adanet_loss=None,
-              train_op=None,
+              subnetwork_train_op=None,
+              ensemble_train_op=None,
               eval_metric_ops=None,
               export_outputs=None):
     """Creates an `EnsembleSpec` instance.
@@ -143,7 +147,8 @@ class _EnsembleSpec(
         either scalar, or with shape `[1]`. The AdaNet algorithm aims to
         minimize this objective which balances training loss with the total
         complexity of the subnetworks in the ensemble.
-      train_op: Op for the training step.
+      subnetwork_train_op: Candidate subnetwork's `TrainOpSpec`.
+      ensemble_train_op: Candidate ensemble's mixture weights `TrainOpSpec`.
       eval_metric_ops: Dict of metric results keyed by name. The values of the
         dict are the results of calling a metric function, namely a
         `(metric_tensor, update_op)` tuple. `metric_tensor` should be evaluated
@@ -166,7 +171,8 @@ class _EnsembleSpec(
         predictions=predictions,
         loss=loss,
         adanet_loss=adanet_loss,
-        train_op=train_op,
+        subnetwork_train_op=subnetwork_train_op,
+        ensemble_train_op=ensemble_train_op,
         eval_metric_ops=eval_metric_ops,
         export_outputs=export_outputs)
 
@@ -243,6 +249,12 @@ def _get_value(target, key):
   if isinstance(target, dict):
     return target[key]
   return target
+
+
+def _to_train_op_spec(train_op):
+  if isinstance(train_op, TrainOpSpec):
+    return train_op
+  return TrainOpSpec(train_op)
 
 
 @contextlib.contextmanager
@@ -627,7 +639,8 @@ class _EnsembleBuilder(object):
                        uniform_average_ensemble_spec.loss)
 
     # Create train ops for training subnetworks and learning mixture weights.
-    train_op = None
+    subnetwork_train_op = None
+    ensemble_train_op = None
     if mode == tf.estimator.ModeKeys.TRAIN and subnetwork_builder:
       ensemble_scope = tf.get_variable_scope()
       _set_trainable_variables(var_list)
@@ -638,7 +651,7 @@ class _EnsembleBuilder(object):
 
         with summary.current_scope(), _subnetwork_context(
             iteration_step_scope=ensemble_scope, scoped_summary=summary):
-          subnetwork_train_op = (
+          subnetwork_train_op = _to_train_op_spec(
               subnetwork_builder.build_subnetwork_train_op(
                   subnetwork=new_subnetwork,
                   loss=subnetwork_spec.loss,
@@ -658,14 +671,14 @@ class _EnsembleBuilder(object):
       with tf.variable_scope("train_mixture_weights"):
         with summary.current_scope(), _subnetwork_context(
             iteration_step_scope=ensemble_scope, scoped_summary=summary):
-          ensemble_train_op = subnetwork_builder.build_mixture_weights_train_op(
-              loss=adanet_loss,
-              var_list=ensemble_var_list,
-              logits=ensemble_logits,
-              labels=labels,
-              iteration_step=iteration_step,
-              summary=summary)
-      train_op = tf.group(subnetwork_train_op, ensemble_train_op)
+          ensemble_train_op = _to_train_op_spec(
+              subnetwork_builder.build_mixture_weights_train_op(
+                  loss=adanet_loss,
+                  var_list=ensemble_var_list,
+                  logits=ensemble_logits,
+                  labels=labels,
+                  iteration_step=iteration_step,
+                  summary=summary))
 
     return _EnsembleSpec(
         name=name,
@@ -677,7 +690,8 @@ class _EnsembleBuilder(object):
         predictions=adanet_weighted_ensemble_spec.predictions,
         loss=ensemble_loss,
         adanet_loss=adanet_loss,
-        train_op=train_op,
+        subnetwork_train_op=subnetwork_train_op,
+        ensemble_train_op=ensemble_train_op,
         eval_metric_ops=eval_metric_ops,
         export_outputs=adanet_weighted_ensemble_spec.export_outputs)
 
