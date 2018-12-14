@@ -171,6 +171,31 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
           max_steps=max_steps,
           saving_listeners=saving_listeners)
 
+  def predict(self,
+              input_fn,
+              predict_keys=None,
+              hooks=None,
+              checkpoint_path=None,
+              yield_single_examples=True):
+    # TODO: Required to support predict on CPU for TPUEstiamtor.
+    # This is the recommended method from TensorFlow TPUEstimator docs:
+    # https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimator#current_limitations
+    tf.logging.warning(
+        "The adanet.TPUEstimator does not support predicting on TPU. "
+        "Instead, all predictions are run on CPU.")
+    tpu_estimator = tf.contrib.tpu.TPUEstimator(
+        model_fn=self._adanet_model_fn,
+        model_dir=self.model_dir,
+        config=self.config,
+        params=self.params,
+        use_tpu=False)
+    return tpu_estimator.predict(
+        input_fn,
+        predict_keys=predict_keys,
+        hooks=hooks,
+        checkpoint_path=checkpoint_path,
+        yield_single_examples=yield_single_examples)
+
   def _call_adanet_model_fn(self, input_fn, mode, params):
     """See the `Estimator` base class for details."""
 

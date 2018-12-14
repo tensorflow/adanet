@@ -199,12 +199,9 @@ class TPUEstimatorTest(tu.AdanetTestCase):
         input_fn=train_input_fn, steps=10, hooks=None)
     tf.logging.info("%s", eval_results)
 
-    # TODO: inference on TPU is not currently supported.
-    if use_tpu:
-      predictions = []
-    else:
-      predictions = estimator.predict(
-          input_fn=tu.dataset_input_fn(features=[0., 0.], labels=None))
+    # Predict.
+    predictions = estimator.predict(
+        input_fn=tu.dataset_input_fn(features=[0., 0.], labels=None))
 
     # Export SavedModel.
     def serving_input_fn():
