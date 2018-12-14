@@ -183,7 +183,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
         model_dir=self.test_subdirectory,
         config=config,
         use_tpu=use_tpu,
-        batch_size=64 if use_tpu else 0)
+        train_batch_size=64 if use_tpu else 0)
     max_steps = 300
 
     xor_features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]

@@ -123,7 +123,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                report_dir=None,
                config=None,
                use_tpu=True,
-               batch_size=None):
+               train_batch_size=None,
+               eval_batch_size=None):
     if not use_tpu:
       tf.logging.warning(
           "This adanet.TPUEstimator is meant to be used for running on TPU. "
@@ -152,7 +153,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         use_tpu=use_tpu,
         eval_on_tpu=False,
         export_to_tpu=False,
-        train_batch_size=batch_size or 0)
+        train_batch_size=train_batch_size or 0,
+        eval_batch_size=eval_batch_size or train_batch_size or 0)
 
   def train(self,
             input_fn,
