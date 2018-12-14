@@ -4,3 +4,4 @@ Welcome to `adanet`! For a tour of this python package's capabilities, please wo
 
 1. [The AdaNet objective](./adanet_objective.ipynb)
 1. [Customizing AdaNet](./customizing_adanet.ipynb)
+1. [AdaNet on TPU](./adanet_tpu.ipynb)
