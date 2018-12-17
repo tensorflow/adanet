@@ -204,8 +204,8 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     # some TPU hooks seem to be failing on predict.
     predictions = []
     tf_verison = LooseVersion(tf.VERSION)
-    if (tf_verison != LooseVersion("1.11") and
-        tf_verison != LooseVersion("1.12")):
+    if (tf_verison != LooseVersion("1.11.0") and
+        tf_verison != LooseVersion("1.12.0")):
       predictions = estimator.predict(
           input_fn=tu.dataset_input_fn(features=[0., 0.], labels=None))
 
