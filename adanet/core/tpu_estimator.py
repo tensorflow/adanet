@@ -168,6 +168,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
       return super(TPUEstimator, self).train(
           input_fn=input_fn,
           hooks=hooks,
+          steps=steps,
           max_steps=max_steps,
           saving_listeners=saving_listeners)
 
