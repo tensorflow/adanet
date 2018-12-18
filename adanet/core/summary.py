@@ -180,8 +180,6 @@ class _ScopedSummary(Summary):
   same name in the same charts.
   """
 
-  _TMP_COLLECTION_NAME = "_tmp_summaries"
-
   def __init__(self, scope=None, skip_summary=False):
     """Initializes a `_ScopedSummary`.
 
@@ -192,6 +190,7 @@ class _ScopedSummary(Summary):
     Returns:
       A `_ScopedSummary` instance.
     """
+
     if tpu_function.get_tpu_context().number_of_shards:
       tf.logging.log_first_n(
           tf.logging.WARN,
@@ -201,6 +200,7 @@ class _ScopedSummary(Summary):
     self._scope = scope
     self._additional_scope = None
     self._skip_summary = skip_summary
+    self._summary_ops = []
     self._actual_summary_scalar_fn = tf.summary.scalar
     self._actual_summary_image_fn = tf.summary.image
     self._actual_summary_histogram_fn = tf.summary.histogram
@@ -238,13 +238,6 @@ class _ScopedSummary(Summary):
     yield
     summary_op_util.summary_scope = original_summary_scope
 
-  def _collection_name(self):
-    """Returns the collection for recording."""
-
-    if self._scope:
-      return "_{}_summaries".format(self._scope)
-    return "_global_summaries"
-
   def _prefix_scope(self, name):
     """Prefixes summary name with scope."""
 
@@ -265,8 +258,8 @@ class _ScopedSummary(Summary):
           name=self._prefix_scope(name),
           tensor=tensor,
           family=family,
-          collections=[self._TMP_COLLECTION_NAME])
-    tf.add_to_collection(self._collection_name(), summary)
+          collections=[])
+    self._summary_ops.append(summary)
     return summary
 
   def image(self, name, tensor, max_outputs=3, family=None):
@@ -281,8 +274,8 @@ class _ScopedSummary(Summary):
           tensor=tensor,
           max_outputs=max_outputs,
           family=family,
-          collections=[self._TMP_COLLECTION_NAME])
-      tf.add_to_collection(self._collection_name(), summary)
+          collections=[])
+    self._summary_ops.append(summary)
     return summary
 
   def histogram(self, name, values, family=None):
@@ -296,8 +289,8 @@ class _ScopedSummary(Summary):
           name=self._prefix_scope(name),
           values=values,
           family=family,
-          collections=[self._TMP_COLLECTION_NAME])
-    tf.add_to_collection(self._collection_name(), summary)
+          collections=[])
+    self._summary_ops.append(summary)
     return summary
 
   def audio(self, name, tensor, sample_rate, max_outputs=3, family=None):
@@ -313,8 +306,8 @@ class _ScopedSummary(Summary):
           sample_rate=sample_rate,
           max_outputs=max_outputs,
           family=family,
-          collections=[self._TMP_COLLECTION_NAME])
-    tf.add_to_collection(self._collection_name(), summary)
+          collections=[])
+    self._summary_ops.append(summary)
     return summary
 
   def merge_all(self):
@@ -325,4 +318,4 @@ class _ScopedSummary(Summary):
     only used in the internal implementation, so this should be OK.
     """
 
-    return tf.get_collection(key=self._collection_name())
+    return self._summary_ops
