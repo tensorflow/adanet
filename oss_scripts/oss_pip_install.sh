@@ -17,6 +17,8 @@
 set -v  # print commands as they're executed
 set -e  # fail and exit on any command erroring
 
+BAZEL_VERSION=0.20.0
+
 : "${TF_VERSION:?}"
 
 if [[ "$TF_VERSION" == "tf-nightly"  ]]
@@ -34,12 +36,12 @@ pip install -q -U numpy
 # Step 1: Install the JDK
 sudo apt-get install openjdk-8-jdk
 
-# Step 2: Add Bazel distribution URI as a package source
-echo "deb [arch=amd64] http://storage.googleapis.com/bazel-apt stable jdk1.8" | sudo tee /etc/apt/sources.list.d/bazel.list
-curl https://bazel.build/bazel-release.pub.gpg | sudo apt-key add -
+# Step 2: Install Bazel using binary installer
+wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
 
-# Step 3: Install and update Bazel
-sudo apt-get update && sudo apt-get install bazel
+# Step 3: Install Bazel
+chmod +x bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
+./bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
 
 # Build adanet pip packaging script
 bazel build //adanet/pip_package:build_pip_package
