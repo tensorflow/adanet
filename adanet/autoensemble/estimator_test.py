@@ -118,10 +118,12 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
           receiver_tensors=serialized_example)
 
     export_dir_base = os.path.join(self.test_subdirectory, "export")
-    estimator.export_saved_model(
+    export_saved_model_fn = getattr(estimator, "export_saved_model", None)
+    if not callable(export_saved_model_fn):
+      export_saved_model_fn = estimator.export_savedmodel
+    export_saved_model_fn(
         export_dir_base=export_dir_base,
-        serving_input_receiver_fn=serving_input_fn,
-        experimental_mode=tf.estimator.ModeKeys.PREDICT)
+        serving_input_receiver_fn=serving_input_fn)
 
 
 if __name__ == "__main__":

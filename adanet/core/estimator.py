@@ -35,6 +35,8 @@ import numpy as np
 import six
 import tensorflow as tf
 
+from tensorflow.python.ops import resources
+
 
 class _StopAfterTrainingHook(tf.train.SessionRunHook):
   """Hook that requests stop once iteration is over."""
@@ -495,7 +497,7 @@ class Estimator(tf.estimator.Estimator):
         if self.config.is_chief:
           # As the chief, store the train hooks and make a placeholder input_fn
           # in order to use them when preparing the next iteration.
-          self._train_hooks = hooks
+          self._train_hooks = hooks or ()
           self._prepare_next_iteration(input_fn)
 
         # This inner loop serves mainly for synchronizing the workers with the
@@ -623,7 +625,7 @@ class Estimator(tf.estimator.Estimator):
     frozen_checkpoint = os.path.join(self.model_dir, "architecture")
     return "{}-{}.txt".format(frozen_checkpoint, iteration_number)
 
-  def _overwrite_checkpoint(self, iteration_number_tensor, iteration_number):
+  def _overwrite_checkpoint(self, current_iteration, iteration_number_tensor):
     """Overwrites the latest checkpoint with the current graph.
 
     This is necessary for two reasons:
@@ -634,9 +636,9 @@ class Estimator(tf.estimator.Estimator):
      begin training the next iteration.
 
     Args:
+      current_iteration: Current `_Iteration` object.
       iteration_number_tensor: Int variable `Tensor` storing the current
         iteration number.
-      iteration_number: Int number of the current iteration.
     """
 
     checkpoint_state = tf.train.get_checkpoint_state(self.model_dir)
@@ -646,9 +648,17 @@ class Estimator(tf.estimator.Estimator):
 
     # Run train hook 'begin' methods which can add ops to the graph, so that
     # they are still present in the overwritten checkpoint.
-    if self._train_hooks:
-      for hook in self._train_hooks:
-        hook.begin()
+    train_hooks = tuple(self._train_hooks) or ()
+    for candidate in current_iteration.candidates:
+      if not candidate.ensemble_spec.subnetwork_train_op:
+        assert not candidate.ensemble_spec.ensemble_train_op
+        continue
+      train_hooks += candidate.ensemble_spec.subnetwork_train_op.chief_hooks
+      train_hooks += candidate.ensemble_spec.subnetwork_train_op.hooks
+      train_hooks += candidate.ensemble_spec.ensemble_train_op.chief_hooks
+      train_hooks += candidate.ensemble_spec.ensemble_train_op.hooks
+    for hook in train_hooks:
+      hook.begin()
 
     global_step_tensor = tf.train.get_global_step()
     global_step = tf.contrib.framework.load_variable(latest_checkpoint,
@@ -656,24 +666,25 @@ class Estimator(tf.estimator.Estimator):
 
     checkpoint_path = os.path.join(self.model_dir, "increment.ckpt")
     with tf.Session(target=self.config.master) as sess:
-      init = tf.group(tf.global_variables_initializer(),
-                      tf.local_variables_initializer(), tf.tables_initializer())
+      init = tf.group(
+          tf.global_variables_initializer(), tf.local_variables_initializer(),
+          tf.tables_initializer(),
+          resources.initialize_resources(resources.shared_resources()))
       sess.run(init)
       coord = tf.train.Coordinator()
       tf.train.start_queue_runners(sess=sess, coord=coord)
       control_deps = [
           tf.assign(global_step_tensor, global_step),
-          tf.assign(iteration_number_tensor, iteration_number),
+          tf.assign(iteration_number_tensor, current_iteration.number),
       ]
       with tf.control_dependencies(control_deps):
         saver = tf.train.Saver(
             sharded=True, max_to_keep=self.config.keep_checkpoint_max)
         saver.recover_last_checkpoints(
             checkpoint_state.all_model_checkpoint_paths)
-        saver.save(sess, checkpoint_path, global_step=iteration_number)
-      if self._train_hooks:
-        for hook in self._train_hooks:
-          hook.end(sess)
+        saver.save(sess, checkpoint_path, global_step=current_iteration.number)
+      for hook in train_hooks:
+        hook.end(sess)
 
   def _get_best_ensemble_index(self, current_iteration):
     """Returns the best candidate ensemble's index in this iteration.
@@ -804,7 +815,7 @@ class Estimator(tf.estimator.Estimator):
     def after_fn():
       self._iteration_ended = True
 
-    training_hooks = [
+    training_hooks = list(current_iteration.estimator_spec.training_hooks) + [
         _StopAfterTrainingHook(current_iteration, after_fn=after_fn)
     ]
 
@@ -1133,6 +1144,7 @@ class Estimator(tf.estimator.Estimator):
         loss=iteration_estimator_spec.loss,
         train_op=iteration_estimator_spec.train_op,
         eval_metric_ops=iteration_estimator_spec.eval_metric_ops,
+        training_chief_hooks=iteration_estimator_spec.training_chief_hooks,
         training_hooks=self._training_hooks(current_iteration, training),
         evaluation_hooks=self._evaluation_hooks(current_iteration, training),
         scaffold=tf.train.Scaffold(summary_op=adanet_summary.merge_all()),
@@ -1156,6 +1168,6 @@ class Estimator(tf.estimator.Estimator):
       tf.logging.info(
           "Overwriting checkpoint with new graph for iteration %s to %s",
           iteration_number, latest_checkpoint)
-      self._overwrite_checkpoint(iteration_number_tensor, iteration_number)
+      self._overwrite_checkpoint(current_iteration, iteration_number_tensor)
 
     return estimator_spec

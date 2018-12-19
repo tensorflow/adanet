@@ -22,6 +22,7 @@ from adanet.core.subnetwork.generator import Builder
 from adanet.core.subnetwork.generator import Generator
 from adanet.core.subnetwork.generator import SimpleGenerator
 from adanet.core.subnetwork.generator import Subnetwork
+from adanet.core.subnetwork.generator import TrainOpSpec
 from adanet.core.subnetwork.report import MaterializedReport
 from adanet.core.subnetwork.report import Report
 

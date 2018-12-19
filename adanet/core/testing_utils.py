@@ -123,7 +123,8 @@ def dummy_ensemble_spec(name,
       loss=loss,
       adanet_loss=adanet_loss,
       eval_metric_ops=eval_metric_ops,
-      train_op=train_op,
+      subnetwork_train_op=train_op,
+      ensemble_train_op=train_op,
       export_outputs=export_outputs)
 
 

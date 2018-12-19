@@ -846,12 +846,13 @@ class _HeadEnsembleBuilder(object):
         predictions=estimator_spec.predictions,
         loss=None,
         adanet_loss=.1,
-        train_op=None,
+        subnetwork_train_op=None,
+        ensemble_train_op=None,
         eval_metric_ops=None,
         export_outputs=estimator_spec.export_outputs)
 
 
-class ExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
+class IterationExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.named_parameters({
       "testcase_name": "regression_head",

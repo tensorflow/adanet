@@ -13,8 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================-->
 
-# Current version (0.5.0-dev)
+# Current version (0.6.0-dev)
  * Under development.
+
+# Release 0.5.0
+ * Support training on TPU using `adanet.TPUEstimator`.
+ * Allow subnetworks to specify `tf.train.SessionRunHook` instances for training with `adanet.subnetwork.TrainOpSpec`.
+ * Add API documentation generation with Sphinx.
+ * Fix bug preventing subnetworks with Resource variables from working beyond the first iteration.
 
 # Release 0.4.0
  * Add `shared` field to `adanet.Subnetwork` to deprecate, replace, and be more flexible than `persisted_tensors`.

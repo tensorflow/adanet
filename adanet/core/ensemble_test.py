@@ -332,15 +332,18 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
             want_logits, sess.run(ensemble_spec.ensemble.logits), atol=1e-3)
         self.assertIsNone(ensemble_spec.loss)
         self.assertIsNone(ensemble_spec.adanet_loss)
-        self.assertIsNone(ensemble_spec.train_op)
+        self.assertIsNone(ensemble_spec.subnetwork_train_op)
+        self.assertIsNone(ensemble_spec.ensemble_train_op)
         self.assertIsNotNone(ensemble_spec.export_outputs)
         return
 
       # Verify that train_op works, previous loss should be greater than loss
       # after a train op.
       loss = sess.run(ensemble_spec.loss)
+      train_op = tf.group(ensemble_spec.subnetwork_train_op.train_op,
+                          ensemble_spec.ensemble_train_op.train_op)
       for _ in range(3):
-        sess.run(ensemble_spec.train_op)
+        sess.run(train_op)
       self.assertGreater(loss, sess.run(ensemble_spec.loss))
 
       self.assertAllClose(

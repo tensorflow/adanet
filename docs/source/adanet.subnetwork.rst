@@ -19,6 +19,12 @@ Interfaces and containers for defining subnetworks, search spaces, and search al
 .. autoclass:: Subnetwork
     :members:
 
+:hidden:`TrainOpSpec`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: TrainOpSpec
+    :members:
+
 :hidden:`Builder`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

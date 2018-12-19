@@ -183,7 +183,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
         model_dir=self.test_subdirectory,
         config=config,
         use_tpu=use_tpu,
-        batch_size=64 if use_tpu else 0)
+        train_batch_size=64 if use_tpu else 0)
     max_steps = 300
 
     xor_features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
@@ -199,10 +199,13 @@ class TPUEstimatorTest(tu.AdanetTestCase):
         input_fn=train_input_fn, steps=10, hooks=None)
     tf.logging.info("%s", eval_results)
 
-    # TODO: inference on TPU is not currently supported.
-    if use_tpu:
-      predictions = []
-    else:
+    # Predict.
+    # TODO: skip predictions on TF versions 1.11 and 1.12 since
+    # some TPU hooks seem to be failing on predict.
+    predictions = []
+    tf_verison = LooseVersion(tf.VERSION)
+    if (tf_verison != LooseVersion("1.11.0") and
+        tf_verison != LooseVersion("1.12.0")):
       predictions = estimator.predict(
           input_fn=tu.dataset_input_fn(features=[0., 0.], labels=None))
 

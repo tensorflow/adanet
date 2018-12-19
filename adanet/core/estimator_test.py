@@ -33,6 +33,7 @@ from adanet.core.subnetwork import MaterializedReport
 from adanet.core.subnetwork import Report
 from adanet.core.subnetwork import SimpleGenerator
 from adanet.core.subnetwork import Subnetwork
+from adanet.core.subnetwork import TrainOpSpec
 from distutils.version import LooseVersion
 import tensorflow as tf
 
@@ -57,12 +58,20 @@ class _DNNBuilder(Builder):
                mixture_weight_learning_rate=.001,
                return_penultimate_layer=True,
                layer_size=1,
+               subnetwork_chief_hooks=None,
+               subnetwork_hooks=None,
+               mixture_weight_chief_hooks=None,
+               mixture_weight_hooks=None,
                seed=13):
     self._name = name
     self._learning_rate = learning_rate
     self._mixture_weight_learning_rate = mixture_weight_learning_rate
     self._return_penultimate_layer = return_penultimate_layer
     self._layer_size = layer_size
+    self._subnetwork_chief_hooks = subnetwork_chief_hooks
+    self._subnetwork_hooks = subnetwork_hooks
+    self._mixture_weight_chief_hooks = mixture_weight_chief_hooks
+    self._mixture_weight_hooks = mixture_weight_hooks
     self._seed = seed
 
   @property
@@ -127,13 +136,21 @@ class _DNNBuilder(Builder):
                                 iteration_step, summary, previous_ensemble):
     optimizer = tf.train.GradientDescentOptimizer(
         learning_rate=self._learning_rate)
-    return optimizer.minimize(loss, var_list=var_list)
+    train_op = optimizer.minimize(loss, var_list=var_list)
+    if not self._subnetwork_hooks:
+      return train_op
+    return TrainOpSpec(train_op, self._subnetwork_chief_hooks,
+                       self._subnetwork_hooks)
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
                                      iteration_step, summary):
     optimizer = tf.train.GradientDescentOptimizer(
         learning_rate=self._mixture_weight_learning_rate)
-    return optimizer.minimize(loss, var_list=var_list)
+    train_op = optimizer.minimize(loss, var_list=var_list)
+    if not self._mixture_weight_hooks:
+      return train_op
+    return TrainOpSpec(train_op, self._mixture_weight_chief_hooks,
+                       self._mixture_weight_hooks)
 
   def build_subnetwork_report(self):
     return Report(
@@ -299,7 +316,8 @@ class _WidthLimitingDNNBuilder(_DNNBuilder):
 class _ModifierSessionRunHook(tf.train.SessionRunHook):
   """Modifies the graph by adding a variable."""
 
-  def __init__(self):
+  def __init__(self, var_name="hook_created_variable"):
+    self._var_name = var_name
     self._begun = False
 
   def begin(self):
@@ -312,7 +330,7 @@ class _ModifierSessionRunHook(tf.train.SessionRunHook):
     if self._begun:
       raise ValueError("begin called twice without end.")
     self._begun = True
-    _ = tf.get_variable(name="foo", initializer="foo")
+    _ = tf.get_variable(name=self._var_name, initializer="")
 
   def end(self, session):
     """Adds a variable to the graph.
@@ -358,6 +376,42 @@ class EstimatorTest(tu.AdanetTestCase):
       "max_iteration_steps": 200,
       "use_bias": False,
       "want_loss": 0.496736,
+  }, {
+      "testcase_name":
+          "single_builder_subnetwork_hooks",
+      "subnetwork_generator":
+          SimpleGenerator([
+              _DNNBuilder(
+                  "dnn",
+                  subnetwork_chief_hooks=[
+                      _ModifierSessionRunHook("chief_hook_var")
+                  ],
+                  subnetwork_hooks=[_ModifierSessionRunHook("hook_var")])
+          ]),
+      "max_iteration_steps":
+          200,
+      "use_bias":
+          False,
+      "want_loss":
+          0.496736,
+  }, {
+      "testcase_name":
+          "single_builder_mixture_weight_hooks",
+      "subnetwork_generator":
+          SimpleGenerator([
+              _DNNBuilder(
+                  "dnn",
+                  mixture_weight_chief_hooks=[
+                      _ModifierSessionRunHook("chief_hook_var")
+                  ],
+                  mixture_weight_hooks=[_ModifierSessionRunHook("hook_var")])
+          ]),
+      "max_iteration_steps":
+          200,
+      "use_bias":
+          False,
+      "want_loss":
+          0.496736,
   }, {
       "testcase_name":
           "single_builder_scalar_mixture_weight",
@@ -1198,9 +1252,8 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
       "head":
           tf.contrib.estimator.regression_head(
               loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
-      "want_summaries": [
-          "average_loss", "average_loss/adanet/adanet_weighted_ensemble"
-      ],
+      "want_summaries":
+          ["average_loss", "average_loss/adanet/adanet_weighted_ensemble"],
       "want_loss":
           .96453667,
   }, {
@@ -1209,9 +1262,8 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
       "head":
           tf.contrib.estimator.binary_classification_head(
               loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
-      "want_summaries": [
-          "average_loss", "average_loss/adanet/adanet_weighted_ensemble"
-      ],
+      "want_summaries":
+          ["average_loss", "average_loss/adanet/adanet_weighted_ensemble"],
       "want_loss":
           0.6909014,
   }, {
@@ -1628,11 +1680,9 @@ class EstimatorReportTest(tu.AdanetTestCase):
 
   @parameterized.named_parameters(
       {
-          "testcase_name":
-              "one_iteration_one_subnetwork",
+          "testcase_name": "one_iteration_one_subnetwork",
           "subnetwork_builders": [_DNNBuilder("dnn", layer_size=1),],
-          "num_iterations":
-              1,
+          "num_iterations": 1,
           "want_materialized_iteration_reports": [[
               MaterializedReport(
                   iteration_number=0,
@@ -1651,8 +1701,7 @@ class EstimatorReportTest(tu.AdanetTestCase):
           "want_all_reports": [],
       },
       {
-          "testcase_name":
-              "one_iteration_three_subnetworks",
+          "testcase_name": "one_iteration_three_subnetworks",
           "subnetwork_builders": [
               # learning_rate is set to 0 for all but one Builder
               # to make sure that only one of them can learn.
@@ -1669,8 +1718,7 @@ class EstimatorReportTest(tu.AdanetTestCase):
               # fixing the match for dnn_3 to win.
               _DNNBuilder("dnn_3", layer_size=3),
           ],
-          "num_iterations":
-              1,
+          "num_iterations": 1,
           "want_materialized_iteration_reports": [[
               MaterializedReport(
                   iteration_number=0,
@@ -2192,16 +2240,13 @@ class EstimatorForceGrowTest(tu.AdanetTestCase):
       "force_grow": True,
       "want_subnetworks": 2,
   }, {
-      "testcase_name":
-          "two_builders",
+      "testcase_name": "two_builders",
       "builders": [
           _LinearBuilder("linear", mixture_weight_learning_rate=0.),
           _LinearBuilder("linear2", mixture_weight_learning_rate=0.)
       ],
-      "force_grow":
-          True,
-      "want_subnetworks":
-          2,
+      "force_grow": True,
+      "want_subnetworks": 2,
   }, {
       "testcase_name":
           "two_builders_with_evaluator",

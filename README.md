@@ -1,5 +1,6 @@
 # AdaNet
 
+[![Documentation Status](https://readthedocs.org/projects/adanet/badge/?version=latest)](https://adanet.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://badge.fury.io/py/adanet.svg)](https://badge.fury.io/py/adanet)
 [![Travis](https://travis-ci.org/tensorflow/adanet.svg?branch=master)](https://travis-ci.org/tensorflow/adanet)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/tensorflow/adanet/blob/master/LICENSE)
@@ -80,6 +81,7 @@ predictions = estimator.predict(input_fn=predict_input_fn)
 
 To get you started:
 
+- [API Documentation](https://adanet.readthedocs.io)
 - [Tutorials: for understanding the AdaNet algorithm and learning to use this package](./adanet/examples/tutorials)
 
 ## Requirements
@@ -108,12 +110,12 @@ Next clone the `adanet` repository:
 
 ```shell
 $ git clone https://github.com/tensorflow/adanet
+$ cd adanet
 ```
 
 From the `adanet` root directory run the tests:
 
 ```shell
-$ cd adanet
 $ bazel test -c opt //...
 ```
 
@@ -124,6 +126,21 @@ You are now ready to experiment with `adanet`.
 ```python
 import adanet
 ```
+
+## Citing this Work
+
+If you use this AdaNet library for academic research, you are encouraged to cite the following:
+
+    @misc{weill2018adanet,
+      author    = {Charles Weill and Javier Gonzalvo and Vitaly Kuznetsov and
+        Scott Yang and Scott Yak and Hanna Mazzawi and Eugen Hotaj and
+        Ghassen Jerfel and Vladimir Macko and Mehryar Mohri and Corinna Cortes},
+      title     = {AdaNet: Fast and flexible AutoML with learning guarantees},
+      year      = {2018},
+      publisher = {GitHub},
+      journal = {GitHub repository},
+      howpublished = {\url{https://github.com/tensorflow/adanet}},
+    }
 
 ## License
 
