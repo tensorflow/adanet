@@ -33,10 +33,10 @@ fi
 pip install -q -U numpy
 
 # Install Bazel for tests.
-# Step 1: Install the JDK
-sudo apt-get install openjdk-8-jdk
+# Step 1: Install required packages
+sudo apt-get install pkg-config zip g++ zlib1g-dev unzip python
 
-# Step 2: Install Bazel using binary installer
+# Step 2: Download Bazel binary installer
 wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
 
 # Step 3: Install Bazel
