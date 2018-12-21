@@ -94,7 +94,7 @@ class _Iteration(
         step=step)
 
 
-def is_over_var():
+def _is_over_var():
   var = tf.get_variable(
       "is_over_var",
       shape=[],
@@ -287,7 +287,7 @@ class _IterationBuilder(object):
       # Hooks on TPU cannot depend on any graph `Tensors`. Instead the value of
       # `is_over` is stored in a `Variable` that can later be retrieved from
       # inside a training hook.
-      is_over_var_fn = tf.make_template("is_over_var_fn", is_over_var)
+      is_over_var_template = tf.make_template("is_over_var_fn", _is_over_var)
 
       training_chief_hooks, training_hooks = (), ()
       for candidate in candidates:
@@ -301,7 +301,7 @@ class _IterationBuilder(object):
           predictions=best_predictions,
           loss=best_loss,
           train_op=self._create_train_op(candidates, mode, iteration_step,
-                                         is_over_var_fn),
+                                         is_over_var_template),
           eval_metric_ops=best_eval_metric_ops,
           export_outputs=best_export_outputs,
           training_chief_hooks=training_chief_hooks,
@@ -313,18 +313,23 @@ class _IterationBuilder(object):
           estimator_spec=estimator_spec,
           best_candidate_index=best_candidate_index,
           summaries=summaries,
-          is_over_fn=is_over_var_fn,
+          is_over_fn=is_over_var_template,
           subnetwork_reports=subnetwork_reports,
           step=iteration_step_tensor)
 
-  def _is_over(self, candidates, is_over_var_fn):
+  def _assign_is_over(self, candidates, is_over_var_template):
     """Assigns whether the iteration is over to the is_over_var.
 
     The iteration is over once all candidates are done training.
 
+    Workers can only assign `is_over_var` to `True` when they think the
+    iteration is over, so that `is_over` cannot be undone in distributed
+    training. Effectively, the fastest worker will always determine when
+    training is over.
+
     Args:
       candidates: List of `_Candidate` instances to train.
-      is_over_var_fn: A fn()->tf.Variable which returns the is_over_var.
+      is_over_var_template: A fn()->tf.Variable which returns the is_over_var.
 
     Returns:
       An op which assigns whether the iteration is over to the is_over_var.
@@ -334,10 +339,12 @@ class _IterationBuilder(object):
       is_over = True
       for candidate in candidates:
         is_over = tf.logical_and(is_over, tf.logical_not(candidate.is_training))
-      var = is_over_var_fn()
-      return tf.assign(var, is_over)
+      is_over_var = is_over_var_template()
+      return tf.cond(
+          is_over, lambda: tf.assign(is_over_var, True, name="assign_is_over"),
+          lambda: tf.no_op("noassign_is_over"))
 
-  def _create_train_op(self, candidates, mode, step, is_over_var_fn):
+  def _create_train_op(self, candidates, mode, step, is_over_var_template):
     """Returns the train op for this set of candidates.
 
     This train op combines the train ops from all the candidates into a single
@@ -351,7 +358,7 @@ class _IterationBuilder(object):
         op is only non-None during `TRAIN`. See `ModeKeys`.
       step: Integer `Variable` for the current step of the iteration, as opposed
         to the global step.
-      is_over_var_fn: A fn()->tf.Variable which returns the is_over_var.
+      is_over_var_template: A fn()->tf.Variable which returns the is_over_var.
 
     Returns:
       A `Tensor` train op.
@@ -366,7 +373,7 @@ class _IterationBuilder(object):
           # The train op of a previous ensemble is None even during `TRAIN`.
           train_ops.append(candidate.ensemble_spec.subnetwork_train_op.train_op)
           train_ops.append(candidate.ensemble_spec.ensemble_train_op.train_op)
-      train_ops.append(self._is_over(candidates, is_over_var_fn))
+      train_ops.append(self._assign_is_over(candidates, is_over_var_template))
       with tf.control_dependencies(train_ops):
         # AdaNet is responsible for incrementing the global step, not the
         # candidates it trains. Incrementing the global step and iteration step
