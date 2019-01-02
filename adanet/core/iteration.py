@@ -295,6 +295,8 @@ class _IterationBuilder(object):
         if not spec.subnetwork_train_op:
           continue
         training_chief_hooks += spec.subnetwork_train_op.chief_hooks or ()
+        training_chief_hooks += spec.ensemble_train_op.chief_hooks or ()
+        training_hooks += spec.subnetwork_train_op.hooks or ()
         training_hooks += spec.ensemble_train_op.hooks or ()
       estimator_spec = tf.estimator.EstimatorSpec(
           mode=mode,
