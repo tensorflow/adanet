@@ -42,7 +42,6 @@ setup(
     long_description='',
     url='https://github.com/tensorflow/adanet',
     author='Google LLC',
-    author_email='opensource@google.com',
     install_requires=REQUIRED_PACKAGES,
     packages=find_packages(),
     # PyPI package information.
