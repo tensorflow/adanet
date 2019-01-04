@@ -9,6 +9,7 @@ python:
 env:
   global:
     - TF_LATEST="1.12.*"
+    - CODECOV_TOKEN="91e8c95b-3e94-4e14-8878-5dd196ee3f22"
   matrix:
     # We test against recent versions of TensorFlow and tf-nightly.
     # If updating, also update TF_LATEST above
@@ -19,6 +20,14 @@ env:
     - TF_VERSION="1.12.*"
     - TF_VERSION="tf-nightly"
 install:
+  # Install coverage for collecting coverage reports.
+  - pip install --user coverage
+  # Install nose for running the test suite with coverage.
+  - pip install --user nose
+  # Install codecov for tracking coverage over time.
+  - pip install --user codecov
   - ./oss_scripts/oss_pip_install.sh
 script:
-  - bazel test -c opt //... --test_output=errors
+  - ./oss_scripts/oss_test.sh
+after_success:
+  - codecov
