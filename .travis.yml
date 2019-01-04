@@ -21,11 +21,11 @@ env:
     - TF_VERSION="tf-nightly"
 install:
   # Install coverage for collecting coverage reports.
-  - pip install --user coverage
+  - pip install coverage
   # Install nose for running the test suite with coverage.
-  - pip install --user nose
+  - pip install nose
   # Install codecov for tracking coverage over time.
-  - pip install --user codecov
+  - pip install codecov
   - ./oss_scripts/oss_pip_install.sh
 script:
   - ./oss_scripts/oss_test.sh
