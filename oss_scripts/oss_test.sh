@@ -18,11 +18,12 @@ set -v  # print commands as they're executed
 set -e  # fail and exit on any command erroring
 
 # Install coverage for collecting coverage reports.
-pip install -q -U coverage
+pip install coverage
 
 # Install nose for running the test suite with coverage.
-pip install -q -U nose
+pip install nose rednose
 
+# Build with Bazel.
 bazel build -c opt //...
 
 # Copy Bazel generated code for report proto.
