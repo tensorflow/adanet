@@ -25,6 +25,7 @@ dist/
 
 # Tests
 .pytest_cache/
+.coverage
 
 # Other
 *.DS_Store

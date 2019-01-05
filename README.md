@@ -3,7 +3,7 @@
 [![Documentation Status](https://readthedocs.org/projects/adanet/badge/?version=latest)](https://adanet.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://badge.fury.io/py/adanet.svg)](https://badge.fury.io/py/adanet)
 [![Travis](https://travis-ci.org/tensorflow/adanet.svg?branch=master)](https://travis-ci.org/tensorflow/adanet)
-[![codecov](https://codecov.io/gh/cweill/adanet/branch/master/graph/badge.svg)](https://codecov.io/gh/cweill/adanet)
+[![codecov](https://codecov.io/gh/tensorflow/adanet/branch/master/graph/badge.svg)](https://codecov.io/gh/tensorflow/adanet)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/tensorflow/adanet/blob/master/LICENSE)
 
 <div align="center">
