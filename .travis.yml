@@ -9,7 +9,7 @@ python:
 env:
   global:
     - TF_LATEST="1.12.*"
-    - CODECOV_TOKEN="91e8c95b-3e94-4e14-8878-5dd196ee3f22"
+    - CODECOV_TOKEN="0d2c482b-f42c-4d4c-b092-cb628ad20857"
   matrix:
     # We test against recent versions of TensorFlow and tf-nightly.
     # If updating, also update TF_LATEST above
