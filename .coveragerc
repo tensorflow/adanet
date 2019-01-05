@@ -25,6 +25,7 @@ ignore_errors = True
 
 omit =
     *_test.py
+    */nasnet.py
 
 [html]
 directory = coverage_html_report
