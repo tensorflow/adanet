@@ -625,7 +625,8 @@ class Estimator(tf.estimator.Estimator):
     frozen_checkpoint = os.path.join(self.model_dir, "architecture")
     return "{}-{}.txt".format(frozen_checkpoint, iteration_number)
 
-  def _overwrite_checkpoint(self, current_iteration, iteration_number_tensor):
+  def _overwrite_checkpoint(self, current_iteration, iteration_number_tensor,
+                            restore_saver):
     """Overwrites the latest checkpoint with the current graph.
 
     This is necessary for two reasons:
@@ -639,6 +640,8 @@ class Estimator(tf.estimator.Estimator):
       current_iteration: Current `_Iteration` object.
       iteration_number_tensor: Int variable `Tensor` storing the current
         iteration number.
+      restore_saver: A `tf.train.Saver` instance for restoring variable
+        values from a checkpoint.
     """
 
     checkpoint_state = tf.train.get_checkpoint_state(self.model_dir)
@@ -671,6 +674,7 @@ class Estimator(tf.estimator.Estimator):
           tf.tables_initializer(),
           resources.initialize_resources(resources.shared_resources()))
       sess.run(init)
+      restore_saver.restore(sess, latest_checkpoint)
       coord = tf.train.Coordinator()
       tf.train.start_queue_runners(sess=sess, coord=coord)
       control_deps = [
@@ -1099,9 +1103,12 @@ class Estimator(tf.estimator.Estimator):
         previous_ensemble = previous_ensemble_spec.ensemble
         previous_ensemble_summary = _ScopedSummary(
             previous_ensemble_spec.name, skip_summary=skip_summaries)
+      restore_saver = None
       if self._Keys.INCREMENT_ITERATION in params:
-        latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
-        tf.train.warm_start(latest_checkpoint, vars_to_warm_start=[".*"])
+        # Create Saver now so that it only restores the current variables in the
+        # graph from the checkpoint. After this line, any variables created will
+        # not have a matching one in the checkpoint until it gets overwritten.
+        restore_saver = tf.train.Saver()
       previous_ensemble_reports, all_reports = [], []
       if self._report_materializer:
         previous_ensemble_reports, all_reports = (
@@ -1168,6 +1175,7 @@ class Estimator(tf.estimator.Estimator):
       tf.logging.info(
           "Overwriting checkpoint with new graph for iteration %s to %s",
           iteration_number, latest_checkpoint)
-      self._overwrite_checkpoint(current_iteration, iteration_number_tensor)
+      self._overwrite_checkpoint(current_iteration, iteration_number_tensor,
+                                 restore_saver)
 
     return estimator_spec
