@@ -311,11 +311,12 @@ class _ScopedSummary(Summary):
     return summary
 
   def merge_all(self):
-    """Returns the list of summaries added using this _ScopedSummary.
+    """Returns the list of this graph's scoped summary ops.
 
     Note: this is an abuse of the tf.summary.merge_all API since it is expected
     to return a summary op with all summaries merged. However, ScopedSummary is
     only used in the internal implementation, so this should be OK.
     """
 
-    return self._summary_ops
+    current_graph = tf.get_default_graph()
+    return [op for op in self._summary_ops if op.graph == current_graph]

@@ -300,7 +300,14 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
       summary.ParseFromString(sess.run(s3))
       self.assertEqual(summary.value[0].tag, "name/with/leading/slash")
 
-  def test_merge_all(self):
+  @parameterized.named_parameters({
+      "testcase_name": "single_graph",
+      "nest_graph": False,
+  }, {
+      "testcase_name": "nested_graph",
+      "nest_graph": True,
+  })
+  def test_merge_all(self, nest_graph):
     c0 = tf.constant(0)
     c1 = tf.constant(1)
 
@@ -316,11 +323,21 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     scoped_summary2.scalar("c0", c0)
     scoped_summary2.scalar("c1", c1)
 
-    summary = tf.Summary()
+    if nest_graph:
+      with tf.Graph().as_default():
+        scoped_summary2.scalar("c2", tf.constant(2))
+        with tf.Session() as sess:
+          summaries = scoped_summary2.merge_all()
+          tf.logging.warn("summaries %s", summaries)
+          summary = tf.Summary()
+          summary.ParseFromString(sess.run(tf.summary.merge(summaries)))
+          self.assertEqual(["c2"], [s.tag for s in summary.value])
+          self.assertEqual([2], [s.simple_value for s in summary.value])
 
-    with self.test_session() as sess:
+    with tf.Session() as sess:
       for scoped_summary in [scoped_summary0, scoped_summary1, scoped_summary2]:
         summaries = scoped_summary.merge_all()
+        summary = tf.Summary()
         summary.ParseFromString(sess.run(tf.summary.merge(summaries)))
         self.assertEqual(["c0", "c1"], [s.tag for s in summary.value])
         self.assertEqual([0, 1], [s.simple_value for s in summary.value])
