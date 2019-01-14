@@ -658,6 +658,13 @@ class Estimator(tf.estimator.Estimator):
         # iterations.
         hook._saver = None  # pylint: disable=protected-access
 
+    # Remove all CheckpointSaverHooks since they are not intended to run between
+    # training runs and will cause errors.
+    train_hooks = [
+        hook for hook in train_hooks
+        if not isinstance(hook, tf.train.CheckpointSaverHook)
+    ]
+
     for hook in train_hooks:
       hook.begin()
 

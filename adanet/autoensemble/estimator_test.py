@@ -131,9 +131,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     features = {"input_1": [[1., 0.]]}
     labels = [[1.]]
 
-    run_config = tf.estimator.RunConfig(tf_random_seed=42,
-                                        save_checkpoints_steps=2,
-                                        keep_checkpoint_max=2)
+    run_config = tf.estimator.RunConfig(tf_random_seed=42)
     head = tf.contrib.estimator.binary_classification_head(
         loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
@@ -152,7 +150,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
                 optimizer=optimizer,
                 hidden_units=[3]),
         ],
-        max_iteration_steps=4,
+        max_iteration_steps=3,
         force_grow=True,
         model_dir=self.test_subdirectory,
         config=run_config)
@@ -167,7 +165,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
       input_labels = tf.constant(labels, name="labels")
       return input_features, input_labels
 
-    estimator.train(input_fn=train_input_fn, max_steps=12, hooks=hooks)
+    estimator.train(input_fn=train_input_fn, max_steps=6, hooks=hooks)
 
 if __name__ == "__main__":
   tf.test.main()
