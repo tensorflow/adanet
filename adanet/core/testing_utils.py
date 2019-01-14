@@ -81,8 +81,6 @@ def dummy_ensemble_spec(name,
 
   if loss is None:
     loss = dummy_tensor([], random_seed)
-  elif not isinstance(loss, tf.Tensor):
-    loss = tf.constant(loss)
 
   if adanet_loss is None:
     adanet_loss = dummy_tensor([], random_seed * 2)
@@ -159,7 +157,6 @@ def _dummy_export_outputs(export_output_key, logits, predictions):
 
 def dummy_estimator_spec(loss=None,
                          random_seed=42,
-                         dict_predictions=False,
                          eval_metric_ops=None):
   """Creates a dummy `EstimatorSpec` instance.
 
@@ -167,8 +164,6 @@ def dummy_estimator_spec(loss=None,
     loss: Float loss to return. When None, it's picked from a random
       distribution.
     random_seed: Scalar seed for random number generators.
-    dict_predictions: Boolean whether to return predictions as a dictionary of
-      `Tensor` or just a single float `Tensor`.
     eval_metric_ops: Optional dictionary of metric ops.
 
   Returns:
@@ -177,14 +172,7 @@ def dummy_estimator_spec(loss=None,
 
   if loss is None:
     loss = dummy_tensor([], random_seed)
-  elif not isinstance(loss, tf.Tensor):
-    loss = tf.constant(loss)
   predictions = dummy_tensor([], random_seed * 2)
-  if dict_predictions:
-    predictions = {
-        "logits": predictions,
-        "classes": tf.cast(tf.abs(predictions), dtype=tf.int64)
-    }
   return tf.estimator.EstimatorSpec(
       mode=tf.estimator.ModeKeys.TRAIN,
       predictions=predictions,
@@ -224,51 +212,6 @@ def dataset_input_fn(features=8., labels=9.):
     return {"x": input_features}, input_labels
 
   return _input_fn
-
-
-class FakeSparseTensor(object):
-  """A fake SparseTensor."""
-
-  def __init__(self, indices, values, dense_shape):
-    self.indices = indices
-    self.values = values
-    self.dense_shape = dense_shape
-
-
-class FakePlaceholder(object):
-  """A fake Placeholder."""
-
-  def __init__(self, dtype, shape=None):
-    self.dtype = dtype
-    self.shape = shape
-
-
-class FakeSparsePlaceholder(object):
-  """A fake SparsePlaceholder."""
-
-  def __init__(self, dtype, shape=None):
-    self.dtype = dtype
-    self.shape = shape
-
-
-def tensor_features(features):
-  """Returns features as tensors, replacing Fakes."""
-
-  result = {}
-  for key, feature in features.items():
-    if isinstance(feature, FakeSparseTensor):
-      feature = tf.SparseTensor(
-          indices=feature.indices,
-          values=feature.values,
-          dense_shape=feature.dense_shape)
-    elif isinstance(feature, FakeSparsePlaceholder):
-      feature = tf.sparse_placeholder(dtype=feature.dtype)
-    elif isinstance(feature, FakePlaceholder):
-      feature = tf.placeholder(dtype=feature.dtype)
-    else:
-      feature = tf.convert_to_tensor(feature)
-    result[key] = feature
-  return result
 
 
 def head():

@@ -325,7 +325,6 @@ class Estimator(tf.estimator.Estimator):
     EVALUATE_ENSEMBLES = "evaluate_ensembles"
     MATERIALIZE_REPORT = "materialize_report"
     INCREMENT_ITERATION = "increment_iteration"
-    PREVIOUS_ENSEMBLE_ARCHITECTURE = "previous_ensemble_architecture"
     SUBNETWORK_GENERATOR = "subnetwork_generator"
 
   def __init__(self,
@@ -420,15 +419,6 @@ class Estimator(tf.estimator.Estimator):
       return 0
     return tf.contrib.framework.load_variable(latest_checkpoint,
                                               self._Keys.CURRENT_ITERATION)
-
-  def _latest_checkpoint_architecture(self):
-    """Returns the iteration number from the latest checkpoint."""
-
-    latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
-    if latest_checkpoint is None:
-      return ""
-    return tf.contrib.framework.load_variable(
-        latest_checkpoint, self._Keys.PREVIOUS_ENSEMBLE_ARCHITECTURE)
 
   def _latest_checkpoint_global_step(self):
     """Returns the global step from the latest checkpoint."""
