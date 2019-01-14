@@ -25,9 +25,9 @@ import functools
 import inspect
 
 from adanet.core.subnetwork import TrainOpSpec
+from adanet.core.summary import monkey_patched_summaries
 import tensorflow as tf
 
-from tensorflow.python.summary import summary as summary_lib
 from tensorflow.python.training import training_util
 
 _VALID_METRIC_FN_ARGS = set(["features", "labels", "predictions"])
@@ -263,10 +263,6 @@ def _subnetwork_context(iteration_step_scope, scoped_summary):
 
   old_get_global_step_fn = tf.train.get_global_step
   old_get_or_create_global_step_fn = tf.train.get_or_create_global_step
-  old_summary_scalar = summary_lib.scalar
-  old_summary_image = summary_lib.image
-  old_summary_histogram = summary_lib.histogram
-  old_summary_audio = summary_lib.audio
 
   def iteration_step(graph=None):
     del graph
@@ -278,36 +274,21 @@ def _subnetwork_context(iteration_step_scope, scoped_summary):
           trainable=False,
           dtype=tf.int64)
 
-  # Monkey-patch global attributes.
-  tf.summary.scalar = scoped_summary.scalar
-  tf.summary.image = scoped_summary.image
-  tf.summary.histogram = scoped_summary.histogram
-  tf.summary.audio = scoped_summary.audio
-  summary_lib.scalar = scoped_summary.scalar
-  summary_lib.image = scoped_summary.image
-  summary_lib.histogram = scoped_summary.histogram
-  summary_lib.audio = scoped_summary.audio
+  # monkey-patch global attributes.
   tf.train.get_global_step = iteration_step
   tf.train.get_or_create_global_step = iteration_step
   training_util.get_global_step = iteration_step
   training_util.get_or_create_global_step = iteration_step
 
   try:
-    yield
+    with monkey_patched_summaries(scoped_summary):
+      yield
   finally:
     # Revert monkey-patches.
     training_util.get_or_create_global_step = old_get_or_create_global_step_fn
     training_util.get_global_step = old_get_global_step_fn
     tf.train.get_or_create_global_step = old_get_or_create_global_step_fn
     tf.train.get_global_step = old_get_global_step_fn
-    summary_lib.audio = old_summary_audio
-    summary_lib.histogram = old_summary_histogram
-    summary_lib.image = old_summary_image
-    summary_lib.scalar = old_summary_scalar
-    tf.summary.audio = old_summary_audio
-    tf.summary.histogram = old_summary_histogram
-    tf.summary.image = old_summary_image
-    tf.summary.scalar = old_summary_scalar
 
 
 def _clear_trainable_variables():

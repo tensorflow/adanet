@@ -140,6 +140,7 @@ py_library(
     name = "ensemble",
     srcs = ["ensemble.py"],
     deps = [
+        ":summary",
         "//adanet/core/subnetwork",
     ],
 )

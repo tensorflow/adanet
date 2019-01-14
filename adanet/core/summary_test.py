@@ -21,6 +21,7 @@ from __future__ import print_function
 
 from absl.testing import parameterized
 from adanet.core.summary import _ScopedSummary
+from adanet.core.summary import monkey_patched_summaries
 from six.moves import range
 import tensorflow as tf
 
@@ -341,6 +342,81 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
         summary.ParseFromString(sess.run(tf.summary.merge(summaries)))
         self.assertEqual(["c0", "c1"], [s.tag for s in summary.value])
         self.assertEqual([0, 1], [s.simple_value for s in summary.value])
+
+  def test_summary_args(self):
+    summary = _ScopedSummary()
+    summary.scalar("scalar", 1, "family")
+    summary.image("image", 1, 3, "family")
+    summary.histogram("histogram", 1, "family")
+    summary.audio("audio", 1, 3, 3, "family")
+    self.assertLen(summary.merge_all(), 4)
+
+  def test_summary_kwargs(self):
+    summary = _ScopedSummary()
+    summary.scalar(name="scalar", tensor=1, family="family")
+    summary.image(name="image", tensor=1, max_outputs=3, family="family")
+    summary.histogram(name="histogram", values=1, family="family")
+    summary.audio(
+        name="audio", tensor=1, sample_rate=3, max_outputs=3, family="family")
+    self.assertLen(summary.merge_all(), 4)
+
+  def test_monkey_patched_summaries_args(self):
+    summary = _ScopedSummary()
+    with monkey_patched_summaries(summary):
+      tf.summary.scalar("scalar", 1, ["collection"], "family")
+      tf.summary.image("image", 1, 3, ["collection"], "family")
+      tf.summary.histogram("histogram", 1, ["collection"], "family")
+      tf.summary.audio("audio", 1, 3, 3, ["collection"], "family")
+
+      tf.contrib.summary.scalar("scalar_v2", 1, "family", 10)
+      tf.contrib.summary.image("image_v2", 1, True, 3, "family", 10)
+      tf.contrib.summary.histogram("histogram_v2", 1, "family", 10)
+      tf.contrib.summary.audio("audio_v2", 1, 3, 3, "family", 10)
+    self.assertLen(summary.merge_all(), 8)
+
+  def test_monkey_patched_summaries_kwargs(self):
+    summary = _ScopedSummary()
+    with monkey_patched_summaries(summary):
+      tf.summary.scalar(
+          name="scalar", tensor=1, collections=["collection"], family="family")
+      tf.summary.image(
+          name="image",
+          tensor=1,
+          max_outputs=3,
+          collections=["collection"],
+          family="family")
+      tf.summary.histogram(
+          name="histogram",
+          values=1,
+          collections=["collection"],
+          family="family")
+      tf.summary.audio(
+          name="audio",
+          tensor=1,
+          sample_rate=3,
+          max_outputs=3,
+          collections=["collection"],
+          family="family")
+
+      tf.contrib.summary.scalar(
+          name="scalar_v2", tensor=1, family="family", step=10)
+      tf.contrib.summary.image(
+          name="image_v2",
+          tensor=1,
+          bad_color=True,
+          max_images=3,
+          family="family",
+          step=10)
+      tf.contrib.summary.histogram(
+          name="histogram_v2", tensor=1, family="family", step=10)
+      tf.contrib.summary.audio(
+          name="audio_v2",
+          tensor=1,
+          sample_rate=3,
+          max_outputs=3,
+          family="family",
+          step=10)
+    self.assertLen(summary.merge_all(), 8)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,8 @@ import contextlib
 import tensorflow as tf
 from tensorflow.contrib.tpu.python.tpu import tpu_function
 from tensorflow.python.ops import summary_op_util
+from tensorflow.python.ops import summary_ops_v2 as summary_v2_lib
+from tensorflow.python.summary import summary as summary_lib
 
 
 class Summary(object):
@@ -320,3 +322,182 @@ class _ScopedSummary(Summary):
 
     current_graph = tf.get_default_graph()
     return [op for op in self._summary_ops if op.graph == current_graph]
+
+
+class _SummaryWrapper(object):
+  """Wraps an `adanet.Summary` to provide summary-like APIs."""
+
+  def __init__(self, summary):
+    self._summary = summary
+
+  def scalar(self, name, tensor, collections=None, family=None):
+    """See `tf.summary.scalar`."""
+
+    if collections is not None:
+      tf.logging.warning(
+          "The `collections` argument will be "
+          "ignored for scalar summary: %s, %s", name, tensor)
+    return self._summary.scalar(name=name, tensor=tensor, family=family)
+
+  def image(self, name, tensor, max_outputs=3, collections=None, family=None):
+    """See `tf.summary.image`."""
+
+    if collections is not None:
+      tf.logging.warning(
+          "The `collections` argument will be "
+          "ignored for image summary: %s, %s", name, tensor)
+    return self._summary.image(
+        name=name, tensor=tensor, max_outputs=max_outputs, family=family)
+
+  def histogram(self, name, values, collections=None, family=None):
+    """See `tf.summary.histogram`."""
+
+    if collections is not None:
+      tf.logging.warning(
+          "The `collections` argument will be "
+          "ignored for histogram summary: %s, %s", name, values)
+    return self._summary.histogram(name=name, values=values, family=family)
+
+  def audio(self,
+            name,
+            tensor,
+            sample_rate,
+            max_outputs=3,
+            collections=None,
+            family=None):
+    """See `tf.summary.audio`."""
+
+    if collections is not None:
+      tf.logging.warning(
+          "The `collections` argument will be "
+          "ignored for audio summary: %s, %s", name, tensor)
+    return self._summary.audio(
+        name=name,
+        tensor=tensor,
+        sample_rate=sample_rate,
+        max_outputs=max_outputs,
+        family=family)
+
+  def scalar_v2(self, name, tensor, family=None, step=None):
+    """See `tf.contrib.summary.scalar`."""
+
+    if step is not None:
+      tf.logging.warning(
+          "The `step` argument will be ignored to use the global step for "
+          "scalar summary: %s, %s", name, tensor)
+    return self._summary.scalar(name=name, tensor=tensor, family=family)
+
+  def image_v2(self,
+               name,
+               tensor,
+               bad_color=None,
+               max_images=3,
+               family=None,
+               step=None):
+    """See `tf.contrib.summary.image`."""
+
+    if step is not None:
+      tf.logging.warning(
+          "The `step` argument will be ignored to use the global step for "
+          "image summary: %s, %s", name, tensor)
+    # TODO: Add support for `bad_color` arg.
+    if bad_color is not None:
+      tf.logging.warning(
+          "The `bad_color` arg is not supported for image summary: %s, %s",
+          name, tensor)
+    return self._summary.image(
+        name=name, tensor=tensor, max_outputs=max_images, family=family)
+
+  def histogram_v2(self, name, tensor, family=None, step=None):
+    """See `tf.contrib.summary.histogram`."""
+
+    if step is not None:
+      tf.logging.warning(
+          "The `step` argument will be ignored to use the global step for "
+          "histogram summary: %s, %s", name, tensor)
+    return self._summary.histogram(name=name, values=tensor, family=family)
+
+  def audio_v2(self,
+               name,
+               tensor,
+               sample_rate,
+               max_outputs,
+               family=None,
+               step=None):
+    """See `tf.contrib.summary.audio`."""
+
+    if step is not None:
+      tf.logging.warning(
+          "The `step` argument will be ignored to use the global step for "
+          "audio summary: %s, %s", name, tensor)
+    return self._summary.audio(
+        name=name,
+        tensor=tensor,
+        sample_rate=sample_rate,
+        max_outputs=max_outputs,
+        family=family)
+
+
+@contextlib.contextmanager
+def monkey_patched_summaries(summary):
+  """A context where global summary functions point to the given summary.
+
+  Restores original summary functions upon exit.
+
+  NOTE: This function is not thread-safe.
+
+  Args:
+    summary: An `adanet.Summary` instance.
+
+  Yields:
+    A context where summary functions are routed to the given `adanet.Summary`.
+  """
+
+  old_summary_scalar = summary_lib.scalar
+  old_summary_image = summary_lib.image
+  old_summary_histogram = summary_lib.histogram
+  old_summary_audio = summary_lib.audio
+  old_summary_v2_scalar = summary_v2_lib.scalar
+  old_summary_v2_image = summary_v2_lib.image
+  old_summary_v2_histogram = summary_v2_lib.histogram
+  old_summary_v2_audio = summary_v2_lib.audio
+
+  # Monkey-patch global attributes.
+  wrapped_summary = _SummaryWrapper(summary)
+  tf.summary.scalar = wrapped_summary.scalar
+  tf.summary.image = wrapped_summary.image
+  tf.summary.histogram = wrapped_summary.histogram
+  tf.summary.audio = wrapped_summary.audio
+  summary_lib.scalar = wrapped_summary.scalar
+  summary_lib.image = wrapped_summary.image
+  summary_lib.histogram = wrapped_summary.histogram
+  summary_lib.audio = wrapped_summary.audio
+  tf.contrib.summary.scalar = wrapped_summary.scalar_v2
+  tf.contrib.summary.image = wrapped_summary.image_v2
+  tf.contrib.summary.histogram = wrapped_summary.histogram_v2
+  tf.contrib.summary.audio = wrapped_summary.audio_v2
+  summary_v2_lib.scalar = wrapped_summary.scalar_v2
+  summary_v2_lib.image = wrapped_summary.image_v2
+  summary_v2_lib.histogram = wrapped_summary.histogram_v2
+  summary_v2_lib.audio = wrapped_summary.audio_v2
+
+  try:
+    yield
+  finally:
+    # Revert monkey-patches.
+    summary_v2_lib.audio = old_summary_v2_audio
+    summary_v2_lib.histogram = old_summary_v2_histogram
+    summary_v2_lib.image = old_summary_v2_image
+    summary_v2_lib.scalar = old_summary_v2_scalar
+    tf.contrib.summary.audio = old_summary_v2_audio
+    tf.contrib.summary.histogram = old_summary_v2_histogram
+    tf.contrib.summary.image = old_summary_v2_image
+    tf.contrib.summary.scalar = old_summary_v2_scalar
+    summary_lib.audio = old_summary_audio
+    summary_lib.histogram = old_summary_histogram
+    summary_lib.image = old_summary_image
+    summary_lib.scalar = old_summary_scalar
+    tf.summary.audio = old_summary_audio
+    tf.summary.histogram = old_summary_histogram
+    tf.summary.image = old_summary_image
+    tf.summary.scalar = old_summary_scalar
