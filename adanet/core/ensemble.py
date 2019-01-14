@@ -317,7 +317,19 @@ def _clear_trainable_variables():
 def _set_trainable_variables(var_list):
   _clear_trainable_variables()
   for var in var_list:
+    assert isinstance(var, tf.Variable)
     tf.add_to_collections(tf.GraphKeys.TRAINABLE_VARIABLES, var)
+
+
+def _get_ensemble_var_list(weighted_subnetworks):
+  var_list = []
+  for weighted_subnetwork in weighted_subnetworks:
+    weight = weighted_subnetwork.weight
+    if isinstance(weight, dict):
+      var_list.extend(weight.values())
+    else:
+      var_list.append(weight)
+  return var_list
 
 
 class _EnsembleBuilder(object):
@@ -663,7 +675,7 @@ class _EnsembleBuilder(object):
       # Note that these mixture weights are on top of the last_layer of the
       # subnetwork constructed in TRAIN mode, which means that dropout is
       # still applied when the mixture weights are being trained.
-      ensemble_var_list = [w.weight for w in weighted_subnetworks]
+      ensemble_var_list = _get_ensemble_var_list(weighted_subnetworks)
       if self._use_bias:
         ensemble_var_list.insert(0, bias)
       _set_trainable_variables(ensemble_var_list)

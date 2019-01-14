@@ -39,11 +39,13 @@ class _Builder(Builder):
                subnetwork_train_op_fn,
                mixture_weights_train_op_fn,
                use_logits_last_layer,
-               seed=42):
+               seed=42,
+               multi_head=False):
     self._subnetwork_train_op_fn = subnetwork_train_op_fn
     self._mixture_weights_train_op_fn = mixture_weights_train_op_fn
     self._use_logits_last_layer = use_logits_last_layer
     self._seed = seed
+    self._multi_head = multi_head
 
   @property
   def name(self):
@@ -75,10 +77,22 @@ class _Builder(Builder):
     assert "fake_histogram" == tf.summary.histogram("histogram", 1.)
     assert "fake_audio" == tf.summary.audio("audio", 1., 1.)
     last_layer = tu.dummy_tensor(shape=(2, 3))
-    logits = tf.layers.dense(
-        last_layer,
-        units=logits_dimension,
-        kernel_initializer=tf.glorot_uniform_initializer(seed=self._seed))
+
+    def logits_fn(logits_dim):
+      return tf.layers.dense(
+          last_layer,
+          units=logits_dim,
+          kernel_initializer=tf.glorot_uniform_initializer(seed=self._seed))
+
+    if self._multi_head:
+      logits = {
+          "head1": logits_fn(logits_dimension / 2),
+          "head2": logits_fn(logits_dimension / 2)
+      }
+      last_layer = {"head1": last_layer, "head2": last_layer}
+    else:
+      logits = logits_fn(logits_dimension)
+
     return Subnetwork(
         last_layer=logits if self._use_logits_last_layer else last_layer,
         logits=logits,
@@ -234,6 +248,17 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_loss": 1.351,
       "want_adanet_loss": 1.364,
       "want_mixture_weight_vars": 1,
+  }, {
+      "testcase_name": "multi_head",
+      "want_logits": {
+          "head1": [[.016], [.117]],
+          "head2": [[.016], [.117]],
+      },
+      "want_loss": 2.675,
+      "want_adanet_loss": 2.675,
+      "multi_head": True,
+      "want_mixture_weight_vars": 2,
+      "want_num_trainable_vars": 4,
   })
   def test_append_new_subnetwork(
       self,
@@ -250,11 +275,22 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       mixture_weight_initializer=tf.zeros_initializer(),
       warm_start_mixture_weights=True,
       subnetwork_builder_class=_Builder,
-      mode=tf.estimator.ModeKeys.TRAIN):
+      mode=tf.estimator.ModeKeys.TRAIN,
+      multi_head=False,
+      want_num_trainable_vars=2):
     seed = 64
+    if multi_head:
+      head = tf.contrib.estimator.multi_head(heads=[
+          tf.contrib.estimator.binary_classification_head(
+              name="head1", loss_reduction=tf.losses.Reduction.SUM),
+          tf.contrib.estimator.binary_classification_head(
+              name="head2", loss_reduction=tf.losses.Reduction.SUM)
+      ])
+    else:
+      head = tf.contrib.estimator.binary_classification_head(
+          loss_reduction=tf.losses.Reduction.SUM)
     builder = _EnsembleBuilder(
-        head=tf.contrib.estimator.binary_classification_head(
-            loss_reduction=tf.losses.Reduction.SUM),
+        head=head,
         mixture_weight_type=mixture_weight_type,
         mixture_weight_initializer=mixture_weight_initializer,
         warm_start_mixture_weights=warm_start_mixture_weights,
@@ -264,10 +300,13 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
         use_bias=use_bias)
 
     features = {"x": tf.constant([[1.], [2.]])}
-    labels = tf.constant([0, 1])
+    if multi_head:
+      labels = {"head1": tf.constant([0, 1]), "head2": tf.constant([0, 1])}
+    else:
+      labels = tf.constant([0, 1])
 
     def _subnetwork_train_op_fn(loss, var_list):
-      self.assertEqual(2, len(var_list))
+      self.assertLen(var_list, want_num_trainable_vars)
       self.assertEqual(var_list,
                        tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
       # Subnetworks get iteration steps instead of global steps.
@@ -283,7 +322,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       return optimizer.minimize(loss, var_list=var_list)
 
     def _mixture_weights_train_op_fn(loss, var_list):
-      self.assertEqual(want_mixture_weight_vars, len(var_list))
+      self.assertLen(var_list, want_mixture_weight_vars)
       self.assertEqual(var_list,
                        tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
       # Subnetworks get iteration steps instead of global steps.
@@ -305,8 +344,11 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
         ensemble_name="test",
         ensemble_spec=ensemble_spec_fn(),
         subnetwork_builder=subnetwork_builder_class(
-            _subnetwork_train_op_fn, _mixture_weights_train_op_fn,
-            use_logits_last_layer, seed),
+            _subnetwork_train_op_fn,
+            _mixture_weights_train_op_fn,
+            use_logits_last_layer,
+            seed,
+            multi_head=multi_head),
         summary=_FakeSummary(),
         features=features,
         iteration_number=1,
@@ -350,10 +392,13 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
           want_logits, sess.run(ensemble_spec.ensemble.logits), atol=1e-3)
 
       # Bias should learn a non-zero value when used.
+      bias = sess.run(ensemble_spec.ensemble.bias)
+      if isinstance(bias, dict):
+        bias = sum(abs(b) for b in bias.values())
       if use_bias:
-        self.assertNotEqual(0., sess.run(ensemble_spec.ensemble.bias))
+        self.assertNotEqual(0., bias)
       else:
-        self.assertAlmostEqual(0., sess.run(ensemble_spec.ensemble.bias))
+        self.assertAlmostEqual(0., bias)
 
       self.assertAlmostEqual(want_loss, sess.run(ensemble_spec.loss), places=3)
       self.assertAlmostEqual(
