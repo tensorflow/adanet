@@ -125,6 +125,49 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
         export_dir_base=export_dir_base,
         serving_input_receiver_fn=serving_input_fn)
 
+  def test_extra_checkpoint_saver_hook(self):
+    """Tests b/122795064."""
+
+    features = {"input_1": [[1., 0.]]}
+    labels = [[1.]]
+
+    run_config = tf.estimator.RunConfig(tf_random_seed=42,
+                                        save_checkpoints_steps=2,
+                                        keep_checkpoint_max=2)
+    head = tf.contrib.estimator.binary_classification_head(
+        loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
+
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=.01)
+    feature_columns = [tf.feature_column.numeric_column("input_1", shape=[2])]
+
+    estimator = AutoEnsembleEstimator(
+        head=head,
+        candidate_pool=[
+            tf.estimator.LinearClassifier(
+                n_classes=2, feature_columns=feature_columns,
+                optimizer=optimizer),
+            tf.estimator.DNNClassifier(
+                n_classes=2,
+                feature_columns=feature_columns,
+                optimizer=optimizer,
+                hidden_units=[3]),
+        ],
+        max_iteration_steps=4,
+        force_grow=True,
+        model_dir=self.test_subdirectory,
+        config=run_config)
+
+    ckpt_dir = os.path.join(self.test_subdirectory)
+    hooks = [tf.train.CheckpointSaverHook(ckpt_dir, save_steps=1)]
+
+    def train_input_fn():
+      input_features = {}
+      for key, feature in features.items():
+        input_features[key] = tf.constant(feature, name=key)
+      input_labels = tf.constant(labels, name="labels")
+      return input_features, input_labels
+
+    estimator.train(input_fn=train_input_fn, max_steps=12, hooks=hooks)
 
 if __name__ == "__main__":
   tf.test.main()

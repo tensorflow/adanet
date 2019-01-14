@@ -640,8 +640,8 @@ class Estimator(tf.estimator.Estimator):
       current_iteration: Current `_Iteration` object.
       iteration_number_tensor: Int variable `Tensor` storing the current
         iteration number.
-      restore_saver: A `tf.train.Saver` instance for restoring variable
-        values from a checkpoint.
+      restore_saver: A `tf.train.Saver` instance for restoring variable values
+        from a checkpoint.
     """
 
     checkpoint_state = tf.train.get_checkpoint_state(self.model_dir)
@@ -651,7 +651,7 @@ class Estimator(tf.estimator.Estimator):
 
     # Run train hook 'begin' methods which can add ops to the graph, so that
     # they are still present in the overwritten checkpoint.
-    train_hooks = tuple(self._train_hooks) or ()
+    train_hooks = self._train_hooks or []
     for candidate in current_iteration.candidates:
       if not candidate.ensemble_spec.subnetwork_train_op:
         assert not candidate.ensemble_spec.ensemble_train_op
@@ -660,6 +660,14 @@ class Estimator(tf.estimator.Estimator):
       train_hooks += candidate.ensemble_spec.subnetwork_train_op.hooks
       train_hooks += candidate.ensemble_spec.ensemble_train_op.chief_hooks
       train_hooks += candidate.ensemble_spec.ensemble_train_op.hooks
+
+    for hook in train_hooks:
+      if isinstance(hook, tf.train.CheckpointSaverHook):
+        # CheckpointSaverHooks are stateful and will carry a Saver across
+        # graphs causing errors. To fix this, we reset the saver between
+        # iterations.
+        hook._saver = None  # pylint: disable=protected-access
+
     for hook in train_hooks:
       hook.begin()
 
