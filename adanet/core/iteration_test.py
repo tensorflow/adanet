@@ -843,6 +843,7 @@ class _HeadEnsembleBuilder(object):
     return _EnsembleSpec(
         name="test",
         ensemble=None,
+        architecture=None,
         predictions=estimator_spec.predictions,
         loss=None,
         adanet_loss=.1,

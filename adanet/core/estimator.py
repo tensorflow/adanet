@@ -24,6 +24,7 @@ import errno
 import os
 import time
 
+from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _CandidateBuilder
 from adanet.core.ensemble import _EnsembleBuilder
 from adanet.core.ensemble import MixtureWeightType
@@ -613,7 +614,7 @@ class Estimator(tf.estimator.Estimator):
     """Returns the filename of the given iteration's frozen graph."""
 
     frozen_checkpoint = os.path.join(self.model_dir, "architecture")
-    return "{}-{}.txt".format(frozen_checkpoint, iteration_number)
+    return "{}-{}.pb".format(frozen_checkpoint, iteration_number)
 
   def _overwrite_checkpoint(self, current_iteration, iteration_number_tensor,
                             restore_saver):
@@ -865,7 +866,7 @@ class Estimator(tf.estimator.Estimator):
       evaluation_hooks.append(eval_metric_hook)
     return evaluation_hooks
 
-  def _save_architecture(self, filename, ensemble):
+  def _save_architecture(self, filename, architecture):
     """Persists the ensemble's architecture in a serialized format.
 
     Writes to a text file with one subnetwork's iteration number and name
@@ -873,17 +874,13 @@ class Estimator(tf.estimator.Estimator):
 
     Args:
       filename: String filename to persist the ensemble architecture.
-      ensemble: Target `adanet.Ensemble` instance.
+      architecture: Target `_Architecture` instance.
     """
 
-    architecture = [
-        "{}:{}".format(w.iteration_number, w.name)
-        for w in ensemble.weighted_subnetworks
-    ]
     # Make directories since model_dir may not have been created yet.
     tf.gfile.MakeDirs(os.path.dirname(filename))
     with tf.gfile.GFile(filename, "w") as record_file:
-      record_file.write(os.linesep.join(architecture))
+      record_file.write(architecture.serialize())
 
   def _read_architecture(self, filename):
     """Reads an ensemble architecture from disk.
@@ -894,7 +891,7 @@ class Estimator(tf.estimator.Estimator):
       filename: String filename where features were recorded.
 
     Returns:
-      A list of <iteration_number>:<subnetwork name> strings.
+      An `_Architecture` instance.
 
     Raises:
       OSError: When file not found at `filename`.
@@ -903,12 +900,8 @@ class Estimator(tf.estimator.Estimator):
     if not tf.gfile.Exists(filename):
       raise OSError(errno.ENOENT, os.strerror(errno.ENOENT), filename)
 
-    architecture = []
-    with tf.gfile.GFile(filename, "r") as record_file:
-      for line in record_file:
-        feature_name = line.rstrip()
-        architecture.append(feature_name)
-    return architecture
+    with tf.gfile.GFile(filename, "rb") as gfile:
+      return _Architecture.deserialize(gfile.read())
 
   # TODO: Refactor architecture building logic to its own module.
   def _architecture_ensemble_spec(self, architecture, features, mode, labels):
@@ -920,7 +913,7 @@ class Estimator(tf.estimator.Estimator):
     variables are restored from the checkpoint.
 
     Args:
-      architecture: A list of <iteration_number>:<subnetwork name> strings.
+      architecture: An `_Architecture` instance.
       features: Dictionary of `Tensor` objects keyed by feature name.
       mode: Defines whether this is training, evaluation or prediction. See
         `ModeKeys`.
@@ -937,28 +930,27 @@ class Estimator(tf.estimator.Estimator):
 
     previous_ensemble_spec = None
     previous_ensemble = None
-    for serialized_subnetwork in architecture:
-      serialized_iteration_number, name = serialized_subnetwork.split(":")
-      rebuild_iteration_number = int(serialized_iteration_number)
+    for iteration_number, names in architecture.subnetworks:
       previous_ensemble_reports, all_reports = [], []
       if self._report_materializer:
         previous_ensemble_reports, all_reports = (
-            self._collate_subnetwork_reports(rebuild_iteration_number))
+            self._collate_subnetwork_reports(iteration_number))
       generated_subnetwork_builders = (
           self._subnetwork_generator.generate_candidates(
               previous_ensemble=previous_ensemble,
-              iteration_number=rebuild_iteration_number,
+              iteration_number=iteration_number,
               previous_ensemble_reports=previous_ensemble_reports,
               all_reports=all_reports))
-      rebuild_subnetwork_builder = None
-      for builder in generated_subnetwork_builders:
-        if builder.name == name:
-          rebuild_subnetwork_builder = builder
-          break
-      if rebuild_subnetwork_builder is None:
-        raise ValueError("Required subnetwork name is missing from "
-                         "generated candidates: {}".format(name))
-
+      subnetwork_builder_names = {
+          b.name: b for b in generated_subnetwork_builders
+      }
+      rebuild_subnetwork_builders = []
+      for name in names:
+        if name not in subnetwork_builder_names:
+          raise ValueError(
+              "Required subnetwork builder is missing for iteration {}: {}"
+              .format(iteration_number, name))
+        rebuild_subnetwork_builders.append(subnetwork_builder_names[name])
       previous_ensemble_summary = None
       if previous_ensemble_spec:
         # Always skip summaries when rebuilding previous architecture,
@@ -967,8 +959,8 @@ class Estimator(tf.estimator.Estimator):
             previous_ensemble_spec.name, skip_summary=True)
 
       current_iteration = self._iteration_builder.build_iteration(
-          iteration_number=rebuild_iteration_number,
-          subnetwork_builders=[rebuild_subnetwork_builder],
+          iteration_number=iteration_number,
+          subnetwork_builders=rebuild_subnetwork_builders,
           features=features,
           labels=labels,
           mode=mode,
@@ -1095,7 +1087,10 @@ class Estimator(tf.estimator.Estimator):
       architecture = self._read_architecture(architecture_filename)
       tf.logging.info(
           "Importing architecture from %s: [%s].", architecture_filename,
-          ", ".join(sorted(["'{}'".format(f) for f in architecture])))
+          ", ".join(
+              sorted([
+                  "'{}:{}'".format(t, n) for t, n in architecture.subnetworks
+              ])))
 
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
     with tf.variable_scope("adanet"):
@@ -1166,10 +1161,10 @@ class Estimator(tf.estimator.Estimator):
       assert self.config.is_chief
       self._best_ensemble_index = self._get_best_ensemble_index(
           current_iteration)
-      ensemble = current_iteration.candidates[
-          self._best_ensemble_index].ensemble_spec.ensemble
+      architecture = current_iteration.candidates[
+          self._best_ensemble_index].ensemble_spec.architecture
       new_architecture_filename = self._architecture_filename(iteration_number)
-      self._save_architecture(new_architecture_filename, ensemble)
+      self._save_architecture(new_architecture_filename, architecture)
     elif self._Keys.MATERIALIZE_REPORT in params:
       assert self.config.is_chief
       assert self._best_ensemble_index is not None

@@ -23,7 +23,9 @@ import collections
 import contextlib
 import functools
 import inspect
+import itertools
 
+from adanet.core.architecture import _Architecture
 from adanet.core.subnetwork import TrainOpSpec
 from adanet.core.summary import monkey_patched_summaries
 import tensorflow as tf
@@ -53,8 +55,8 @@ class WeightedSubnetwork(
     logits: The output :class:`tf.Tensor` or dict of string to weight
       :class:`tf.Tensor` (for multi-head) after the matrix multiplication of
       `weight` and the subnetwork's :meth:`last_layer`. The output's shape is
-      [batch_size, logits_dimension]. It is equivalent to a linear logits layer
-      in a neural network.
+        [batch_size, logits_dimension]. It is equivalent to a linear logits
+        layer in a neural network.
     subnetwork: The :class:`adanet.subnetwork.Subnetwork` to weight.
 
   Returns:
@@ -115,6 +117,7 @@ class _EnsembleSpec(
     collections.namedtuple("_EnsembleSpec", [
         "name",
         "ensemble",
+        "architecture",
         "predictions",
         "loss",
         "adanet_loss",
@@ -128,6 +131,7 @@ class _EnsembleSpec(
   def __new__(cls,
               name,
               ensemble,
+              architecture,
               predictions,
               loss=None,
               adanet_loss=None,
@@ -140,6 +144,7 @@ class _EnsembleSpec(
     Args:
       name: String name of this ensemble. Should be unique in the graph.
       ensemble: The `Ensemble` of interest.
+      architecture: The `_Architecture` representation of the ensemble.
       predictions: Predictions `Tensor` or dict of `Tensor`.
       loss: Loss `Tensor` as defined by the surrogate loss function Phi in
         Equations (4), (5), and (6). Must be either scalar, or with shape `[1]`.
@@ -168,6 +173,7 @@ class _EnsembleSpec(
         cls,
         name=name,
         ensemble=ensemble,
+        architecture=architecture,
         predictions=predictions,
         loss=loss,
         adanet_loss=adanet_loss,
@@ -192,10 +198,11 @@ class MixtureWeightType(object):
   MATRIX = "matrix"
 
 
-def _architecture_as_metric(weighted_subnetworks):
+def _architecture_as_metric(architecture):
   """Returns a representation of the ensemble's architecture as a tf.metric."""
 
-  joined_names = " | ".join([w.name for w in weighted_subnetworks])
+  joined_names = " | ".join(
+      itertools.chain(*[names for _, names in architecture.subnetworks]))
   architecture = tf.convert_to_tensor(
       "| {} |".format(joined_names), name="architecture")
   architecture_summary = tf.summary.text("architecture/adanet", architecture)
@@ -438,6 +445,7 @@ class _EnsembleBuilder(object):
       subnetwork_index = 0
       num_subnetworks = 1
       ensemble = None
+      architecture = _Architecture()
       if ensemble_spec:
         ensemble = ensemble_spec.ensemble
         previous_subnetworks = [
@@ -459,6 +467,8 @@ class _EnsembleBuilder(object):
                     weighted_subnetwork.subnetwork,
                     num_subnetworks,
                     weight_initializer=weight_initializer))
+          architecture.add_subnetwork(weighted_subnetwork.iteration_number,
+                                      weighted_subnetwork.name)
           subnetwork_index += 1
 
       ensemble_scope = tf.get_variable_scope()
@@ -490,6 +500,7 @@ class _EnsembleBuilder(object):
             self._build_weighted_subnetwork(subnetwork_builder.name,
                                             iteration_number, subnetwork,
                                             num_subnetworks))
+        architecture.add_subnetwork(iteration_number, subnetwork_builder.name)
       if ensemble:
         if len(previous_subnetworks) == len(ensemble.weighted_subnetworks):
           bias = self._create_bias_term(
@@ -507,6 +518,7 @@ class _EnsembleBuilder(object):
       return self._build_ensemble_spec(
           name=ensemble_name,
           weighted_subnetworks=weighted_subnetworks,
+          architecture=architecture,
           summary=summary,
           bias=bias,
           features=features,
@@ -520,6 +532,7 @@ class _EnsembleBuilder(object):
   def _build_ensemble_spec(self,
                            name,
                            weighted_subnetworks,
+                           architecture,
                            summary,
                            bias,
                            features,
@@ -536,6 +549,7 @@ class _EnsembleBuilder(object):
         that returned the given `Subnetwork`.
       weighted_subnetworks: List of `WeightedSubnetwork` instances that form
         this ensemble. Ordered from first to most recent.
+      architecture: The `_Architecture` representation of the ensemble.
       summary: A `_ScopedSummary` instance for recording ensemble summaries.
       bias: Bias term `Tensor` or dict of string to `Tensor` (for multi-head)
         for the AdaNet-weighted ensemble logits.
@@ -621,7 +635,7 @@ class _EnsembleBuilder(object):
           estimator_spec=subnetwork_spec,
           metric_fn=metric_fn)
       eval_metric_ops["architecture/adanet/ensembles"] = (
-          _architecture_as_metric(weighted_subnetworks))
+          _architecture_as_metric(architecture))
 
     if mode == tf.estimator.ModeKeys.TRAIN:
       with summary.current_scope():
@@ -680,6 +694,7 @@ class _EnsembleBuilder(object):
             bias=bias,
             logits=ensemble_logits,
         ),
+        architecture=architecture,
         predictions=adanet_weighted_ensemble_spec.predictions,
         loss=ensemble_loss,
         adanet_loss=adanet_loss,

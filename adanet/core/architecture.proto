@@ -1,0 +1,20 @@
+// Architecture definition of an AdaNet model.
+
+syntax = "proto3";
+
+package adanet.architecture;
+
+// Next id: 3
+message Subnetwork {
+  // Zero-indexed iteration number when this Subnetwork was created.
+  int32 iteration_number = 1;
+
+  // Name of the subnetwork.Builder that produced this Subnetwork.
+  string builder_name = 2;
+}
+
+// Next id: 2
+message Ensemble {
+  // Component subnetworks of this Ensemble.
+  repeated Subnetwork subnetworks = 1;
+}

@@ -23,6 +23,7 @@ import os
 import shutil
 
 from absl.testing import parameterized
+from adanet.core.architecture import _Architecture
 from adanet.core.ensemble import _EnsembleSpec
 from adanet.core.ensemble import Ensemble
 from adanet.core.ensemble import WeightedSubnetwork
@@ -117,6 +118,7 @@ def dummy_ensemble_spec(name,
           bias=bias,
           logits=logits,
       ),
+      architecture=_Architecture(),
       predictions=predictions,
       loss=loss,
       adanet_loss=adanet_loss,

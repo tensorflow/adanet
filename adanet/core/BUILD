@@ -27,6 +27,7 @@ py_library(
     name = "estimator",
     srcs = ["estimator.py"],
     deps = [
+        ":architecture",
         ":candidate",
         ":ensemble",
         ":iteration",
@@ -140,6 +141,7 @@ py_library(
     name = "ensemble",
     srcs = ["ensemble.py"],
     deps = [
+        ":architecture",
         ":summary",
         "//adanet/core/subnetwork",
     ],
@@ -195,6 +197,7 @@ py_library(
     testonly = 1,
     srcs = ["testing_utils.py"],
     deps = [
+        ":architecture",
         ":ensemble",
         "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
@@ -257,4 +260,34 @@ py_test(
         "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
+)
+
+py_library(
+    name = "architecture",
+    srcs = ["architecture.py"],
+    deps = [
+        "architecture_pb2",
+    ],
+)
+
+py_test(
+    name = "architecture_test",
+    srcs = ["architecture_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":architecture",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+proto_library(
+    name = "architecture_proto",
+    srcs = ["architecture.proto"],
+)
+
+py_proto_library(
+    name = "architecture_pb2",
+    default_runtime = "@com_google_protobuf//:protobuf_python",
+    protoc = "@com_google_protobuf//:protoc",
+    deps = [":architecture_proto"],
 )

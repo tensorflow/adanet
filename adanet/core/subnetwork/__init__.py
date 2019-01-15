@@ -27,10 +27,11 @@ from adanet.core.subnetwork.report import MaterializedReport
 from adanet.core.subnetwork.report import Report
 
 __all__ = [
-    "Subnetwork",
     "Builder",
     "Generator",
-    "SimpleGenerator",
-    "Report",
     "MaterializedReport",
+    "Report",
+    "SimpleGenerator",
+    "Subnetwork",
+    "TrainOpSpec",
 ]
