@@ -266,7 +266,7 @@ py_library(
     name = "architecture",
     srcs = ["architecture.py"],
     deps = [
-        "architecture_pb2",
+        ":architecture_pb2",
     ],
 )
 
@@ -287,7 +287,7 @@ proto_library(
 
 py_proto_library(
     name = "architecture_pb2",
+    srcs = ["architecture.proto"],
     default_runtime = "@com_google_protobuf//:protobuf_python",
     protoc = "@com_google_protobuf//:protoc",
-    deps = [":architecture_proto"],
 )
