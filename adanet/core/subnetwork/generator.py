@@ -183,10 +183,8 @@ class Builder(object):
     construct the candidate subnetwork's graph operations and variables.
 
     Accessing the global step via :meth:`tf.train.get_or_create_global_step()`
-    or
-    :meth:`tf.train.get_global_step()` within this scope will return an
-    incrementable
-    iteration step since the beginning of the iteration.
+    or :meth:`tf.train.get_global_step()` within this scope will return an
+    incrementable iteration step since the beginning of the iteration.
 
     Args:
       features: Input `dict` of :class:`tf.Tensor` objects.
