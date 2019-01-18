@@ -108,12 +108,14 @@ class _IterationBuilder(object):
   """Builds AdaNet iterations."""
 
   def __init__(self,
+               model_dir,
                candidate_builder,
                ensemble_builder,
                replicate_ensemble_in_training=False):
     """Creates an `_IterationBuilder` instance.
 
     Args:
+      model_dir: String model directory path.
       candidate_builder: A `_CandidateBuilder` instance.
       ensemble_builder: An `_EnsembleBuilder` instance.
       replicate_ensemble_in_training: Whether to build the frozen subnetworks in
@@ -123,6 +125,7 @@ class _IterationBuilder(object):
       An `_IterationBuilder` object.
     """
 
+    self._model_dir = model_dir
     self._candidate_builder = candidate_builder
     self._ensemble_builder = ensemble_builder
     self._replicate_ensemble_in_training = replicate_ensemble_in_training
@@ -241,15 +244,18 @@ class _IterationBuilder(object):
         seen_builder_names[subnetwork_builder.name] = True
         ensemble_name = "t{}_{}".format(iteration_number,
                                         subnetwork_builder.name)
-        summary = _ScopedSummary(
-            ensemble_name, skip_summary=skip_summaries or rebuilding)
-        summaries.append(summary)
+        subnetwork_summary = _ScopedSummary(
+            self._model_dir,
+            namespace="candidate",
+            scope=ensemble_name,
+            skip_summary=skip_summaries or rebuilding)
+        summaries.append(subnetwork_summary)
         ensemble_spec = self._ensemble_builder.append_new_subnetwork(
             ensemble_name=ensemble_name,
             ensemble_spec=previous_ensemble_spec,
             iteration_number=iteration_number,
             subnetwork_builder=subnetwork_builder,
-            summary=summary,
+            summary=subnetwork_summary,
             features=features,
             mode=ensemble_mode,
             iteration_step=iteration_step_tensor,
@@ -258,7 +264,7 @@ class _IterationBuilder(object):
             ensemble_spec=ensemble_spec,
             training=training,
             iteration_step=iteration_step_tensor,
-            summary=summary)
+            summary=subnetwork_summary)
         candidates.append(candidate)
 
         # Generate subnetwork reports.
@@ -298,6 +304,19 @@ class _IterationBuilder(object):
         training_chief_hooks += spec.ensemble_train_op.chief_hooks or ()
         training_hooks += spec.subnetwork_train_op.hooks or ()
         training_hooks += spec.ensemble_train_op.hooks or ()
+      summary = _ScopedSummary(
+          self._model_dir,
+          namespace=None,
+          scope=None,
+          skip_summary=skip_summaries or rebuilding)
+      with summary.current_scope():
+        summary.scalar("iteration/adanet/iteration", iteration_number)
+        summary.scalar("iteration_step/adanet/iteration_step",
+                       iteration_step_tensor)
+        if best_loss is not None:
+          summary.scalar("loss", best_loss)
+          summary.scalar("loss/adanet/adanet_weighted_ensemble", best_loss)
+      summaries.append(summary)
       estimator_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           predictions=best_predictions,

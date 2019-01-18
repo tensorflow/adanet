@@ -19,7 +19,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import contextlib
 import os
 
 from absl.testing import parameterized
@@ -31,8 +30,6 @@ from adanet.core.subnetwork import Subnetwork
 from adanet.core.tpu_estimator import TPUEstimator
 from distutils.version import LooseVersion
 import tensorflow as tf
-
-from tensorflow.contrib.tpu.python.tpu import tpu_function
 
 
 class _DNNBuilder(Builder):
@@ -98,6 +95,10 @@ class _DNNBuilder(Builder):
           kernel_initializer=tf.glorot_uniform_initializer(seed=seed))
 
     summary.scalar("scalar", 3)
+    batch_size = features["x"].get_shape().as_list()[0]
+    summary.image("image", tf.ones([batch_size, 3, 3, 1]))
+    with tf.variable_scope("nested"):
+      summary.scalar("scalar", 5)
 
     return Subnetwork(
         last_layer=logits,
@@ -129,32 +130,33 @@ class _DNNBuilder(Builder):
         })
 
 
-@contextlib.contextmanager
-def fake_run_on_tpu():
-  """Fakes TPU existence when running TPU tests on CPU/GPU."""
-
-  original_number_of_shards_fn = tpu_function.TpuContext.number_of_shards
-  tpu_function.TpuContext.number_of_shards = 1
-  try:
-    yield
-  finally:
-    tpu_function.TpuContext.number_of_shards = original_number_of_shards_fn
-
-
-def _summaries_exist(dir_path):
-  """Returns whether the given dir contains non-empty tf.Summaries."""
+def _check_eventfile_for_keyword(keyword, dir_):
+  """Checks event files for the keyword."""
 
   tf.summary.FileWriterCache.clear()
-  filenames = os.path.join(dir_path, "events*")
+
+  # Get last `Event` written.
+  filenames = os.path.join(dir_, "events*")
   event_paths = tf.gfile.Glob(filenames)
   if not event_paths:
-    raise ValueError("Path {!r} not found.".format(filenames))
+    raise ValueError("Path '{}' not found.".format(filenames))
 
-  for last_event in tf.train.summary_iterator(event_paths[-1]):
-    summary = last_event.summary
-    if summary and summary.value:
-      return True
-  return False
+  # There can be multiple events files for summaries.
+  for event_path in event_paths:
+    for last_event in tf.train.summary_iterator(event_path):
+      if last_event.summary is not None:
+        for value in last_event.summary.value:
+          if keyword == value.tag:
+            if value.HasField("simple_value"):
+              return value.simple_value
+            if value.HasField("image"):
+              return (value.image.height, value.image.width,
+                      value.image.colorspace)
+            if value.HasField("tensor"):
+              return value.tensor.string_val
+
+  raise ValueError("Keyword '{}' not found in path '{}'.".format(
+      keyword, filenames))
 
 
 class TPUEstimatorTest(tu.AdanetTestCase):
@@ -197,15 +199,14 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     # Evaluate.
     eval_results = estimator.evaluate(
         input_fn=train_input_fn, steps=10, hooks=None)
-    tf.logging.info("%s", eval_results)
 
     # Predict.
     # TODO: skip predictions on TF versions 1.11 and 1.12 since
     # some TPU hooks seem to be failing on predict.
     predictions = []
-    tf_verison = LooseVersion(tf.VERSION)
-    if (tf_verison != LooseVersion("1.11.0") and
-        tf_verison != LooseVersion("1.12.0")):
+    tf_version = LooseVersion(tf.VERSION)
+    if (tf_version != LooseVersion("1.11.0") and
+        tf_version != LooseVersion("1.12.0")):
       predictions = estimator.predict(
           input_fn=tu.dataset_input_fn(features=[0., 0.], labels=None))
 
@@ -230,25 +231,76 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     for prediction in predictions:
       self.assertIsNotNone(prediction["predictions"])
 
-  def test_tpu_estimator_summaries(self):
-    config = tf.contrib.tpu.RunConfig(tf_random_seed=42)
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "not_use_tpu",
+          "use_tpu": False,
+      },
+  )
+  def test_tpu_estimator_summaries(self, use_tpu):
+    config = tf.contrib.tpu.RunConfig(
+        tf_random_seed=42, save_summary_steps=2, log_step_count_steps=1)
+    assert config.log_step_count_steps
     estimator = TPUEstimator(
         head=tu.head(),
-        subnetwork_generator=SimpleGenerator([_DNNBuilder("dnn")]),
+        subnetwork_generator=SimpleGenerator(
+            [_DNNBuilder("dnn", use_tpu=use_tpu)]),
         max_iteration_steps=200,
         model_dir=self.test_subdirectory,
         config=config,
-        use_tpu=False)
-    train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
+        use_tpu=use_tpu,
+        train_batch_size=64 if use_tpu else 0)
+    xor_features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
+    xor_labels = [[1.], [0.], [1.], [0.]]
+    train_input_fn = tu.dummy_input_fn(xor_features, xor_labels)
 
-    with fake_run_on_tpu():
-      estimator.train(input_fn=train_input_fn, max_steps=3)
+    estimator.train(input_fn=train_input_fn, max_steps=3)
     estimator.evaluate(input_fn=train_input_fn, steps=3)
 
-    self.assertFalse(
-        _summaries_exist(self.test_subdirectory + "/candidate/t0_dnn"))
-    self.assertTrue(
-        _summaries_exist(self.test_subdirectory + "/candidate/t0_dnn/eval"))
+    ensemble_loss = .5
+    self.assertAlmostEqual(
+        ensemble_loss,
+        _check_eventfile_for_keyword("loss", self.test_subdirectory),
+        places=1)
+    self.assertIsNotNone(
+        _check_eventfile_for_keyword("global_step/sec", self.test_subdirectory))
+    eval_subdir = os.path.join(self.test_subdirectory, "eval")
+    self.assertAlmostEqual(
+        ensemble_loss,
+        _check_eventfile_for_keyword("loss", eval_subdir),
+        places=1)
+    self.assertEqual(
+        0.,
+        _check_eventfile_for_keyword("iteration/adanet/iteration",
+                                     self.test_subdirectory))
+
+    candidate_subdir = os.path.join(self.test_subdirectory, "candidate/t0_dnn")
+    self.assertAlmostEqual(
+        3., _check_eventfile_for_keyword("scalar", candidate_subdir), places=3)
+    self.assertEqual((3, 3, 1),
+                     _check_eventfile_for_keyword("image/image/0",
+                                                  candidate_subdir))
+    self.assertAlmostEqual(
+        5.,
+        _check_eventfile_for_keyword("nested/scalar", candidate_subdir),
+        places=1)
+    self.assertAlmostEqual(
+        ensemble_loss,
+        _check_eventfile_for_keyword(
+            "adanet_loss/adanet/adanet_weighted_ensemble", candidate_subdir),
+        places=1)
+    self.assertAlmostEqual(
+        0.,
+        _check_eventfile_for_keyword(
+            "complexity_regularization/adanet/adanet_weighted_ensemble",
+            candidate_subdir),
+        places=1)
+    self.assertAlmostEqual(
+        1.,
+        _check_eventfile_for_keyword(
+            "mixture_weight_norms/adanet/"
+            "adanet_weighted_ensemble/subnetwork_0", candidate_subdir),
+        places=1)
 
 
 if __name__ == "__main__":

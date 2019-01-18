@@ -36,9 +36,11 @@ import numpy as np
 import six
 import tensorflow as tf
 
+from tensorflow.python.framework import ops
 from tensorflow.python.ops import resources
 
 
+# TODO: Move hooks to their own module.
 class _StopAfterTrainingHook(tf.train.SessionRunHook):
   """Hook that requests stop once iteration is over."""
 
@@ -70,6 +72,128 @@ class _StopAfterTrainingHook(tf.train.SessionRunHook):
       return
     run_context.request_stop()
     self._after_fn()
+
+
+# TODO: Move hooks to their own module.
+class _StepCounterHook(tf.train.SessionRunHook):
+  """Hook that counts steps per second.
+
+  TODO: Remove once Estimator uses summaries v2 by default.
+
+  """
+
+  def __init__(self,
+               every_n_steps=100,
+               every_n_secs=None,
+               output_dir=None,
+               summary_writer=None):
+
+    if (every_n_steps is None) == (every_n_secs is None):
+      raise ValueError(
+          "exactly one of every_n_steps and every_n_secs should be provided.")
+    self._timer = tf.train.SecondOrStepTimer(
+        every_steps=every_n_steps, every_secs=every_n_secs)
+
+    assert output_dir
+    self._summary_writer = summary_writer
+    self._output_dir = output_dir
+    self._last_global_step = None
+    self._steps_per_run = 1
+
+  def begin(self):
+    if self._summary_writer is None and self._output_dir:
+      self._summary_writer = tf.summary.FileWriter(
+          self._output_dir,
+          session=ops.get_default_session(),
+          filename_suffix=".step")
+    self._global_step_tensor = tf.train.get_global_step()
+    if self._global_step_tensor is None:
+      raise RuntimeError(
+          "Global step should be created to use StepCounterHook.")
+    self._summary_tag = tf.train.get_global_step().op.name + "/sec"
+
+  def after_create_session(self, session, coord):
+    del coord
+    # Reset any stale state in case we're recovering from a previous error.
+    session.run(tf.contrib.summary.summary_writer_initializer_op())
+    self._last_global_step = None
+    self._timer.reset()
+
+  def before_run(self, run_context):  # pylint: disable=unused-argument
+    return tf.train.SessionRunArgs(self._global_step_tensor)
+
+  def _log_and_record(self, elapsed_steps, elapsed_time, global_step):
+    steps_per_sec = elapsed_steps / elapsed_time
+    if self._summary_writer is not None:
+      summary = tf.Summary(value=[
+          tf.Summary.Value(tag=self._summary_tag, simple_value=steps_per_sec)
+      ])
+      self._summary_writer.add_summary(summary, global_step)
+
+  def after_run(self, run_context, run_values):
+    stale_global_step = run_values.results
+    if self._timer.should_trigger_for_step(stale_global_step +
+                                           self._steps_per_run):
+      # Get the real value after train op.
+      global_step = run_context.session.run(self._global_step_tensor)
+      if self._timer.should_trigger_for_step(global_step):
+        elapsed_time, elapsed_steps = self._timer.update_last_triggered_step(
+            global_step)
+        if elapsed_time is not None:
+          with ops.default_session(run_context.session):
+            self._log_and_record(elapsed_steps, elapsed_time, global_step)
+
+    self._last_global_step = stale_global_step
+
+  def end(self, session):
+    if self._summary_writer is not None:
+      with ops.default_session(session):
+        self._summary_writer.flush()
+
+
+class _SummarySaverHook(tf.train.SessionRunHook):
+  """Periodically saves summaries to disk for TensorBoard to read.
+
+  Args:
+    current_iteration: The current `_Iteration` t.
+    save_steps: Integer step frequency for saving summaries.
+
+  Returns:
+    A `_SummarySaverHook` instance.
+  """
+
+  def __init__(self, current_iteration, save_steps):
+    self._init_op = tf.contrib.summary.summary_writer_initializer_op()
+    self._all_summary_ops = [s.merge_all() for s in current_iteration.summaries]
+    self._timer = tf.train.SecondOrStepTimer(every_steps=save_steps)
+    self._flush_ops = [s.flush() for s in current_iteration.summaries]
+    self._next_step = None
+    self._global_step_tensor = tf.train.get_global_step()
+
+  def after_create_session(self, session, coord):
+    session.run(self._init_op)
+
+  def before_run(self, run_context):
+    del run_context  # Unused
+    self._request_summary = (
+        self._next_step is None or
+        self._timer.should_trigger_for_step(self._next_step))
+    requests = {"global_step": self._global_step_tensor}
+    if self._request_summary:
+      requests["summary"] = self._all_summary_ops
+    return tf.train.SessionRunArgs(requests)
+
+  def after_run(self, run_context, run_values):
+    stale_global_step = run_values.results["global_step"]
+    global_step = stale_global_step + 1
+    if self._next_step is None or self._request_summary:
+      global_step = run_context.session.run(self._global_step_tensor)
+    if self._request_summary:
+      self._timer.update_last_triggered_step(global_step)
+    self._next_step = global_step
+
+  def end(self, session):
+    session.run(self._flush_ops)
 
 
 class _EvalMetricSaverHook(tf.train.SessionRunHook):
@@ -406,9 +530,9 @@ class Estimator(tf.estimator.Estimator):
     candidate_builder = _CandidateBuilder(
         max_steps=max_iteration_steps,
         adanet_loss_decay=self._adanet_loss_decay)
-    self._iteration_builder = _IterationBuilder(candidate_builder,
-                                                self._ensemble_builder,
-                                                replicate_ensemble_in_training)
+    self._iteration_builder = _IterationBuilder(
+        self.model_dir, candidate_builder, self._ensemble_builder,
+        replicate_ensemble_in_training)
     report_dir = report_dir or os.path.join(self._model_dir, "report")
     self._report_accessor = _ReportAccessor(report_dir)
 
@@ -808,6 +932,29 @@ class Estimator(tf.estimator.Estimator):
     tf.logging.info("Finished saving subnetwork reports for iteration %s",
                     current_iteration.number)
 
+  def _chief_training_hooks(self, current_iteration, training):
+    """Returns training hooks to run on chief for this iteration.
+
+    Args:
+      current_iteration: Current `_Iteration`.
+      training: Whether in training mode.
+
+    Returns:
+      A list of `tf.train.SessionRunHook` instances.
+    """
+
+    if not training:
+      return []
+
+    training_hooks = list(current_iteration.estimator_spec.training_chief_hooks)
+    training_hooks += [
+        _StepCounterHook(
+            every_n_steps=self.config.log_step_count_steps,
+            output_dir=self.model_dir),
+        _SummarySaverHook(current_iteration, self.config.save_summary_steps),
+    ]
+    return training_hooks
+
   def _training_hooks(self, current_iteration, training):
     """Returns training hooks for this iteration.
 
@@ -826,18 +973,8 @@ class Estimator(tf.estimator.Estimator):
       self._iteration_ended = True
 
     training_hooks = list(current_iteration.estimator_spec.training_hooks) + [
-        _StopAfterTrainingHook(current_iteration, after_fn=after_fn)
+        _StopAfterTrainingHook(current_iteration, after_fn=after_fn),
     ]
-
-    for summary in current_iteration.summaries:
-      output_dir = self.model_dir
-      if summary.scope:
-        output_dir = os.path.join(output_dir, "candidate", summary.scope)
-      summary_saver_hook = tf.train.SummarySaverHook(
-          save_steps=self.config.save_summary_steps,
-          output_dir=output_dir,
-          summary_op=summary.merge_all())
-      training_hooks.append(summary_saver_hook)
     return training_hooks
 
   def _evaluation_hooks(self, current_iteration, training):
@@ -956,8 +1093,10 @@ class Estimator(tf.estimator.Estimator):
         # Always skip summaries when rebuilding previous architecture,
         # since they are not useful.
         previous_ensemble_summary = _ScopedSummary(
-            previous_ensemble_spec.name, skip_summary=True)
-
+            self.model_dir,
+            namespace="candidate",
+            scope=previous_ensemble_spec.name,
+            skip_summary=True)
       current_iteration = self._iteration_builder.build_iteration(
           iteration_number=iteration_number,
           subnetwork_builders=rebuild_subnetwork_builders,
@@ -1102,7 +1241,10 @@ class Estimator(tf.estimator.Estimator):
             architecture, features, mode, labels)
         previous_ensemble = previous_ensemble_spec.ensemble
         previous_ensemble_summary = _ScopedSummary(
-            previous_ensemble_spec.name, skip_summary=skip_summaries)
+            self.model_dir,
+            namespace="candidate",
+            scope=previous_ensemble_spec.name,
+            skip_summary=skip_summaries)
       restore_saver = None
       if self._Keys.INCREMENT_ITERATION in params:
         # Create Saver now so that it only restores the current variables in the
@@ -1127,6 +1269,8 @@ class Estimator(tf.estimator.Estimator):
           previous_ensemble_summary=previous_ensemble_summary,
           previous_ensemble_spec=previous_ensemble_spec)
 
+    params["current_iteration"] = current_iteration
+
     # Variable which allows us to read the current iteration from a checkpoint.
     iteration_number_tensor = tf.get_variable(
         self._Keys.CURRENT_ITERATION,
@@ -1135,15 +1279,6 @@ class Estimator(tf.estimator.Estimator):
         initializer=tf.zeros_initializer(),
         trainable=False)
 
-    adanet_summary = _ScopedSummary("global", skip_summaries)
-    adanet_summary.scalar("iteration/adanet/iteration", iteration_number_tensor)
-    adanet_summary.scalar("iteration_step/adanet/iteration_step",
-                          current_iteration.step)
-    if current_iteration.estimator_spec.loss is not None:
-      adanet_summary.scalar("loss", current_iteration.estimator_spec.loss)
-      adanet_summary.scalar("loss/adanet/adanet_weighted_ensemble",
-                            current_iteration.estimator_spec.loss)
-
     iteration_estimator_spec = current_iteration.estimator_spec
     estimator_spec = tf.estimator.EstimatorSpec(
         mode=mode,
@@ -1151,10 +1286,11 @@ class Estimator(tf.estimator.Estimator):
         loss=iteration_estimator_spec.loss,
         train_op=iteration_estimator_spec.train_op,
         eval_metric_ops=iteration_estimator_spec.eval_metric_ops,
-        training_chief_hooks=iteration_estimator_spec.training_chief_hooks,
+        training_chief_hooks=self._chief_training_hooks(current_iteration,
+                                                        training),
         training_hooks=self._training_hooks(current_iteration, training),
         evaluation_hooks=self._evaluation_hooks(current_iteration, training),
-        scaffold=tf.train.Scaffold(summary_op=adanet_summary.merge_all()),
+        scaffold=tf.train.Scaffold(summary_op=tf.constant("")),
         export_outputs=iteration_estimator_spec.export_outputs)
 
     if self._Keys.EVALUATE_ENSEMBLES in params:

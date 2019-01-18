@@ -124,6 +124,10 @@ class _DNNBuilder(Builder):
           kernel_initializer=tf.glorot_uniform_initializer(seed=seed))
 
     summary.scalar("scalar", 3)
+    batch_size = features["x"].get_shape().as_list()[0]
+    summary.image("image", tf.ones([batch_size, 3, 3, 1]))
+    with tf.variable_scope("nested"):
+      summary.scalar("scalar", 5)
 
     return Subnetwork(
         last_layer=last_layer if self._return_penultimate_layer else logits,
@@ -1113,11 +1117,19 @@ def _check_eventfile_for_keyword(keyword, dir_):
   if not event_paths:
     raise ValueError("Path '{}' not found.".format(filenames))
 
-  for last_event in tf.train.summary_iterator(event_paths[-1]):
-    if last_event.summary is not None:
-      for value in last_event.summary.value:
-        if keyword == value.tag:
-          return value.simple_value
+  # There can be multiple events files for summaries.
+  for event_path in event_paths:
+    for last_event in tf.train.summary_iterator(event_path):
+      if last_event.summary is not None:
+        for value in last_event.summary.value:
+          if keyword == value.tag:
+            if value.HasField("simple_value"):
+              return value.simple_value
+            if value.HasField("image"):
+              return (value.image.height, value.image.width,
+                      value.image.colorspace)
+            if value.HasField("tensor"):
+              return value.tensor.string_val
 
   raise ValueError("Keyword '{}' not found in path '{}'.".format(
       keyword, filenames))
@@ -1172,7 +1184,8 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
   def test_summaries(self):
     """Tests that summaries are written to candidate directory."""
 
-    run_config = tf.estimator.RunConfig(tf_random_seed=42)
+    run_config = tf.estimator.RunConfig(
+        tf_random_seed=42, log_step_count_steps=2)
     subnetwork_generator = SimpleGenerator(
         [_DNNBuilder("dnn", mixture_weight_learning_rate=.001)])
     report_materializer = ReportMaterializer(
@@ -1196,6 +1209,8 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
         ensemble_loss,
         _check_eventfile_for_keyword("loss", self.test_subdirectory),
         places=3)
+    self.assertIsNotNone(
+        _check_eventfile_for_keyword("global_step/sec", self.test_subdirectory))
     self.assertEqual(
         0.,
         _check_eventfile_for_keyword("iteration/adanet/iteration",
@@ -1204,6 +1219,13 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
     candidate_subdir = os.path.join(self.test_subdirectory, "candidate/t0_dnn")
     self.assertAlmostEqual(
         3., _check_eventfile_for_keyword("scalar", candidate_subdir), places=3)
+    self.assertEqual((3, 3, 1),
+                     _check_eventfile_for_keyword("image/image/0",
+                                                  candidate_subdir))
+    self.assertAlmostEqual(
+        5.,
+        _check_eventfile_for_keyword("nested/scalar", candidate_subdir),
+        places=3)
     self.assertAlmostEqual(
         ensemble_loss,
         _check_eventfile_for_keyword(
@@ -1345,11 +1367,11 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
     candidate_subdir = os.path.join(self.test_subdirectory, candidate_subdir)
     self.assertAlmostEqual(metrics["loss"],
                            _check_eventfile_for_keyword("loss", global_subdir))
-    self.assertIsNotNone(
-        _check_eventfile_for_keyword(
-            "architecture/adanet/ensembles/0",
-            global_subdir,
-        ))
+    self.assertEqual([b"| linear |"],
+                     _check_eventfile_for_keyword(
+                         "architecture/adanet/ensembles/0",
+                         global_subdir,
+                     ))
     self.assertAlmostEqual(
         metrics["loss"],
         _check_eventfile_for_keyword(
