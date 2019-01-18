@@ -439,11 +439,9 @@ def _make_metrics(sess, metric_fn, mode=tf.estimator.ModeKeys.EVAL):
       features=features,
       mode=mode,
       labels=labels)
-  fn, kwargs = ensemble_spec.eval_metrics
-  eval_metric_ops = fn(**kwargs)
   sess.run((tf.global_variables_initializer(),
             tf.local_variables_initializer()))
-  metrics = sess.run(eval_metric_ops)
+  metrics = sess.run(ensemble_spec.eval_metric_ops)
   return {k: metrics[k][1] for k in metrics}
 
 

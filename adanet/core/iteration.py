@@ -21,12 +21,11 @@ from __future__ import print_function
 
 import collections
 
-from adanet.core import dict_utils
 from adanet.core import subnetwork
 from adanet.core.summary import _ScopedSummary
 
 import numpy as np
-import six
+from six.moves import zip
 import tensorflow as tf
 
 
@@ -137,8 +136,7 @@ class _IterationBuilder(object):
                       labels=None,
                       previous_ensemble_summary=None,
                       previous_ensemble_spec=None,
-                      rebuilding=False,
-                      params=None):
+                      rebuilding=False):
     """Builds and returns AdaNet iteration t.
 
     This method uses the generated the candidate subnetworks given the ensemble
@@ -159,7 +157,6 @@ class _IterationBuilder(object):
       previous_ensemble_spec: Optional `_EnsembleSpec` for iteration t-1.
       rebuilding: Boolean whether the iteration is being rebuilt only to restore
         the previous best subnetworks and ensembles.
-      params: The model_fn params.
 
     Returns:
       An _Iteration instance.
@@ -226,14 +223,12 @@ class _IterationBuilder(object):
 
         # Generate subnetwork reports.
         if mode == tf.estimator.ModeKeys.EVAL:
-          metrics = {}
-          if previous_ensemble_spec.eval_metrics is not None:
-            metric_fn, kwargs = previous_ensemble_spec.eval_metrics
-            metrics = metric_fn(**kwargs)
           subnetwork_report = subnetwork.Report(
               hparams={},
               attributes={},
-              metrics=metrics,
+              metrics=(previous_ensemble_spec.eval_metric_ops.copy()
+                       if previous_ensemble_spec.eval_metric_ops is not None
+                       else {}),
           )
           subnetwork_report.metrics["adanet_loss"] = tf.metrics.mean(
               previous_ensemble_spec.adanet_loss)
@@ -258,8 +253,7 @@ class _IterationBuilder(object):
             features=features,
             mode=ensemble_mode,
             iteration_step=iteration_step_tensor,
-            labels=labels,
-            params=params)
+            labels=labels)
         candidate = self._candidate_builder.build_candidate(
             ensemble_spec=ensemble_spec,
             training=training,
@@ -273,11 +267,9 @@ class _IterationBuilder(object):
           if not subnetwork_report:
             subnetwork_report = subnetwork.Report(
                 hparams={}, attributes={}, metrics={})
-          if ensemble_spec.eval_metrics is not None:
-            metrics_fn, kwargs = ensemble_spec.eval_metrics
-            metrics = metrics_fn(**kwargs)
-            for metric_name in sorted(metrics):
-              metric = metrics[metric_name]
+          if ensemble_spec.eval_metric_ops is not None:
+            for metric_name in sorted(ensemble_spec.eval_metric_ops):
+              metric = ensemble_spec.eval_metric_ops[metric_name]
               subnetwork_report.metrics[metric_name] = metric
           subnetwork_report.metrics["adanet_loss"] = tf.metrics.mean(
               ensemble_spec.adanet_loss)
@@ -288,8 +280,8 @@ class _IterationBuilder(object):
       best_predictions = self._best_predictions(candidates,
                                                 best_candidate_index)
       best_loss = self._best_loss(candidates, best_candidate_index, mode)
-      best_eval_metrics = self._create_best_eval_metrics_tuple(
-          candidates, best_candidate_index, mode, params)
+      best_eval_metric_ops = self._best_eval_metric_ops(
+          candidates, best_candidate_index, mode)
       best_export_outputs = self._best_export_outputs(
           candidates, best_candidate_index, mode, best_predictions)
       # Hooks on TPU cannot depend on any graph `Tensors`. Instead the value of
@@ -306,17 +298,13 @@ class _IterationBuilder(object):
         training_chief_hooks += spec.ensemble_train_op.chief_hooks or ()
         training_hooks += spec.subnetwork_train_op.hooks or ()
         training_hooks += spec.ensemble_train_op.hooks or ()
-      eval_metric_ops = None
-      if best_eval_metrics is not None:
-        metric_fn, kwargs = best_eval_metrics
-        eval_metric_ops = metric_fn(**kwargs)
       estimator_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           predictions=best_predictions,
           loss=best_loss,
           train_op=self._create_train_op(candidates, mode, iteration_step,
                                          is_over_var_template),
-          eval_metric_ops=eval_metric_ops,
+          eval_metric_ops=best_eval_metric_ops,
           export_outputs=best_export_outputs,
           training_chief_hooks=training_chief_hooks,
           training_hooks=training_hooks)
@@ -397,21 +385,19 @@ class _IterationBuilder(object):
             tf.assign_add(step, 1),
         )
 
-  def _create_best_eval_metrics_tuple(self, candidates, best_candidate_index,
-                                      mode, params):
-    """Returns (metric_fn, tensors) which computes best candidate metrics.
+  def _best_eval_metric_ops(self, candidates, best_candidate_index, mode):
+    """Returns the eval metric ops of the best candidate.
 
-    Specifically, when metric_fn(tensors) is called, it separates the metric ops
-    by metric name. All candidates are not required to have the same metrics.
-    When they all share a given metric, an additional metric is added which
-    represents that of the best candidate.
+    Specifically, it separates the metric ops by the subnetwork's names. All
+    candidates are not required to have the same metrics. When they all share
+    a given metric, an additional metric is added which represents that of the
+    best candidate.
 
     Args:
       candidates: List of `_Candidate` instances to choose from.
       best_candidate_index: `Tensor` index of the best candidate in the list.
       mode: Defines whether this is training, evaluation or inference. Eval
         metrics are only defined during evaluation. See `ModeKeys`.
-      params: The params passed to model_fn.
 
     Returns:
       Dict of metric results keyed by name. The values of the dict are the
@@ -421,102 +407,40 @@ class _IterationBuilder(object):
     if mode != tf.estimator.ModeKeys.EVAL:
       return None
 
-    metric_fns, tensors = self._collate_metric_fns_and_tensors(candidates)
-    # All tensors outfed from the TPU must be batch-major.
-    batch_size = params.get("batch_size", 1) if params else 1
-    tensors["best_candidate_index"] = tf.tile([best_candidate_index],
-                                              [batch_size])
-    tensors = dict_utils.flatten_dict(tensors)
+    with tf.variable_scope("best_eval_metric_ops"):
+      eval_metric_ops = {}
+      all_metrics = {}
+      for candidate in candidates:
+        ensemble_spec = candidate.ensemble_spec
+        if not ensemble_spec.eval_metric_ops:
+          continue
+        for metric_name in sorted(ensemble_spec.eval_metric_ops):
+          metric_op = ensemble_spec.eval_metric_ops[metric_name]
+          if metric_name not in all_metrics:
+            all_metrics[metric_name] = []
+          all_metrics[metric_name].append(metric_op)
+      for metric_name in sorted(all_metrics):
+        metric_ops = all_metrics[metric_name]
+        if len(metric_ops) != len(candidates):
+          continue
+        values, ops = list(zip(*metric_ops))
+        best_value = tf.stack(values)[best_candidate_index]
+        best_op = tf.group(ops)
+        best_candidate_metric = (best_value, best_op)
+        eval_metric_ops[metric_name] = best_candidate_metric
 
-    def _best_eval_metrics_fn(**kwargs):
-      """Returns the best eval metrics."""
-
-      with tf.variable_scope("best_eval_metrics"):
-        tensors = dict_utils.unflatten_dict(kwargs, metric_fns.keys())
-        grouped_metrics = self._group_metric_ops(metric_fns, tensors)
-
-        eval_metric_ops = {}
-        for metric_name in sorted(grouped_metrics):
-          metric_ops = grouped_metrics[metric_name]
-          if len(metric_ops) != len(candidates):
-            continue
-
-          best_candidate_index = tensors["best_candidate_index"]
-          values, ops = list(six.moves.zip(*metric_ops))
-          idx, idx_update_op = tf.metrics.mean(best_candidate_index)
-          best_value = tf.stack(values)[tf.cast(idx, tf.int32)]
-          # All tensors in this function have been outfed from the TPU, so we
-          # must update them manually, otherwise the TPU will hang indefinetly
-          # for the value of idx to wait.
-          ops = list(ops)
-          ops.append(idx_update_op)
-          best_op = tf.group(ops)
-          best_candidate_metric = (best_value, best_op)
-          eval_metric_ops[metric_name] = best_candidate_metric
-
-          # Include any evaluation metric shared among all the candidates in
-          # the top level metrics in TensorBoard. These "root" metrics track
-          # AdaNet's overall performance, making it easier to compare with other
-          # estimators that report the same metrics.
-          suffix = "/adanet/adanet_weighted_ensemble"
-          if not metric_name.endswith(suffix):
-            continue
-          root_metric_name = metric_name[:-len(suffix)]
-          if root_metric_name == "loss":
-            continue
-          eval_metric_ops[root_metric_name] = best_candidate_metric
-
-        return eval_metric_ops
-
-    return _best_eval_metrics_fn, tensors
-
-  def _collate_metric_fns_and_tensors(self, candidates):
-    """Collates all candidates' metric_fns and tensors from their eval_metrics.
-
-    The fns and tensors are keyed by the index of the candidate in the list.
-
-    Args:
-      candidates: List of `_Candidate` instances.
-
-    Returns:
-      The dicts of functions and tensors keyed by candidate index.
-    """
-    fns = {}
-    tensors = {}
-    for i, candidate in enumerate(candidates):
-      ensemble_spec = candidate.ensemble_spec
-      if not ensemble_spec.eval_metrics:
-        continue
-      metric_fn, metric_tensors = ensemble_spec.eval_metrics
-      key = "candidate_{}".format(i)
-      fns[key] = metric_fn
-      tensors[key] = metric_tensors
-    return fns, tensors
-
-  def _group_metric_ops(self, metric_fns, tensors):
-    """Runs the metric_fns and groups the returned metric ops by name.
-
-    Tensors will be passed as params to metric_fns which have the same key. The
-    dicts of eval metrics returned by metric_fns are then reduced by key.
-
-    Args:
-      metric_fns: A dictionary of fn(tensors)->dict(metric_name, metric_ops).
-      tensors: A dictionary of tensors to pass to metric_fns.
-
-    Returns:
-      The metric ops grouped by name.
-    """
-    grouped_metrics = {}
-    for key in sorted(metric_fns):
-      fn = metric_fns[key]
-      args = tensors[key]
-      eval_metric_ops = fn(**args)
-      for metric_name in sorted(eval_metric_ops):
-        metric_op = eval_metric_ops[metric_name]
-        if metric_name not in grouped_metrics:
-          grouped_metrics[metric_name] = []
-        grouped_metrics[metric_name].append(metric_op)
-    return grouped_metrics
+        # Include any evaluation metric shared among all the candidates in the
+        # top level metrics in TensorBoard. These "root" metrics track AdaNet's
+        # overall performance, making it easier to compare with other estimators
+        # that report the same metrics.
+        suffix = "/adanet/adanet_weighted_ensemble"
+        if not metric_name.endswith(suffix):
+          continue
+        root_metric_name = metric_name[:-len(suffix)]
+        if root_metric_name == "loss":
+          continue
+        eval_metric_ops[root_metric_name] = best_candidate_metric
+      return eval_metric_ops
 
   def _best_candidate_index(self, candidates):
     """Returns the index of the best candidate in the list.

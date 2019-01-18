@@ -55,7 +55,7 @@ def dummy_ensemble_spec(name,
                         bias=0.,
                         loss=None,
                         adanet_loss=None,
-                        eval_metrics=None,
+                        eval_metric_ops=None,
                         dict_predictions=False,
                         export_output_key=None,
                         train_op=None):
@@ -70,7 +70,7 @@ def dummy_ensemble_spec(name,
       distribution.
     adanet_loss: Float AdaNet loss to return. When None, it's picked from a
       random distribution.
-    eval_metrics: Optional eval metrics tuple of (metric_fn, tensor args).
+    eval_metric_ops: Optional dictionary of metric ops.
     dict_predictions: Boolean whether to return predictions as a dictionary of
       `Tensor` or just a single float `Tensor`.
     export_output_key: An `ExportOutputKeys` for faking export outputs.
@@ -122,7 +122,7 @@ def dummy_ensemble_spec(name,
       predictions=predictions,
       loss=loss,
       adanet_loss=adanet_loss,
-      eval_metrics=eval_metrics,
+      eval_metric_ops=eval_metric_ops,
       subnetwork_train_op=train_op,
       ensemble_train_op=train_op,
       export_outputs=export_outputs)
