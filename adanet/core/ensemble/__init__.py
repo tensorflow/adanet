@@ -1,4 +1,4 @@
-# Copyright 2018 The AdaNet Authors. All Rights Reserved.
+# Copyright 2019 The AdaNet Authors. All Rights Reserved.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,8 +26,16 @@ from __future__ import print_function
 
 from adanet.core.ensemble.ensembler import Ensemble
 from adanet.core.ensemble.ensembler import Ensembler
+from adanet.core.ensemble.strategy import AllStrategy
+from adanet.core.ensemble.strategy import Candidate
+from adanet.core.ensemble.strategy import GrowStrategy
+from adanet.core.ensemble.strategy import Strategy
 
 __all__ = [
     "Ensemble",
     "Ensembler",
+    "Candidate",
+    "Strategy",
+    "GrowStrategy",
+    "AllStrategy",
 ]
