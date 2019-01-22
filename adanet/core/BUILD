@@ -14,7 +14,7 @@ py_library(
     srcs = ["__init__.py"],
     visibility = whitelist,
     deps = [
-        ":ensemble",
+        ":ensemble_builder",
         ":estimator",
         ":evaluator",
         ":report_materializer",
@@ -29,7 +29,7 @@ py_library(
     deps = [
         ":architecture",
         ":candidate",
-        ":ensemble",
+        ":ensemble_builder",
         ":iteration",
         ":report_accessor",
         ":summary",
@@ -45,7 +45,7 @@ py_test(
     shard_count = 40,
     srcs_version = "PY2AND3",
     deps = [
-        ":ensemble",
+        ":ensemble_builder",
         ":estimator",
         ":evaluator",
         ":report_materializer",
@@ -59,7 +59,7 @@ py_library(
     name = "tpu_estimator",
     srcs = ["tpu_estimator.py"],
     deps = [
-        ":ensemble",
+        ":ensemble_builder",
         ":estimator",
         "@six_archive//:six",
     ],
@@ -111,7 +111,7 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":candidate",
-        ":ensemble",
+        ":ensemble_builder",
         ":iteration",
         ":testing_utils",
         "//adanet/core/subnetwork",
@@ -138,8 +138,8 @@ py_test(
 )
 
 py_library(
-    name = "ensemble",
-    srcs = ["ensemble.py"],
+    name = "ensemble_builder",
+    srcs = ["ensemble_builder.py"],
     deps = [
         ":architecture",
         ":summary",
@@ -148,11 +148,11 @@ py_library(
 )
 
 py_test(
-    name = "ensemble_test",
-    srcs = ["ensemble_test.py"],
+    name = "ensemble_builder_test",
+    srcs = ["ensemble_builder_test.py"],
     srcs_version = "PY2AND3",
     deps = [
-        ":ensemble",
+        ":ensemble_builder",
         ":summary",
         ":testing_utils",
         "//adanet/core/subnetwork",
@@ -199,7 +199,7 @@ py_library(
     srcs = ["testing_utils.py"],
     deps = [
         ":architecture",
-        ":ensemble",
+        ":ensemble_builder",
         "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],

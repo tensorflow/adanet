@@ -24,8 +24,8 @@ import os
 import shutil
 
 from absl.testing import parameterized
-from adanet.core.ensemble import _EnsembleBuilder
-from adanet.core.ensemble import MixtureWeightType
+from adanet.core.ensemble_builder import _EnsembleBuilder
+from adanet.core.ensemble_builder import MixtureWeightType
 from adanet.core.subnetwork import Builder
 from adanet.core.subnetwork import Subnetwork
 from adanet.core.summary import Summary

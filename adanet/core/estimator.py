@@ -26,8 +26,8 @@ import time
 
 from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _CandidateBuilder
-from adanet.core.ensemble import _EnsembleBuilder
-from adanet.core.ensemble import MixtureWeightType
+from adanet.core.ensemble_builder import _EnsembleBuilder
+from adanet.core.ensemble_builder import MixtureWeightType
 from adanet.core.iteration import _IterationBuilder
 from adanet.core.report_accessor import _ReportAccessor
 from adanet.core.summary import _ScopedSummary

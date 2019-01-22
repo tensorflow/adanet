@@ -24,9 +24,9 @@ import shutil
 
 from absl.testing import parameterized
 from adanet.core.architecture import _Architecture
-from adanet.core.ensemble import _EnsembleSpec
-from adanet.core.ensemble import Ensemble
-from adanet.core.ensemble import WeightedSubnetwork
+from adanet.core.ensemble_builder import _EnsembleSpec
+from adanet.core.ensemble_builder import Ensemble
+from adanet.core.ensemble_builder import WeightedSubnetwork
 from adanet.core.subnetwork import Subnetwork
 import tensorflow as tf
 

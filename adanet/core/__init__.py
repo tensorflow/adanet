@@ -19,9 +19,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.core.ensemble import Ensemble
-from adanet.core.ensemble import MixtureWeightType
-from adanet.core.ensemble import WeightedSubnetwork
+from adanet.core.ensemble_builder import Ensemble
+from adanet.core.ensemble_builder import MixtureWeightType
+from adanet.core.ensemble_builder import WeightedSubnetwork
 from adanet.core.estimator import Estimator
 from adanet.core.evaluator import Evaluator
 from adanet.core.report_materializer import ReportMaterializer

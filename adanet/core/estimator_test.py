@@ -23,7 +23,7 @@ import os
 
 from absl.testing import parameterized
 from adanet.core import testing_utils as tu
-from adanet.core.ensemble import MixtureWeightType
+from adanet.core.ensemble_builder import MixtureWeightType
 from adanet.core.estimator import Estimator
 from adanet.core.evaluator import Evaluator
 from adanet.core.report_materializer import ReportMaterializer

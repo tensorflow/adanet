@@ -22,7 +22,7 @@ from __future__ import print_function
 import collections
 import functools
 
-from adanet.core.ensemble import MixtureWeightType
+from adanet.core.ensemble_builder import MixtureWeightType
 from adanet.core.estimator import _StepCounterHook
 from adanet.core.estimator import Estimator
 import six

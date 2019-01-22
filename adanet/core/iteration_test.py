@@ -21,7 +21,7 @@ from __future__ import print_function
 
 from absl.testing import parameterized
 from adanet.core.candidate import _Candidate
-from adanet.core.ensemble import _EnsembleSpec
+from adanet.core.ensemble_builder import _EnsembleSpec
 from adanet.core.iteration import _Iteration
 from adanet.core.iteration import _IterationBuilder
 from adanet.core.subnetwork import Builder as SubnetworkBuilder
