@@ -290,14 +290,15 @@ class _FakeEnsembleBuilder(object):
                eval_metric_ops_fn=None,
                export_output_key=None):
     self._dict_predictions = dict_predictions
-    self._eval_metric_ops_fn = lambda: None
     self._export_output_key = export_output_key
     if eval_metric_ops_fn:
-      self._eval_metric_ops_fn = eval_metric_ops_fn
+      self._eval_metrics = (eval_metric_ops_fn, {})
+    else:
+      self._eval_metrics = None
 
-  def append_new_subnetwork(self, ensemble_name, ensemble_spec,
-                            subnetwork_builder, iteration_number,
-                            iteration_step, summary, features, mode, labels):
+  def append_new_subnetwork(
+      self, ensemble_name, ensemble_spec, subnetwork_builder, iteration_number,
+      iteration_step, summary, features, mode, labels, params):
     del ensemble_name
     del summary
     del mode
@@ -305,6 +306,7 @@ class _FakeEnsembleBuilder(object):
     del labels
     del iteration_number
     del iteration_step
+    del params
 
     num_subnetworks = 0
     if ensemble_spec:
@@ -315,7 +317,7 @@ class _FakeEnsembleBuilder(object):
         num_subnetworks=num_subnetworks,
         random_seed=subnetwork_builder.seed,
         dict_predictions=self._dict_predictions,
-        eval_metric_ops=self._eval_metric_ops_fn(),
+        eval_metrics=self._eval_metrics,
         export_output_key=self._export_output_key)
 
 
@@ -480,9 +482,9 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           "labels":
               lambda: [1],
           "previous_ensemble_spec":
-              lambda: tu.dummy_ensemble_spec("old", eval_metric_ops={
+              lambda: tu.dummy_ensemble_spec("old", eval_metrics=(lambda: {
                   "a": (tf.constant(1), tf.constant(2))
-              }),
+              }, {})),
           "want_loss":
               1.403943,
           "want_predictions":
@@ -828,15 +830,16 @@ class _HeadEnsembleBuilder(object):
   def __init__(self, head):
     self._head = head
 
-  def append_new_subnetwork(self, ensemble_name, ensemble_spec,
-                            subnetwork_builder, iteration_number,
-                            iteration_step, summary, features, mode, labels):
+  def append_new_subnetwork(
+      self, ensemble_name, ensemble_spec, subnetwork_builder, iteration_number,
+      iteration_step, summary, features, mode, labels, params):
     del ensemble_name
     del ensemble_spec
     del subnetwork_builder
     del iteration_number
     del iteration_step
     del summary
+    del params
 
     logits = [[.5]]
 
@@ -851,7 +854,7 @@ class _HeadEnsembleBuilder(object):
         adanet_loss=.1,
         subnetwork_train_op=None,
         ensemble_train_op=None,
-        eval_metric_ops=None,
+        eval_metrics=None,
         export_outputs=estimator_spec.export_outputs)
 
 

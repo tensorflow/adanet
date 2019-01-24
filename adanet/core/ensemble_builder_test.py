@@ -113,14 +113,14 @@ class _Builder(Builder):
 
 
 class _BuilderPrunerAll(_Builder):
-  """Removed previous ensemble completely"""
+  """Removed previous ensemble completely."""
 
   def prune_previous_ensemble(self, previous_ensemble):
     return []
 
 
 class _BuilderPrunerLeaveOne(_Builder):
-  """Removed previous ensemble completely"""
+  """Removed previous ensemble completely."""
 
   def prune_previous_ensemble(self, previous_ensemble):
     if previous_ensemble:
@@ -151,12 +151,14 @@ class _FakeSummary(Summary):
 class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
+    super(EnsembleBuilderTest, self).setUp()
     # Setup and cleanup test directory.
     self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
     os.mkdir(self.test_subdirectory)
 
   def tearDown(self):
+    super(EnsembleBuilderTest, self).tearDown()
     tf.reset_default_graph()
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
 
@@ -418,13 +420,26 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
           use_bias=True)
 
 
-def _make_metrics(sess, metric_fn, mode=tf.estimator.ModeKeys.EVAL):
-  head = tf.contrib.estimator.binary_classification_head(
-      loss_reduction=tf.losses.Reduction.SUM)
+def _make_metrics(sess,
+                  metric_fn,
+                  mode=tf.estimator.ModeKeys.EVAL,
+                  multi_head=False):
+
+  if multi_head:
+    head = tf.contrib.estimator.multi_head(heads=[
+        tf.contrib.estimator.binary_classification_head(
+            name="head1", loss_reduction=tf.losses.Reduction.SUM),
+        tf.contrib.estimator.binary_classification_head(
+            name="head2", loss_reduction=tf.losses.Reduction.SUM)
+    ])
+    labels = {"head1": tf.constant([0, 1]), "head2": tf.constant([0, 1])}
+  else:
+    head = tf.contrib.estimator.binary_classification_head(
+        loss_reduction=tf.losses.Reduction.SUM)
+    labels = tf.constant([0, 1])
+  features = {"x": tf.constant([[1.], [2.]])}
   builder = _EnsembleBuilder(
       head, MixtureWeightType.SCALAR, metric_fn=metric_fn)
-  features = {"x": tf.constant([[1.], [2.]])}
-  labels = tf.constant([0, 1])
 
   ensemble_spec = builder.append_new_subnetwork(
       ensemble_name="test",
@@ -439,9 +454,11 @@ def _make_metrics(sess, metric_fn, mode=tf.estimator.ModeKeys.EVAL):
       features=features,
       mode=mode,
       labels=labels)
+  fn, kwargs = ensemble_spec.eval_metrics
+  eval_metric_ops = fn(**kwargs)
   sess.run((tf.global_variables_initializer(),
             tf.local_variables_initializer()))
-  metrics = sess.run(ensemble_spec.eval_metric_ops)
+  metrics = sess.run(eval_metric_ops)
   return {k: metrics[k][1] for k in metrics}
 
 
@@ -555,6 +572,17 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
 
     # TODO: Add support for tf.keras.metrics.Mean like `add_metrics`.
     _test_metric_fn(metric_fn_1)
+
+  def test_multi_head(self):
+    """Tests b/123084079."""
+
+    def metric_fn(predictions):
+      self.assertIn(("head1", "logits"), predictions)
+      self.assertIn(("head2", "logits"), predictions)
+      return {}
+
+    with self.test_session() as sess:
+      _make_metrics(sess, metric_fn, multi_head=True)
 
 
 if __name__ == "__main__":

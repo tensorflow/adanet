@@ -995,9 +995,11 @@ class Estimator(tf.estimator.Estimator):
       eval_subdir = "eval"
       if self._evaluation_name:
         eval_subdir = "eval_{}".format(self._evaluation_name)
+      metric_fn, kwargs = candidate.ensemble_spec.eval_metrics
+      eval_metric_ops = metric_fn(**kwargs)
       eval_metric_hook = _EvalMetricSaverHook(
           name=candidate.ensemble_spec.name,
-          eval_metric_ops=candidate.ensemble_spec.eval_metric_ops,
+          eval_metric_ops=eval_metric_ops,
           output_dir=os.path.join(self.model_dir, "candidate",
                                   candidate.ensemble_spec.name, eval_subdir))
       evaluation_hooks.append(eval_metric_hook)
@@ -1041,7 +1043,8 @@ class Estimator(tf.estimator.Estimator):
       return _Architecture.deserialize(gfile.read())
 
   # TODO: Refactor architecture building logic to its own module.
-  def _architecture_ensemble_spec(self, architecture, features, mode, labels):
+  def _architecture_ensemble_spec(self, architecture, features, mode, labels,
+                                  params):
     """Returns an `_EnsembleSpec` with the given architecture.
 
     Creates the ensemble architecture by calling `generate_subnetworks` on
@@ -1056,6 +1059,7 @@ class Estimator(tf.estimator.Estimator):
         `ModeKeys`.
       labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
         (for multi-head). Can be `None`.
+      params: The params passed to model_fn.
 
     Returns:
       An `EnsembleSpec` instance for the given architecture.
@@ -1105,7 +1109,8 @@ class Estimator(tf.estimator.Estimator):
           mode=mode,
           previous_ensemble_summary=previous_ensemble_summary,
           previous_ensemble_spec=previous_ensemble_spec,
-          rebuilding=True)
+          rebuilding=True,
+          params=params)
       previous_ensemble_spec = current_iteration.candidates[-1].ensemble_spec
       previous_ensemble = previous_ensemble_spec.ensemble
     return previous_ensemble_spec
@@ -1238,7 +1243,7 @@ class Estimator(tf.estimator.Estimator):
       previous_ensemble_summary = None
       if architecture:
         previous_ensemble_spec = self._architecture_ensemble_spec(
-            architecture, features, mode, labels)
+            architecture, features, mode, labels, params)
         previous_ensemble = previous_ensemble_spec.ensemble
         previous_ensemble_summary = _ScopedSummary(
             self.model_dir,
@@ -1267,7 +1272,8 @@ class Estimator(tf.estimator.Estimator):
           labels=labels,
           mode=mode,
           previous_ensemble_summary=previous_ensemble_summary,
-          previous_ensemble_spec=previous_ensemble_spec)
+          previous_ensemble_spec=previous_ensemble_spec,
+          params=params)
 
     params["current_iteration"] = current_iteration
 
