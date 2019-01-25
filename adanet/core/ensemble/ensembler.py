@@ -68,8 +68,9 @@ class Ensembler(object):
     """This ensembler's unique string name."""
 
   @abc.abstractmethod
-  def build_ensemble(self, subnetworks, features, labels, logits_dimension,
-                     training, iteration_step, summary, previous_ensemble):
+  def build_ensemble(self, subnetworks, previous_ensemble_subnetworks, features,
+                     labels, logits_dimension, training, iteration_step,
+                     summary, previous_ensemble):
     # pyformat: disable
     """Builds an ensemble of subnetworks.
 
@@ -79,7 +80,11 @@ class Ensembler(object):
 
     Args:
       subnetworks: Ordered iterable of :class:`adanet.subnetwork.Subnetwork`
-        instances to ensemble.
+        instances to ensemble. Must have at least one element.
+      previous_ensemble_subnetworks: Ordered iterable of
+        :class:`adanet.subnetwork.Subnetwork` instances present in previous
+        ensemble to be used. The subnetworks from previous_ensemble not
+        included in this list should be pruned. Can be set to None or empty.
       features: Input `dict` of :class:`tf.Tensor` objects.
       labels: Labels :class:`tf.Tensor` or a dictionary of string label name to
         :class:`tf.Tensor` (for multi-head). Can be `None`.

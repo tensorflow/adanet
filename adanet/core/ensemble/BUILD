@@ -12,6 +12,7 @@ py_library(
     deps = [
         ":ensembler",
         ":strategy",
+        ":weighted",
     ],
 )
 
@@ -36,5 +37,25 @@ py_test(
     deps = [
         ":ensemble",
         "//adanet/core/subnetwork",
+    ],
+)
+
+py_library(
+    name = "weighted",
+    srcs = ["weighted.py"],
+    deps = [
+        ":ensembler",
+    ],
+)
+
+py_test(
+    name = "weighted_test",
+    srcs = ["weighted_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":ensemble",
+        "//adanet/core",
+        "//adanet/core/subnetwork",
+        "@absl_py//absl/testing:parameterized",
     ],
 )
