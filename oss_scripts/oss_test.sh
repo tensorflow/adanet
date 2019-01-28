@@ -31,4 +31,4 @@ cp bazel-genfiles/adanet/core/architecture_pb2.py adanet/core
 cp bazel-genfiles/adanet/core/report_pb2.py adanet/core
 
 # Run test suite and collect coverage (see setup.cfg in root).
-nosetests
+nosetests -v
