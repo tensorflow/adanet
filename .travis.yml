@@ -24,6 +24,6 @@ install:
   - pip install codecov
   - ./oss_scripts/oss_pip_install.sh
 script:
-  - ./oss_scripts/oss_test.sh
+  - travis_wait ./oss_scripts/oss_test.sh
 after_success:
   - codecov
