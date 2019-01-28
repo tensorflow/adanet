@@ -175,7 +175,6 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":summary",
-        ":testing_utils",
         "@absl_py//absl/testing:parameterized",
         "@six_archive//:six",
     ],

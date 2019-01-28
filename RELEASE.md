@@ -15,8 +15,6 @@ limitations under the License.
 
 # Current version (0.6.0-dev)
  * Under development.
- * Support recording TensorBoard `scalar`, `image`, `histogram`, and `audio` summaries on TPU during training.
- * Support `scalar`, `image`, `histogram`, and `audio` functions in the `tf.contrib.summary` package.
 
 # Release 0.5.0
  * Support training on TPU using `adanet.TPUEstimator`.

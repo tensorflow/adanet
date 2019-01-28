@@ -724,8 +724,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                            want_export_outputs=None,
                            mode=tf.estimator.ModeKeys.TRAIN):
     global_step = tf.train.create_global_step()
-    builder = _IterationBuilder("/tmp", _FakeCandidateBuilder(),
-                                ensemble_builder)
+    builder = _IterationBuilder(_FakeCandidateBuilder(), ensemble_builder)
     iteration = builder.build_iteration(
         iteration_number=0,
         subnetwork_builders=subnetwork_builders,
@@ -810,8 +809,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                                  want_raises,
                                  previous_ensemble_spec_fn=lambda: None,
                                  mode=tf.estimator.ModeKeys.TRAIN):
-    builder = _IterationBuilder("/tmp", _FakeCandidateBuilder(),
-                                ensemble_builder)
+    builder = _IterationBuilder(_FakeCandidateBuilder(), ensemble_builder)
     features = [[1., -1., 0.]]
     labels = [1]
     with self.test_session():
@@ -869,8 +867,7 @@ class IterationExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
   })
   def test_head_export_outputs(self, head):
     ensemble_builder = _HeadEnsembleBuilder(head)
-    builder = _IterationBuilder("/tmp", _FakeCandidateBuilder(),
-                                ensemble_builder)
+    builder = _IterationBuilder(_FakeCandidateBuilder(), ensemble_builder)
     features = [[1., -1., 0.]]
     labels = [1]
     mode = tf.estimator.ModeKeys.PREDICT
