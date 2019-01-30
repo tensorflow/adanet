@@ -111,7 +111,8 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
     Returns:
       A `str` representing the `dictionary`.
     """
-    return ", ".join("%s = %s" % (k, v) for k, v in sorted(dictionary.items()))
+    return ", ".join(
+        "{} = {}".format(k, v) for k, v in sorted(dictionary.items()))
 
   def end(self, session):
     """See `SessionRunHook`."""
@@ -138,7 +139,7 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
       elif isinstance(value, six.binary_type):
         summ = tf.summary.Summary.FromString(value)
         for i, _ in enumerate(summ.value):
-          summ.value[i].tag = "%s/%d" % (key, i)
+          summ.value[i].tag = "{}/{}".format(key, i)
         summary_proto.value.extend(summ.value)
       else:
         tf.logging.warn(
