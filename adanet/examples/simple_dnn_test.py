@@ -29,7 +29,7 @@ class _FakeEnsemble(object):
   """A fake ensemble of one subnetwork."""
 
   def __init__(self, num_layers):
-    persisted_tensors = {"num_layers": tf.constant(num_layers)}
+    shared_tensors = {"num_layers": tf.constant(num_layers)}
     self._weighted_subnetworks = [
         adanet.WeightedSubnetwork(
             name=None,
@@ -40,7 +40,7 @@ class _FakeEnsemble(object):
                 last_layer=[1],
                 logits=[1],
                 complexity=1,
-                persisted_tensors=persisted_tensors))
+                shared=shared_tensors))
     ]
 
   @property

@@ -96,12 +96,12 @@ class _SimpleDNNBuilder(adanet.subnetwork.Builder):
       summary.scalar("complexity", complexity)
       summary.scalar("num_layers", self._num_layers)
 
-    persisted_tensors = {_NUM_LAYERS_KEY: tf.constant(self._num_layers)}
+    shared_tensors = {_NUM_LAYERS_KEY: tf.constant(self._num_layers)}
     return adanet.Subnetwork(
         last_layer=last_layer,
         logits=logits,
         complexity=complexity,
-        persisted_tensors=persisted_tensors)
+        shared=shared_tensors)
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
@@ -208,7 +208,7 @@ class Generator(adanet.subnetwork.Generator):
     if previous_ensemble:
       num_layers = tf.contrib.util.constant_value(
           previous_ensemble.weighted_subnetworks[-1].subnetwork
-          .persisted_tensors[_NUM_LAYERS_KEY])
+          .shared[_NUM_LAYERS_KEY])
     return [
         self._dnn_builder_fn(num_layers=num_layers),
         self._dnn_builder_fn(num_layers=num_layers + 1),
