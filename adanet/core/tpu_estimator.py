@@ -24,10 +24,9 @@ import functools
 
 from adanet.core.ensemble_builder import MixtureWeightType
 from adanet.core.estimator import Estimator
-import six
 import tensorflow as tf
-from tensorflow.contrib.tpu.python.tpu import tpu_function
-from tensorflow.python import summary  # Suppress lint error for rollback. pylint: disable=g-direct-tensorflow-import
+from tensorflow.contrib.tpu.python.tpu import tpu_function  # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python import summary  # pylint: disable=g-direct-tensorflow-import
 
 
 # TODO: support summaries on TPU during training.
@@ -41,7 +40,7 @@ def _rewire_summaries():
     Context where summary functions are rewired to be no-ops when on TPU.
   """
 
-  if tpu_function.get_tpu_context().number_of_shards == 0:
+  if not tpu_function.get_tpu_context().number_of_shards:
     yield
     return
 
@@ -125,10 +124,14 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                use_tpu=True,
                train_batch_size=None,
                eval_batch_size=None):
-    if not use_tpu:
+    self._use_tpu = use_tpu
+    if self._use_tpu:
       tf.logging.warning(
           "This adanet.TPUEstimator is meant to be used for running on TPU. "
           "If you want to run on CPU/GPU, use adanet.Estimator instead.")
+      tf.logging.warning(
+          "Only the evaluation metrics of the best candidate will be display "
+          "in Tensorboard when evaluating on TPU.")
 
     super(TPUEstimator, self).__init__(
         head=head,
@@ -151,7 +154,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         report_dir=report_dir,
         config=config if config else tf.contrib.tpu.RunConfig(),
         use_tpu=use_tpu,
-        eval_on_tpu=False,
+        eval_on_tpu=use_tpu,
         export_to_tpu=False,
         train_batch_size=train_batch_size or 0,
         eval_batch_size=eval_batch_size or train_batch_size or 0)
@@ -163,7 +166,6 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
             max_steps=None,
             saving_listeners=None):
     # Rewire summaries to be no-ops when running on TPU.
-    # TODO: Rewire predict and eval when TPU support is added.
     with _rewire_summaries():
       return super(TPUEstimator, self).train(
           input_fn=input_fn,
@@ -172,13 +174,28 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
           max_steps=max_steps,
           saving_listeners=saving_listeners)
 
+  def evaluate(self,
+               input_fn,
+               steps=None,
+               hooks=None,
+               checkpoint_path=None,
+               name=None):
+    # Rewire summaries to be no-ops when running on TPU.
+    with _rewire_summaries():
+      return super(TPUEstimator, self).evaluate(
+          input_fn=input_fn,
+          steps=steps,
+          hooks=hooks,
+          checkpoint_path=checkpoint_path,
+          name=name)
+
   def predict(self,
               input_fn,
               predict_keys=None,
               hooks=None,
               checkpoint_path=None,
               yield_single_examples=True):
-    # TODO: Required to support predict on CPU for TPUEstiamtor.
+    # TODO: Required to support predict on CPU for TPUEstimator.
     # This is the recommended method from TensorFlow TPUEstimator docs:
     # https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimator#current_limitations
     tf.logging.warning(
@@ -211,16 +228,22 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
       input_fn = functools.partial(input_fn, params)
       super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode, params)
 
-  def _adanet_model_fn(self, features, labels, mode, params):
+  def _create_estimator_spec(self, current_iteration, mode, training, scaffold):
     """See the `Estimator` base class for details."""
 
-    estimator_spec = super(TPUEstimator, self)._adanet_model_fn(
-        features, labels, mode, params)
-    if "use_tpu" in params and mode == tf.estimator.ModeKeys.TRAIN:
-      kwargs = {
-          key: value
-          for key, value in six.iteritems(estimator_spec._asdict())
-          if key not in ("eval_metric_ops", "scaffold", "training_chief_hooks")
-      }
-      estimator_spec = tf.contrib.tpu.TPUEstimatorSpec(**kwargs)
-    return estimator_spec
+    if not self._use_tpu:
+      return super(TPUEstimator, self)._create_estimator_spec(
+          current_iteration, mode, training, scaffold)
+
+    iteration_estimator_spec = current_iteration.estimator_spec
+    return tf.contrib.tpu.TPUEstimatorSpec(
+        mode=mode,
+        predictions=iteration_estimator_spec.predictions,
+        loss=iteration_estimator_spec.loss,
+        train_op=iteration_estimator_spec.train_op,
+        eval_metrics=iteration_estimator_spec.eval_metrics,
+        training_hooks=self._training_hooks(current_iteration, training),
+        # Return a constant summary_op, otherwise `Estimator` creates summary
+        # ops that do not work on TPU.
+        scaffold_fn=lambda: tf.train.Scaffold(summary_op=tf.constant("")),
+        export_outputs=iteration_estimator_spec.export_outputs)

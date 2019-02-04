@@ -36,7 +36,7 @@ import numpy as np
 import six
 import tensorflow as tf
 
-from tensorflow.python.ops import resources
+from tensorflow.python.ops import resources  # pylint: disable=g-direct-tensorflow-import
 
 
 class _StopAfterTrainingHook(tf.train.SessionRunHook):
@@ -394,6 +394,7 @@ class Estimator(tf.estimator.Estimator):
     # These are defined after base Estimator's init so that they can
     # use the same temporary model_dir as the underlying Estimator even if
     # model_dir is not provided.
+    use_tpu = kwargs.get("use_tpu", False)
     self._ensemble_builder = _EnsembleBuilder(
         head=head,
         mixture_weight_type=mixture_weight_type,
@@ -403,13 +404,16 @@ class Estimator(tf.estimator.Estimator):
         adanet_lambda=adanet_lambda,
         adanet_beta=adanet_beta,
         use_bias=use_bias,
-        metric_fn=metric_fn)
+        metric_fn=metric_fn,
+        use_tpu=use_tpu)
     candidate_builder = _CandidateBuilder(
         max_steps=max_iteration_steps,
         adanet_loss_decay=self._adanet_loss_decay)
-    self._iteration_builder = _IterationBuilder(candidate_builder,
-                                                self._ensemble_builder,
-                                                replicate_ensemble_in_training)
+    self._iteration_builder = _IterationBuilder(
+        candidate_builder,
+        self._ensemble_builder,
+        replicate_ensemble_in_training,
+        use_tpu=use_tpu)
     report_dir = report_dir or os.path.join(self._model_dir, "report")
     self._report_accessor = _ReportAccessor(report_dir)
 
@@ -1034,6 +1038,22 @@ class Estimator(tf.estimator.Estimator):
 
     return previous_ensemble_reports, all_reports
 
+  def _create_estimator_spec(self, current_iteration, mode, training, scaffold):
+    """Creates the EstimatorSpec which will be returned by _adanet_model_fn."""
+
+    iteration_estimator_spec = current_iteration.estimator_spec
+    return tf.estimator.EstimatorSpec(
+        mode=mode,
+        predictions=iteration_estimator_spec.predictions,
+        loss=iteration_estimator_spec.loss,
+        train_op=iteration_estimator_spec.train_op,
+        eval_metric_ops=iteration_estimator_spec.eval_metric_ops,
+        training_chief_hooks=iteration_estimator_spec.training_chief_hooks,
+        training_hooks=self._training_hooks(current_iteration, training),
+        evaluation_hooks=self._evaluation_hooks(current_iteration, training),
+        scaffold=scaffold,
+        export_outputs=iteration_estimator_spec.export_outputs)
+
   def _adanet_model_fn(self, features, labels, mode, params):
     """AdaNet model_fn.
 
@@ -1151,18 +1171,9 @@ class Estimator(tf.estimator.Estimator):
       adanet_summary.scalar("loss/adanet/adanet_weighted_ensemble",
                             current_iteration.estimator_spec.loss)
 
-    iteration_estimator_spec = current_iteration.estimator_spec
-    estimator_spec = tf.estimator.EstimatorSpec(
-        mode=mode,
-        predictions=iteration_estimator_spec.predictions,
-        loss=iteration_estimator_spec.loss,
-        train_op=iteration_estimator_spec.train_op,
-        eval_metric_ops=iteration_estimator_spec.eval_metric_ops,
-        training_chief_hooks=iteration_estimator_spec.training_chief_hooks,
-        training_hooks=self._training_hooks(current_iteration, training),
-        evaluation_hooks=self._evaluation_hooks(current_iteration, training),
-        scaffold=tf.train.Scaffold(summary_op=adanet_summary.merge_all()),
-        export_outputs=iteration_estimator_spec.export_outputs)
+    estimator_spec = self._create_estimator_spec(
+        current_iteration, mode, training,
+        tf.train.Scaffold(summary_op=adanet_summary.merge_all()))
 
     if self._Keys.EVALUATE_ENSEMBLES in params:
       assert self.config.is_chief

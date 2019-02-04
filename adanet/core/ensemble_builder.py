@@ -32,7 +32,7 @@ from adanet.core.summary import monkey_patched_summaries
 import six
 import tensorflow as tf
 
-from tensorflow.python.training import training_util
+from tensorflow.python.training import training_util  # pylint: disable=g-direct-tensorflow-import
 
 _VALID_METRIC_FN_ARGS = {"features", "labels", "predictions"}
 
@@ -212,16 +212,14 @@ class MixtureWeightType(object):
 def _architecture_as_metric(architecture):
   """Returns a representation of the ensemble's architecture as a tf.metric."""
 
-  architecture_ = architecture
-
   def _architecture_metric_fn(**kwargs):
     del kwargs  # Unused.
 
-    joined_names = " | ".join(
-        itertools.chain(*[names for _, names in architecture_.subnetworks]))
-    architecture = tf.convert_to_tensor(
-        "| {} |".format(joined_names), name="architecture")
-    architecture_summary = tf.summary.text("architecture/adanet", architecture)
+    architecture_ = " | ".join(
+        itertools.chain(*[names for _, names in architecture.subnetworks]))
+    architecture_ = tf.convert_to_tensor(
+        "| {} |".format(architecture_), name="architecture")
+    architecture_summary = tf.summary.text("architecture/adanet", architecture_)
     return {"architecture/adanet/ensembles": (architecture_summary, tf.no_op())}
 
   return _architecture_metric_fn
@@ -336,11 +334,11 @@ def _create_group_metrics(group_name, features, labels, estimator_spec,
 
   # If estimator_spec is not a TPUEstimatorSpec we create dummy eval_metric_fn
   # and tensors.
-  if isinstance(estimator_spec, tf.contrib.tpu.TPUEstimatorSpec):
-    spec_metric_fn, spec_tensors = estimator_spec.eval_metrics
-  else:
+  if isinstance(estimator_spec, tf.estimator.EstimatorSpec):
     spec_metric_fn = lambda: estimator_spec.eval_metric_ops
     spec_tensors = {}
+  else:
+    spec_metric_fn, spec_tensors = estimator_spec.eval_metrics
   metric_fns.append(_create_scoped_metric_fn(spec_metric_fn, group_name))
   for key, value in six.iteritems(spec_tensors):
     tensors["{}/{}/{}".format(group_name, _KWARGS_KEY, key)] = value
@@ -459,7 +457,8 @@ class _EnsembleBuilder(object):
                adanet_lambda=0.,
                adanet_beta=0.,
                use_bias=True,
-               metric_fn=None):
+               metric_fn=None,
+               use_tpu=False):
     """Returns an initialized `_EnsembleBuilder`.
 
     Args:
@@ -502,6 +501,7 @@ class _EnsembleBuilder(object):
           override the existing one. The values of the dict are the results of
           calling a metric function, namely a `(metric_tensor, update_op)`
           tuple.
+     use_tpu: Whether AdaNet is running on TPU.
 
     Returns:
       An `_EnsembleBuilder` instance.
@@ -519,6 +519,7 @@ class _EnsembleBuilder(object):
 
     _verify_metric_fn_args(metric_fn)
 
+    self._use_tpu = use_tpu
     self._head = head
     self._mixture_weight_type = mixture_weight_type
     self._mixture_weight_initializer = mixture_weight_initializer
@@ -707,32 +708,21 @@ class _EnsembleBuilder(object):
                                               summary))
 
     # The AdaNet-weighted ensemble.
-    adanet_weighted_ensemble_spec = self._head.create_estimator_spec(
-        features=features,
-        mode=mode,
-        logits=ensemble_logits,
-        labels=labels,
-        train_op_fn=lambda _: tf.no_op())
+    adanet_weighted_ensemble_spec = self._create_estimator_spec(
+        features, labels, mode, ensemble_logits)
 
     # A baseline ensemble: the uniform-average of subnetwork outputs.
     # It is practically free to compute, requiring no additional training, and
     # tends to generalize very well. However the AdaNet-weighted ensemble
     # should perform at least as well given the correct hyperparameters.
-    uniform_average_ensemble_spec = self._head.create_estimator_spec(
-        features=features,
-        mode=mode,
-        logits=self._uniform_average_ensemble_logits(weighted_subnetworks),
-        labels=labels,
-        train_op_fn=lambda _: tf.no_op())
+    uniform_average_ensemble_spec = self._create_estimator_spec(
+        features, labels, mode,
+        self._uniform_average_ensemble_logits(weighted_subnetworks))
 
     # The subnetwork.
     new_subnetwork = weighted_subnetworks[-1].subnetwork
-    subnetwork_spec = self._head.create_estimator_spec(
-        features=features,
-        mode=mode,
-        logits=new_subnetwork.logits,
-        labels=labels,
-        train_op_fn=lambda _: tf.no_op())
+    subnetwork_spec = self._create_estimator_spec(features, labels, mode,
+                                                  new_subnetwork.logits)
 
     ensemble_loss = adanet_weighted_ensemble_spec.loss
     adanet_loss = None
@@ -774,7 +764,10 @@ class _EnsembleBuilder(object):
           params=params)
       metric_fns.extend(fns)
       metric_tensors.update(tensors)
-      metric_fns.append(_architecture_as_metric(architecture))
+      # TODO: refactor _architecture_as_metric to use tf.contrib.summary
+      # in order to work on TPU.
+      if not self._use_tpu:
+        metric_fns.append(_architecture_as_metric(architecture))
 
     if mode == tf.estimator.ModeKeys.TRAIN:
       with summary.current_scope():
@@ -841,6 +834,20 @@ class _EnsembleBuilder(object):
         ensemble_train_op=ensemble_train_op,
         eval_metrics=_create_eval_metrics_tuple(metric_fns, metric_tensors),
         export_outputs=adanet_weighted_ensemble_spec.export_outputs)
+
+  def _create_estimator_spec(self, features, labels, mode, logits):
+    """Creates the head's EstimatorSpec or TPUEstimatorSpec on TPU."""
+
+    if self._use_tpu:
+      create_spec_fn = self._head._create_tpu_estimator_spec  # pylint: disable=protected-access
+    else:
+      create_spec_fn = self._head.create_estimator_spec
+    return create_spec_fn(
+        features=features,
+        labels=labels,
+        mode=mode,
+        logits=logits,
+        train_op_fn=lambda _: tf.no_op())
 
   def _complexity_regularization(self, weight_l1_norm, complexity):
     """For a subnetwork, computes: (lambda * r(h) + beta) * |w|."""

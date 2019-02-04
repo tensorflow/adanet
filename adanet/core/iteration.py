@@ -111,7 +111,8 @@ class _IterationBuilder(object):
   def __init__(self,
                candidate_builder,
                ensemble_builder,
-               replicate_ensemble_in_training=False):
+               replicate_ensemble_in_training=False,
+               use_tpu=False):
     """Creates an `_IterationBuilder` instance.
 
     Args:
@@ -119,6 +120,7 @@ class _IterationBuilder(object):
       ensemble_builder: An `_EnsembleBuilder` instance.
       replicate_ensemble_in_training: Whether to build the frozen subnetworks in
         `training` mode during training.
+      use_tpu: Whether AdaNet is running on TPU.
 
     Returns:
       An `_IterationBuilder` object.
@@ -127,6 +129,7 @@ class _IterationBuilder(object):
     self._candidate_builder = candidate_builder
     self._ensemble_builder = ensemble_builder
     self._replicate_ensemble_in_training = replicate_ensemble_in_training
+    self._use_tpu = use_tpu
     super(_IterationBuilder, self).__init__()
 
   def build_iteration(self,
@@ -310,16 +313,31 @@ class _IterationBuilder(object):
       if best_eval_metrics is not None:
         metric_fn, kwargs = best_eval_metrics
         eval_metric_ops = metric_fn(**kwargs)
-      estimator_spec = tf.estimator.EstimatorSpec(
-          mode=mode,
-          predictions=best_predictions,
-          loss=best_loss,
-          train_op=self._create_train_op(candidates, mode, iteration_step,
-                                         is_over_var_template),
-          eval_metric_ops=eval_metric_ops,
-          export_outputs=best_export_outputs,
-          training_chief_hooks=training_chief_hooks,
-          training_hooks=training_hooks)
+      if self._use_tpu:
+        estimator_spec = tf.contrib.tpu.TPUEstimatorSpec(
+            mode=mode,
+            predictions=best_predictions,
+            loss=best_loss,
+            train_op=self._create_train_op(candidates, mode, iteration_step,
+                                           is_over_var_template),
+            eval_metrics=best_eval_metrics,
+            export_outputs=best_export_outputs,
+            training_hooks=training_hooks)
+      else:
+        eval_metric_ops = None
+        if best_eval_metrics is not None:
+          metric_fn, kwargs = best_eval_metrics
+          eval_metric_ops = metric_fn(**kwargs)
+        estimator_spec = tf.estimator.EstimatorSpec(
+            mode=mode,
+            predictions=best_predictions,
+            loss=best_loss,
+            train_op=self._create_train_op(candidates, mode, iteration_step,
+                                           is_over_var_template),
+            eval_metric_ops=eval_metric_ops,
+            export_outputs=best_export_outputs,
+            training_chief_hooks=training_chief_hooks,
+            training_hooks=training_hooks)
 
       return _Iteration(
           number=iteration_number,
@@ -447,7 +465,7 @@ class _IterationBuilder(object):
           best_value = tf.stack(values)[tf.cast(idx, tf.int32)]
           # All tensors in this function have been outfed from the TPU, so we
           # must update them manually, otherwise the TPU will hang indefinetly
-          # for the value of idx to wait.
+          # for the value of idx to update.
           ops = list(ops)
           ops.append(idx_update_op)
           best_op = tf.group(ops)
