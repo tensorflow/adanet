@@ -25,6 +25,7 @@ import functools
 from adanet.core.ensemble_builder import MixtureWeightType
 from adanet.core.estimator import Estimator
 import tensorflow as tf
+
 from tensorflow.contrib.tpu.python.tpu import tpu_function  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python import summary  # pylint: disable=g-direct-tensorflow-import
 
@@ -228,13 +229,14 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
       input_fn = functools.partial(input_fn, params)
       super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode, params)
 
-  def _create_estimator_spec(self, current_iteration, mode, training, scaffold):
+  def _create_estimator_spec(self, current_iteration, mode, scaffold):
     """See the `Estimator` base class for details."""
 
     if not self._use_tpu:
       return super(TPUEstimator, self)._create_estimator_spec(
-          current_iteration, mode, training, scaffold)
+          current_iteration, mode, scaffold)
 
+    training = mode == tf.estimator.ModeKeys.TRAIN
     iteration_estimator_spec = current_iteration.estimator_spec
     return tf.contrib.tpu.TPUEstimatorSpec(
         mode=mode,
@@ -243,6 +245,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         train_op=iteration_estimator_spec.train_op,
         eval_metrics=iteration_estimator_spec.eval_metrics,
         training_hooks=self._training_hooks(current_iteration, training),
+        evaluation_hooks=self._evaluation_hooks(current_iteration, training),
         # Return a constant summary_op, otherwise `Estimator` creates summary
         # ops that do not work on TPU.
         scaffold_fn=lambda: tf.train.Scaffold(summary_op=tf.constant("")),

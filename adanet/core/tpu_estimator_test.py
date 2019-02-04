@@ -312,31 +312,26 @@ class TPUEstimatorTest(tu.AdanetTestCase):
               "adanet_weighted_ensemble/subnetwork_0", candidate_subdir),
           places=1)
 
-    # Only summaries for the best candidate are written out during eval.
+    # Eval metric summaries are always written out during eval.
     eval_subdir = os.path.join(self.test_subdirectory, "eval")
     candidate_eval_subdir = os.path.join(candidate_subdir, "eval")
     self.assertAlmostEqual(
         ensemble_loss, _get_summary_value("loss", eval_subdir), places=1)
-    if use_tpu:
-      with self.assertRaises(ValueError):
+    self.assertAlmostEqual(
+        .5,
         _get_summary_value("average_loss/adanet/adanet_weighted_ensemble",
-                           candidate_eval_subdir)
-    else:
-      self.assertAlmostEqual(
-          .5,
-          _get_summary_value("average_loss/adanet/adanet_weighted_ensemble",
-                             candidate_eval_subdir),
-          places=1)
-      self.assertAlmostEqual(
-          .5,
-          _get_summary_value("average_loss/adanet/uniform_average_ensemble",
-                             candidate_eval_subdir),
-          places=1)
-      self.assertAlmostEqual(
-          .5,
-          _get_summary_value("average_loss/adanet/subnetwork",
-                             candidate_eval_subdir),
-          places=1)
+                           candidate_eval_subdir),
+        places=1)
+    self.assertAlmostEqual(
+        .5,
+        _get_summary_value("average_loss/adanet/uniform_average_ensemble",
+                           candidate_eval_subdir),
+        places=1)
+    self.assertAlmostEqual(
+        .5,
+        _get_summary_value("average_loss/adanet/subnetwork",
+                           candidate_eval_subdir),
+        places=1)
 
 
 if __name__ == "__main__":

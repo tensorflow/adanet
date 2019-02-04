@@ -213,13 +213,22 @@ def _architecture_as_metric(architecture):
   """Returns a representation of the ensemble's architecture as a tf.metric."""
 
   def _architecture_metric_fn(**kwargs):
+    """Manually creates the tf.metric with a serialized tf.Summary proto."""
+
     del kwargs  # Unused.
 
     architecture_ = " | ".join(
         itertools.chain(*[names for _, names in architecture.subnetworks]))
-    architecture_ = tf.convert_to_tensor(
-        "| {} |".format(architecture_), name="architecture")
-    architecture_summary = tf.summary.text("architecture/adanet", architecture_)
+    architecture_ = "| {} |".format(architecture_)
+    summary_metadata = tf.SummaryMetadata(
+        plugin_data=tf.SummaryMetadata.PluginData(plugin_name="text"))
+    summary_proto = tf.summary.Summary()
+    summary_proto.value.add(
+        metadata=summary_metadata,
+        tag="architecture/adanet",
+        tensor=tf.make_tensor_proto(architecture_, dtype=tf.string))
+    architecture_summary = tf.convert_to_tensor(
+        summary_proto.SerializeToString(), name="architecture")
     return {"architecture/adanet/ensembles": (architecture_summary, tf.no_op())}
 
   return _architecture_metric_fn
@@ -284,11 +293,22 @@ def _create_scoped_metric_fn(metric_fn, group_name):
 
     metrics = _reflective_call(metric_fn, **kwargs)
     rescoped_metrics = {}
-    for key, value in six.iteritems(metrics):
-      rescoped_metrics["{}/adanet/{}".format(key, group_name)] = value
+    # Hooks on TPU cannot depend on any graph Tensors. Instead the metric values
+    # are stored in Variables that are later read from the evaluation hooks.
+    for i, metric in enumerate(six.iteritems(metrics)):
+      key, (tensor, op) = metric
+      var = tf.get_variable(
+          "metric_{}".format(i),
+          shape=tensor.shape,
+          dtype=tensor.dtype,
+          trainable=False,
+          initializer=tf.zeros_initializer(),
+          collections=[tf.GraphKeys.LOCAL_VARIABLES])
+      metric = (var, tf.assign(var, op))
+      rescoped_metrics["{}/adanet/{}".format(key, group_name)] = metric
     return rescoped_metrics
 
-  return _scoped_metric_fn
+  return tf.make_template("metric_fn_template", _scoped_metric_fn)
 
 
 def _prefix(tensors, group_name, flat_key, default_key):

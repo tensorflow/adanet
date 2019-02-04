@@ -65,7 +65,8 @@ class Report(
 
     def _is_accepted_dtype(tensor):
       """Returns True iff tensor has the dtype we can handle."""
-      return tensor.dtype in (tf.bool, tf.int32, tf.float32, tf.string)
+      return tensor.dtype.base_dtype in (tf.bool, tf.int32, tf.float32,
+                                         tf.string)
 
     # Validate hparams
     for key, value in hparams.items():
@@ -98,10 +99,11 @@ class Report(
         raise ValueError(
             "metric tuple '{}' has fewer than 2 elements".format(key))
 
-      if not isinstance(value[0], tf.Tensor):
+      if not isinstance(value[0], (tf.Tensor, tf.Variable)):
         raise ValueError(
             "First element of metric tuple '{}' has value {} and type {}. "
-            "Must be a Tensor.".format(key, value, type(value[0])))
+            "Must be a Tensor or Variable.".format(key, value[0],
+                                                   type(value[0])))
 
       if not _is_accepted_dtype(value[0]):
         raise ValueError(
@@ -117,11 +119,11 @@ class Report(
             "value: {}".format(key, value[0]))
         continue
 
-      if not (isinstance(value[1], tf.Tensor) or
-              isinstance(value[1], tf.Operation)):
+      if not isinstance(value[1], (tf.Tensor, tf.Operation, tf.Variable)):
         raise ValueError(
             "Second element of metric tuple '{}' has value {} and type {}. "
-            "Must be a Tensor or Operation.".format(key, value, type(value[1])))
+            "Must be a Tensor, Operation, or Variable.".format(
+                key, value[1], type(value[1])))
 
       metrics_copy[key] = value
 

@@ -75,17 +75,17 @@ class _StopAfterTrainingHook(tf.train.SessionRunHook):
 class _EvalMetricSaverHook(tf.train.SessionRunHook):
   """A hook for writing evaluation metrics as summaries to disk."""
 
-  def __init__(self, name, eval_metric_ops, output_dir):
+  def __init__(self, name, eval_metrics, output_dir):
     """Initializes a `_EvalMetricSaverHook` instance.
 
     Args:
       name: String name of candidate owner of these metrics.
-      eval_metric_ops: Dict of metric results keyed by name. The values of the
-        dict are the results of calling a metric function, namely a
-        `(metric_tensor, update_op)` tuple. `metric_tensor` should be evaluated
-        without any impact on state (typically is a pure computation based on
-        variables.). For example, it should not trigger the `update_op` or
-        require any input fetching.
+      eval_metrics: Tuple of (metric_fn, tensors) which returns a dict of metric
+        results keyed by name. The values of the dict are the results of calling
+        a metric function, namely a `(metric_tensor, update_op)` tuple.
+        `metric_tensor` should be evaluated without any impact on state
+        (typically is a pure computation based on variables.). For example, it
+        should not trigger the `update_op` or require any input fetching.
       output_dir: Directory for writing evaluation summaries.
 
     Returns:
@@ -93,14 +93,25 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
     """
 
     self._name = name
-    self._eval_metric_ops = eval_metric_ops
+    self._eval_metrics = eval_metrics
     self._output_dir = output_dir
+
+  def begin(self):
+    """See `SessionRunHook`."""
+
+    # The metric_fn is called with tf.placeholders to simply read the value of
+    # the metric variables. The metrics themselves are computed as a result of
+    # being returned in the EstimatorSpec by _adanet_model_fn.
+    metric_fn, tensors = self._eval_metrics
+    tensors = {k: tf.placeholder(v.dtype, v.shape) for k, v in tensors.items()}
+    eval_metric_ops = metric_fn(**tensors)
+    self._eval_metric_tensors = {k: v[0] for k, v in eval_metric_ops.items()}
 
   def before_run(self, run_context):
     """See `SessionRunHook`."""
 
     del run_context  # Unused
-    return tf.train.SessionRunArgs(self._eval_metric_ops)
+    return tf.train.SessionRunArgs(self._eval_metric_tensors)
 
   def _dict_to_str(self, dictionary):
     """Get a `str` representation of a `dict`.
@@ -119,12 +130,8 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
 
     # Forked from tensorflow/python/estimator/estimator.py function called
     # _write_dict_to_summary.
-    eval_dict = {}
-    for key, metric in self._eval_metric_ops.items():
-      eval_dict[key] = metric[0]
     current_global_step = tf.train.get_global_step()
-
-    eval_dict, current_global_step = session.run((eval_dict,
+    eval_dict, current_global_step = session.run((self._eval_metric_tensors,
                                                   current_global_step))
 
     tf.logging.info("Saving candidate '%s' dict for global step %d: %s",
@@ -863,11 +870,9 @@ class Estimator(tf.estimator.Estimator):
       eval_subdir = "eval"
       if self._evaluation_name:
         eval_subdir = "eval_{}".format(self._evaluation_name)
-      metric_fn, kwargs = candidate.ensemble_spec.eval_metrics
-      eval_metric_ops = metric_fn(**kwargs)
       eval_metric_hook = _EvalMetricSaverHook(
           name=candidate.ensemble_spec.name,
-          eval_metric_ops=eval_metric_ops,
+          eval_metrics=candidate.ensemble_spec.eval_metrics,
           output_dir=os.path.join(self.model_dir, "candidate",
                                   candidate.ensemble_spec.name, eval_subdir))
       evaluation_hooks.append(eval_metric_hook)
@@ -1038,9 +1043,10 @@ class Estimator(tf.estimator.Estimator):
 
     return previous_ensemble_reports, all_reports
 
-  def _create_estimator_spec(self, current_iteration, mode, training, scaffold):
+  def _create_estimator_spec(self, current_iteration, mode, scaffold):
     """Creates the EstimatorSpec which will be returned by _adanet_model_fn."""
 
+    training = mode == tf.estimator.ModeKeys.TRAIN
     iteration_estimator_spec = current_iteration.estimator_spec
     return tf.estimator.EstimatorSpec(
         mode=mode,
@@ -1172,7 +1178,7 @@ class Estimator(tf.estimator.Estimator):
                             current_iteration.estimator_spec.loss)
 
     estimator_spec = self._create_estimator_spec(
-        current_iteration, mode, training,
+        current_iteration, mode,
         tf.train.Scaffold(summary_op=adanet_summary.merge_all()))
 
     if self._Keys.EVALUATE_ENSEMBLES in params:
