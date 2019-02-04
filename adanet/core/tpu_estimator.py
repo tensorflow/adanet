@@ -130,9 +130,6 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
       tf.logging.warning(
           "This adanet.TPUEstimator is meant to be used for running on TPU. "
           "If you want to run on CPU/GPU, use adanet.Estimator instead.")
-      tf.logging.warning(
-          "Only the evaluation metrics of the best candidate will be display "
-          "in Tensorboard when evaluating on TPU.")
 
     super(TPUEstimator, self).__init__(
         head=head,

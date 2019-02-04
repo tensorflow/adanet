@@ -784,10 +784,7 @@ class _EnsembleBuilder(object):
           params=params)
       metric_fns.extend(fns)
       metric_tensors.update(tensors)
-      # TODO: refactor _architecture_as_metric to use tf.contrib.summary
-      # in order to work on TPU.
-      if not self._use_tpu:
-        metric_fns.append(_architecture_as_metric(architecture))
+      metric_fns.append(_architecture_as_metric(architecture))
 
     if mode == tf.estimator.ModeKeys.TRAIN:
       with summary.current_scope():
