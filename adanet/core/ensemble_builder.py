@@ -295,8 +295,8 @@ def _create_scoped_metric_fn(metric_fn, group_name):
     rescoped_metrics = {}
     # Hooks on TPU cannot depend on any graph Tensors. Instead the metric values
     # are stored in Variables that are later read from the evaluation hooks.
-    for i, metric in enumerate(six.iteritems(metrics)):
-      key, (tensor, op) = metric
+    for i, key in enumerate(sorted(metrics)):
+      tensor, op = metrics[key]
       var = tf.get_variable(
           "metric_{}".format(i),
           shape=tensor.shape,

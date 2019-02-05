@@ -317,6 +317,9 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     candidate_eval_subdir = os.path.join(candidate_subdir, "eval")
     self.assertAlmostEqual(
         ensemble_loss, _get_summary_value("loss", eval_subdir), places=1)
+    self.assertEqual([b"| dnn |"],
+                     _get_summary_value("architecture/adanet/ensembles/0",
+                                        eval_subdir))
     self.assertAlmostEqual(
         .5,
         _get_summary_value("average_loss/adanet/adanet_weighted_ensemble",
