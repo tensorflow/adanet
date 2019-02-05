@@ -21,33 +21,65 @@ import abc
 import collections
 
 
-class Candidate(collections.namedtuple("Candidate", ["subnetwork_builders"])):
+class Candidate(
+    collections.namedtuple("Candidate", [
+        "name", "subnetwork_builders", "previous_ensemble_subnetwork_builders"
+    ])):
   """An ensemble candidate found during the search phase.
 
   Args:
-    subnetwork_builders: Candidate`adanet.subnetwork.Builder` instances.
+    name: String name of this ensemble candidate.
+    subnetwork_builders: Candidate class:`adanet.subnetwork.Builder` instances
+      to include in the ensemble.
+    previous_ensemble_subnetwork_builders: class:`adanet.subnetwork.Builder`
+      instances to include from the previous ensemble.
   """
 
-  def __new__(cls, subnetwork_builders):
+  def __new__(cls, name, subnetwork_builders,
+              previous_ensemble_subnetwork_builders):
     return super(Candidate, cls).__new__(
-        cls, subnetwork_builders=tuple(subnetwork_builders))
+        cls,
+        name=name,
+        subnetwork_builders=tuple(subnetwork_builders),
+        previous_ensemble_subnetwork_builders=tuple(
+            previous_ensemble_subnetwork_builders or []))
 
 
 class Strategy(object):
   """An abstract ensemble strategy."""
+
   __metaclass__ = abc.ABCMeta
 
   @abc.abstractmethod
-  def generate_ensemble_candidates(self, subnetwork_builders):
-    """Returns an iterable for `adanet.ensemble.Candidate`."""
+  def generate_ensemble_candidates(self, subnetwork_builders,
+                                   previous_ensemble_subnetwork_builders):
+    """Generates ensemble candidates to search over this iteration.
+
+    TODO: Pruning the previous subnetwork may require more metadata such
+    as `subnetwork.Reports` and `ensemble.Reports` to make smart decisions.
+
+    Args:
+      subnetwork_builders: Candidate class:`adanet.subnetwork.Builder` instances
+        for this iteration.
+      previous_ensemble_subnetwork_builders: class:`adanet.subnetwork.Builder`
+        instances from the previous ensemble. Including only a subset of these
+        in a returned `adanet.ensemble.Candidate` is equivalent to pruning the
+        previous ensemble.
+
+    Returns:
+      An iterable of `adanet.ensemble.Candidate` instances to train and consider
+      this iteration.
+    """
 
 
 class GrowStrategy(Strategy):
   """Greedily grows an ensemble, one subnetwork at a time."""
 
-  def generate_ensemble_candidates(self, subnetwork_builders):
+  def generate_ensemble_candidates(self, subnetwork_builders,
+                                   previous_ensemble_subnetwork_builders):
     return [
-        Candidate([subnetwork_builder])
+        Candidate(subnetwork_builder.name, [subnetwork_builder],
+                  previous_ensemble_subnetwork_builders)
         for subnetwork_builder in subnetwork_builders
     ]
 
@@ -55,5 +87,9 @@ class GrowStrategy(Strategy):
 class AllStrategy(Strategy):
   """Ensembles all subnetworks from the current iteration."""
 
-  def generate_ensemble_candidates(self, subnetwork_builders):
-    return [Candidate(subnetwork_builders)]
+  def generate_ensemble_candidates(self, subnetwork_builders,
+                                   previous_ensemble_subnetwork_builders):
+    return [
+        Candidate("all", subnetwork_builders,
+                  previous_ensemble_subnetwork_builders)
+    ]

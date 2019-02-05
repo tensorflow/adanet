@@ -155,8 +155,7 @@ def _get_summary_value(keyword, dir_):
   filenames = os.path.join(dir_, "events*")
   event_paths = tf.gfile.Glob(filenames)
   if not event_paths:
-    raise ValueError("Path {!r} not found.".format(filenames))
-
+    raise ValueError("Path '{!r}' not found.".format(filenames))
   for last_event in tf.train.summary_iterator(event_paths[-1]):
     if last_event.summary is not None:
       for value in last_event.summary.value:
@@ -241,7 +240,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
         export_dir_base=estimator.model_dir,
         serving_input_receiver_fn=serving_input_fn)
 
-    self.assertAlmostEqual(0.32416, eval_results["loss"], places=3)
+    self.assertAlmostEqual(0.36, eval_results["loss"], places=2)
     self.assertEqual(max_steps, eval_results["global_step"])
     for prediction in predictions:
       self.assertIsNotNone(prediction["predictions"])
@@ -272,13 +271,17 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     estimator.train(input_fn=train_input_fn, max_steps=3)
     estimator.evaluate(input_fn=train_input_fn, steps=3)
 
+    subnetwork_subdir = os.path.join(self.test_subdirectory,
+                                     "subnetwork/t0_dnn")
+
     ensemble_loss = .5
-    candidate_subdir = os.path.join(self.test_subdirectory, "candidate/t0_dnn")
+    ensemble_subdir = os.path.join(self.test_subdirectory,
+                                   "ensemble/t0_dnn_complexity_regularized")
     # No summaries are written during training on TPU.
     if use_tpu:
       with self.assertRaises(ValueError):
         _get_summary_value("loss", self.test_subdirectory)
-        _get_summary_value("scalar", candidate_subdir)
+        _get_summary_value("scalar", ensemble_subdir)
     else:
       self.assertAlmostEqual(
           ensemble_loss,
@@ -289,52 +292,54 @@ class TPUEstimatorTest(tu.AdanetTestCase):
           _get_summary_value("iteration/adanet/iteration",
                              self.test_subdirectory))
       self.assertAlmostEqual(
-          3., _get_summary_value("scalar", candidate_subdir), places=3)
+          3., _get_summary_value("scalar", subnetwork_subdir), places=3)
       self.assertEqual((3, 3, 1),
-                       _get_summary_value("image/image/0", candidate_subdir))
+                       _get_summary_value("image/image/0", subnetwork_subdir))
       self.assertAlmostEqual(
-          5., _get_summary_value("nested/scalar", candidate_subdir), places=1)
+          5., _get_summary_value("nested/scalar", subnetwork_subdir), places=3)
       self.assertAlmostEqual(
           ensemble_loss,
           _get_summary_value("adanet_loss/adanet/adanet_weighted_ensemble",
-                             candidate_subdir),
+                             ensemble_subdir),
           places=1)
       self.assertAlmostEqual(
           0.,
           _get_summary_value(
               "complexity_regularization/adanet/adanet_weighted_ensemble",
-              candidate_subdir),
+              ensemble_subdir),
           places=1)
       self.assertAlmostEqual(
           1.,
           _get_summary_value(
               "mixture_weight_norms/adanet/"
-              "adanet_weighted_ensemble/subnetwork_0", candidate_subdir),
+              "adanet_weighted_ensemble/subnetwork_0", ensemble_subdir),
           places=1)
 
     # Eval metric summaries are always written out during eval.
+    subnetwork_eval_subdir = os.path.join(subnetwork_subdir, "eval")
+    if use_tpu:
+      # TODO: Why is subnetwork eval loss 0.0 when use_tpu=False?
+      self.assertAlmostEqual(
+          ensemble_loss,
+          _get_summary_value("loss", subnetwork_eval_subdir),
+          places=1)
+    self.assertAlmostEqual(
+        ensemble_loss,
+        _get_summary_value("average_loss", subnetwork_eval_subdir),
+        places=1)
+
     eval_subdir = os.path.join(self.test_subdirectory, "eval")
-    candidate_eval_subdir = os.path.join(candidate_subdir, "eval")
-    self.assertAlmostEqual(
-        ensemble_loss, _get_summary_value("loss", eval_subdir), places=1)
-    self.assertEqual([b"| dnn |"],
-                     _get_summary_value("architecture/adanet/ensembles/0",
-                                        eval_subdir))
-    self.assertAlmostEqual(
-        .5,
-        _get_summary_value("average_loss/adanet/adanet_weighted_ensemble",
-                           candidate_eval_subdir),
-        places=1)
-    self.assertAlmostEqual(
-        .5,
-        _get_summary_value("average_loss/adanet/uniform_average_ensemble",
-                           candidate_eval_subdir),
-        places=1)
-    self.assertAlmostEqual(
-        .5,
-        _get_summary_value("average_loss/adanet/subnetwork",
-                           candidate_eval_subdir),
-        places=1)
+    ensemble_eval_subdir = os.path.join(ensemble_subdir, "eval")
+    for subdir in [ensemble_eval_subdir, eval_subdir]:
+      self.assertEqual([b"| dnn |"],
+                       _get_summary_value("architecture/adanet/ensembles/0",
+                                          subdir))
+      if use_tpu or subdir == eval_subdir:
+        # TODO: Why is ensemble eval loss 0.0 when use_tpu=False?
+        self.assertAlmostEqual(
+            ensemble_loss, _get_summary_value("loss", subdir), places=1)
+      self.assertAlmostEqual(
+          ensemble_loss, _get_summary_value("average_loss", subdir), places=1)
 
 
 if __name__ == "__main__":

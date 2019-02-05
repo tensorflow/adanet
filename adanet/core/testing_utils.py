@@ -24,9 +24,9 @@ import shutil
 
 from absl.testing import parameterized
 from adanet.core.architecture import _Architecture
+from adanet.core.ensemble import ComplexityRegularized
+from adanet.core.ensemble import WeightedSubnetwork
 from adanet.core.ensemble_builder import _EnsembleSpec
-from adanet.core.ensemble_builder import Ensemble
-from adanet.core.ensemble_builder import WeightedSubnetwork
 from adanet.core.subnetwork import Subnetwork
 import tensorflow as tf
 
@@ -58,6 +58,7 @@ def dummy_ensemble_spec(name,
                         eval_metrics=None,
                         dict_predictions=False,
                         export_output_key=None,
+                        subnetwork_builders=None,
                         train_op=None):
   """Creates a dummy `_EnsembleSpec` instance.
 
@@ -74,6 +75,7 @@ def dummy_ensemble_spec(name,
     dict_predictions: Boolean whether to return predictions as a dictionary of
       `Tensor` or just a single float `Tensor`.
     export_output_key: An `ExportOutputKeys` for faking export outputs.
+    subnetwork_builders: List of `adanet.subnetwork.Builder` objects.
     train_op: A train op.
 
   Returns:
@@ -113,18 +115,18 @@ def dummy_ensemble_spec(name,
   bias = tf.constant(bias)
   return _EnsembleSpec(
       name=name,
-      ensemble=Ensemble(
+      ensemble=ComplexityRegularized(
           weighted_subnetworks=weighted_subnetworks * num_subnetworks,
           bias=bias,
           logits=logits,
       ),
       architecture=_Architecture(),
+      subnetwork_builders=subnetwork_builders,
       predictions=predictions,
       loss=loss,
       adanet_loss=adanet_loss,
+      train_op=train_op,
       eval_metrics=eval_metrics,
-      subnetwork_train_op=train_op,
-      ensemble_train_op=train_op,
       export_outputs=export_outputs)
 
 

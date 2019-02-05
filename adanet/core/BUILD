@@ -34,6 +34,7 @@ py_library(
         ":report_accessor",
         ":summary",
         ":timer",
+        "//adanet/core/ensemble",
         "@six_archive//:six",
     ],
 )
@@ -157,6 +158,7 @@ py_test(
         ":ensemble_builder",
         ":summary",
         ":testing_utils",
+        "//adanet/core/ensemble",
         "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
@@ -201,6 +203,7 @@ py_library(
     deps = [
         ":architecture",
         ":ensemble_builder",
+        "//adanet/core/ensemble",
         "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],

@@ -22,7 +22,6 @@ from __future__ import print_function
 import contextlib
 import functools
 
-from adanet.core.ensemble_builder import MixtureWeightType
 from adanet.core.estimator import Estimator
 import tensorflow as tf
 
@@ -106,14 +105,10 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                head,
                subnetwork_generator,
                max_iteration_steps,
-               mixture_weight_type=MixtureWeightType.SCALAR,
-               mixture_weight_initializer=None,
-               warm_start_mixture_weights=False,
-               adanet_lambda=0.,
-               adanet_beta=0.,
+               ensemblers=None,
+               ensemble_strategies=None,
                evaluator=None,
                report_materializer=None,
-               use_bias=False,
                metric_fn=None,
                force_grow=False,
                replicate_ensemble_in_training=False,
@@ -124,7 +119,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                config=None,
                use_tpu=True,
                train_batch_size=None,
-               eval_batch_size=None):
+               eval_batch_size=None,
+               **kwargs):
     self._use_tpu = use_tpu
     if self._use_tpu:
       tf.logging.warning(
@@ -135,14 +131,10 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         head=head,
         subnetwork_generator=subnetwork_generator,
         max_iteration_steps=max_iteration_steps,
-        mixture_weight_type=mixture_weight_type,
-        mixture_weight_initializer=mixture_weight_initializer,
-        warm_start_mixture_weights=warm_start_mixture_weights,
-        adanet_lambda=adanet_lambda,
-        adanet_beta=adanet_beta,
+        ensemblers=ensemblers,
+        ensemble_strategies=ensemble_strategies,
         evaluator=evaluator,
         report_materializer=report_materializer,
-        use_bias=use_bias,
         metric_fn=metric_fn,
         force_grow=force_grow,
         replicate_ensemble_in_training=replicate_ensemble_in_training,
@@ -155,7 +147,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         eval_on_tpu=use_tpu,
         export_to_tpu=False,
         train_batch_size=train_batch_size or 0,
-        eval_batch_size=eval_batch_size or train_batch_size or 0)
+        eval_batch_size=eval_batch_size or train_batch_size or 0,
+        **kwargs)
 
   def train(self,
             input_fn,
@@ -226,12 +219,12 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
       input_fn = functools.partial(input_fn, params)
       super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode, params)
 
-  def _create_estimator_spec(self, current_iteration, mode, scaffold):
+  def _create_estimator_spec(self, current_iteration, mode):
     """See the `Estimator` base class for details."""
 
     if not self._use_tpu:
       return super(TPUEstimator, self)._create_estimator_spec(
-          current_iteration, mode, scaffold)
+          current_iteration, mode)
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     iteration_estimator_spec = current_iteration.estimator_spec

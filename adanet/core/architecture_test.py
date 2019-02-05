@@ -33,6 +33,29 @@ class ArchitectureTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name": "single",
       "subnetworks": [(0, "linear")],
+      "want": ((0, "linear"),),
+  }, {
+      "testcase_name": "different_iterations",
+      "subnetworks": [(0, "linear"), (1, "dnn")],
+      "want": ((0, "linear"), (1, "dnn")),
+  }, {
+      "testcase_name": "same_iterations",
+      "subnetworks": [(0, "linear"), (0, "dnn"), (1, "dnn")],
+      "want": ((0, "linear"), (0, "dnn"), (1, "dnn")),
+  })
+  def test_subnetworks(self, subnetworks, want):
+    arch = _Architecture()
+    for subnetwork in subnetworks:
+      arch.add_subnetwork(*subnetwork)
+    self.assertEqual(want, arch.subnetworks)
+
+  @parameterized.named_parameters({
+      "testcase_name": "empty",
+      "subnetworks": [],
+      "want": (),
+  }, {
+      "testcase_name": "single",
+      "subnetworks": [(0, "linear")],
       "want": ((0, ("linear",)),),
   }, {
       "testcase_name": "different_iterations",
@@ -43,24 +66,26 @@ class ArchitectureTest(parameterized.TestCase, tf.test.TestCase):
       "subnetworks": [(0, "linear"), (0, "dnn"), (1, "dnn")],
       "want": ((0, ("linear", "dnn")), (1, ("dnn",))),
   })
-  def test_subnetworks(self, subnetworks, want):
+  def test_subnetworks_grouped_by_iteration(self, subnetworks, want):
     arch = _Architecture()
     for subnetwork in subnetworks:
       arch.add_subnetwork(*subnetwork)
-    self.assertEqual(want, arch.subnetworks)
+    self.assertEqual(want, arch.subnetworks_grouped_by_iteration)
 
   def test_serialization_lifecycle(self):
     arch = _Architecture()
     arch.add_subnetwork(0, "linear")
     arch.add_subnetwork(0, "dnn")
     arch.add_subnetwork(1, "dnn")
-    self.assertEqual(((0, ("linear", "dnn")), (1, ("dnn",))), arch.subnetworks)
+    self.assertEqual(((0, ("linear", "dnn")), (1, ("dnn",))),
+                     arch.subnetworks_grouped_by_iteration)
     serialized = arch.serialize()
     self.assertEqual(
         b"\n\x08\x12\x06linear\n\x05\x12\x03dnn\n\x07\x08\x01\x12\x03dnn",
         serialized)
     deserialized_arch = _Architecture.deserialize(serialized)
-    self.assertEqual(arch.subnetworks, deserialized_arch.subnetworks)
+    self.assertEqual(arch.subnetworks_grouped_by_iteration,
+                     deserialized_arch.subnetworks_grouped_by_iteration)
 
 
 if __name__ == "__main__":

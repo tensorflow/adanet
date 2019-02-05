@@ -182,12 +182,13 @@ class _ScopedSummary(Summary):
   same name in the same charts.
   """
 
-  def __init__(self, scope=None, skip_summary=False):
+  def __init__(self, scope=None, skip_summary=False, namespace=None):
     """Initializes a `_ScopedSummary`.
 
     Args:
       scope: String scope name.
       skip_summary: Whether to record summary ops.
+      namespace: Optional string namespace for the summary.
 
     Returns:
       A `_ScopedSummary` instance.
@@ -200,6 +201,7 @@ class _ScopedSummary(Summary):
       skip_summary = True
 
     self._scope = scope
+    self._namespace = namespace
     self._additional_scope = None
     self._skip_summary = skip_summary
     self._summary_ops = []
@@ -213,6 +215,12 @@ class _ScopedSummary(Summary):
     """Returns scope string."""
 
     return self._scope
+
+  @property
+  def namespace(self):
+    """Returns namespace string."""
+
+    return self._namespace
 
   @contextlib.contextmanager
   def current_scope(self):

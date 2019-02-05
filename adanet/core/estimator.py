@@ -26,8 +26,10 @@ import time
 
 from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _CandidateBuilder
+from adanet.core.ensemble import ComplexityRegularizedEnsembler
+from adanet.core.ensemble import GrowStrategy
 from adanet.core.ensemble_builder import _EnsembleBuilder
-from adanet.core.ensemble_builder import MixtureWeightType
+from adanet.core.ensemble_builder import _SubnetworkManager
 from adanet.core.iteration import _IterationBuilder
 from adanet.core.report_accessor import _ReportAccessor
 from adanet.core.summary import _ScopedSummary
@@ -73,13 +75,14 @@ class _StopAfterTrainingHook(tf.train.SessionRunHook):
 
 
 class _EvalMetricSaverHook(tf.train.SessionRunHook):
-  """A hook for writing evaluation metrics as summaries to disk."""
+  """A hook for writing candidate evaluation metrics as summaries to disk."""
 
-  def __init__(self, name, eval_metrics, output_dir):
+  def __init__(self, name, kind, eval_metrics, output_dir):
     """Initializes a `_EvalMetricSaverHook` instance.
 
     Args:
       name: String name of candidate owner of these metrics.
+      kind: The kind of candidate that the metrics belong to (e.g. subnetwork).
       eval_metrics: Tuple of (metric_fn, tensors) which returns a dict of metric
         results keyed by name. The values of the dict are the results of calling
         a metric function, namely a `(metric_tensor, update_op)` tuple.
@@ -93,6 +96,7 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
     """
 
     self._name = name
+    self._kind = kind
     self._eval_metrics = eval_metrics
     self._output_dir = output_dir
 
@@ -106,12 +110,6 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
     tensors = {k: tf.placeholder(v.dtype, v.shape) for k, v in tensors.items()}
     eval_metric_ops = metric_fn(**tensors)
     self._eval_metric_tensors = {k: v[0] for k, v in eval_metric_ops.items()}
-
-  def before_run(self, run_context):
-    """See `SessionRunHook`."""
-
-    del run_context  # Unused
-    return tf.train.SessionRunArgs(self._eval_metric_tensors)
 
   def _dict_to_str(self, dictionary):
     """Get a `str` representation of a `dict`.
@@ -134,8 +132,8 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
     eval_dict, current_global_step = session.run((self._eval_metric_tensors,
                                                   current_global_step))
 
-    tf.logging.info("Saving candidate '%s' dict for global step %d: %s",
-                    self._name, current_global_step,
+    tf.logging.info("Saving %s '%s' dict for global step %d: %s",
+                    self._kind, self._name, current_global_step,
                     self._dict_to_str(eval_dict))
     summary_writer = tf.summary.FileWriterCache.get(self._output_dir)
     summary_proto = tf.summary.Summary()
@@ -158,32 +156,7 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
 
 class Estimator(tf.estimator.Estimator):
   # pyformat: disable
-  r"""The AdaNet algorithm implemented as a :class:`tf.estimator.Estimator`.
-
-  AdaNet is as defined in the paper: https://arxiv.org/abs/1607.01097.
-
-  The AdaNet algorithm uses a weak learning algorithm to iteratively generate a
-  set of candidate subnetworks that attempt to minimize the loss function
-  defined in Equation (4) as part of an ensemble. At the end of each iteration,
-  the best candidate is chosen based on its ensemble's complexity-regularized
-  train loss. New subnetworks are allowed to use any subnetwork weights within
-  the previous iteration's ensemble in order to improve upon them. If the
-  complexity-regularized loss of the new ensemble, as defined in Equation (4),
-  is less than that of the previous iteration's ensemble, the AdaNet algorithm
-  continues onto the next iteration.
-
-  AdaNet attempts to minimize the following loss function to learn the mixture
-  weights 'w' of each subnetwork 'h' in the ensemble with differentiable
-  convex non-increasing surrogate loss function Phi:
-
-  Equation (4):
-
-  .. math::
-
-      F(w) = \frac{1}{m} \sum_{i=1}^{m} \Phi \left(\sum_{j=1}^{N}w_jh_j(x_i),
-      y_i \right) + \sum_{j=1}^{N} \left(\lambda r(h_j) + \beta \right) |w_j|
-
-  with :math:`\lambda >= 0` and :math:`\beta >= 0`.
+  r"""A :class:`tf.estimator.Estimator` for training, evaluation, and serving.
 
   This implementation uses an :class:`adanet.subnetwork.Generator` as its weak
   learning algorithm for generating candidate subnetworks. These are trained in
@@ -212,44 +185,11 @@ class Estimator(tf.estimator.Estimator):
     max_iteration_steps: Total number of steps for which to train candidates per
       iteration. If :class:`OutOfRange` or :class:`StopIteration` occurs in the
       middle, training stops before `max_iteration_steps` steps.
-    mixture_weight_type: The :class:`adanet.MixtureWeightType` defining which
-      mixture weight type to learn in the linear combination of subnetwork
-      outputs:
-        - :class:`SCALAR`: creates a rank 0 tensor mixture weight . It performs
-          an element- wise multiplication with its subnetwork's logits. This
-          mixture weight is the simplest to learn, the quickest to train, and
-          most likely to generalize well.
-        - :class:`VECTOR`:  creates a tensor with shape [k] where k is the
-          ensemble's logits dimension as defined by `head`. It is similar to
-          `SCALAR` in that it performs an element-wise multiplication with its
-          subnetwork's logits, but is more flexible in learning a subnetworks's
-          preferences per class.
-        - :class:`MATRIX`: creates a tensor of shape [a, b] where a is the
-          number of outputs from the subnetwork's `last_layer` and b is the
-          number of outputs from the ensemble's `logits`. This weight
-          matrix-multiplies the subnetwork's `last_layer`. This mixture weight
-          offers the most flexibility and expressivity, allowing subnetworks to
-          have outputs of different dimensionalities. However, it also has the
-          most trainable parameters (a*b), and is therefore the most sensitive
-          to learning rates and regularization.
-    mixture_weight_initializer: The initializer for mixture_weights. When
-      `None`, the default is different according to `mixture_weight_type`:
-        - :class:`SCALAR`: initializes to 1/N where N is the number of
-          subnetworks in the ensemble giving a uniform average.
-        - :class:`VECTOR`: initializes each entry to 1/N where N is the number
-          of subnetworks in the ensemble giving a uniform average.
-        - :class:`MATRIX`: uses :meth:`tf.zeros_initializer`.
-    warm_start_mixture_weights: Whether, at the beginning of an iteration, to
-      initialize the mixture weights of the subnetworks from the previous
-      ensemble to their learned value at the previous iteration, as opposed to
-      retraining them from scratch. Takes precedence over the value for
-      `mixture_weight_initializer` for subnetworks from previous iterations.
-    adanet_lambda: Float multiplier 'lambda' for applying L1 regularization to
-      subnetworks' mixture weights 'w' in the ensemble proportional to their
-      complexity. See Equation (4) in the AdaNet paper.
-    adanet_beta: Float L1 regularization multiplier 'beta' to apply equally to
-      all subnetworks' weights 'w' in the ensemble regardless of their
-      complexity. See Equation (4) in the AdaNet paper.
+    ensemblers: An iterable of :class:`adanet.ensemble.Ensembler` objects that
+      define how to ensemble a group of subnetworks.
+    ensemble_strategies: An iterable of :class:`adanet.ensemble.Strategy`
+      objects that define the candidate ensembles of subnetworks to explore at
+      each iteration.
     evaluator: An :class:`adanet.Evaluator` for candidate selection after all
       subnetworks are done training. When `None`, candidate selection uses a
       moving average of their :class:`adanet.Ensemble` AdaNet loss during
@@ -264,9 +204,6 @@ class Estimator(tf.estimator.Estimator):
       `subnetwork_generator` :meth:`generate_candidates` method will receive
       empty Lists for their `previous_ensemble_reports` and `all_reports`
       arguments.
-    use_bias: Whether to add a bias term to the ensemble's logits. Adding a bias
-      allows the ensemble to learn a shift in the data, often leading to more
-      stable training and better predictions.
     metric_fn: A function for adding custom evaluation metrics, which should
       obey the following signature:
         - `Args`:
@@ -340,14 +277,10 @@ class Estimator(tf.estimator.Estimator):
                head,
                subnetwork_generator,
                max_iteration_steps,
-               mixture_weight_type=MixtureWeightType.SCALAR,
-               mixture_weight_initializer=None,
-               warm_start_mixture_weights=False,
-               adanet_lambda=0.,
-               adanet_beta=0.,
+               ensemblers=None,
+               ensemble_strategies=None,
                evaluator=None,
                report_materializer=None,
-               use_bias=False,
                metric_fn=None,
                force_grow=False,
                replicate_ensemble_in_training=False,
@@ -357,16 +290,17 @@ class Estimator(tf.estimator.Estimator):
                report_dir=None,
                config=None,
                **kwargs):
-    # TODO: Add argument to specify how many frozen graph
-    # checkpoints to keep.
-
+    if ensemblers and len(ensemblers) > 1:
+      raise ValueError("More than a single Ensembler is not yet supported.")
+    if ensemble_strategies and len(ensemble_strategies) > 1:
+      raise ValueError(
+          "More than a single ensemble Strategy is not yet supported.")
     if subnetwork_generator is None:
       raise ValueError("subnetwork_generator can't be None.")
     if max_iteration_steps <= 0.:
       raise ValueError("max_iteration_steps must be > 0.")
 
     self._subnetwork_generator = subnetwork_generator
-
     self._adanet_loss_decay = adanet_loss_decay
 
     # Overwrite superclass's assert that members are not overwritten in order
@@ -386,6 +320,23 @@ class Estimator(tf.estimator.Estimator):
 
     self._inside_adanet_training_loop = False
 
+    # Added for backwards compatibility.
+    default_ensembler_args = [
+        "mixture_weight_type", "mixture_weight_initializer",
+        "warm_start_mixture_weights", "adanet_lambda", "adanet_beta", "use_bias"
+    ]
+    default_ensembler_kwargs = {
+        k: v for k, v in kwargs.items() if k in default_ensembler_args
+    }
+    if default_ensembler_kwargs:
+      tf.logging.warn(
+          "The following arguments have been moved to "
+          "`adanet.ensemble.ComplexityRegularizedEnsembler` which can be "
+          "specified in the `ensemblers` argument: {}".format(
+              sorted(default_ensembler_kwargs.keys())))
+    for key in default_ensembler_kwargs:
+      del kwargs[key]
+
     # This `Estimator` is responsible for bookkeeping across iterations, and
     # for training the subnetworks in both a local and distributed setting.
     # Subclassing improves future-proofing against new private methods being
@@ -398,29 +349,34 @@ class Estimator(tf.estimator.Estimator):
         model_dir=model_dir,
         **kwargs)
 
+    if default_ensembler_kwargs and ensemblers:
+      raise ValueError("When specifying the `ensemblers` argument, "
+                       "the following arguments must not be given: {}".format(
+                           default_ensembler_kwargs.keys()))
+    if not ensemblers:
+      default_ensembler_kwargs["model_dir"] = self.model_dir
+      ensemblers = [ComplexityRegularizedEnsembler(**default_ensembler_kwargs)]
+
     # These are defined after base Estimator's init so that they can
     # use the same temporary model_dir as the underlying Estimator even if
     # model_dir is not provided.
     use_tpu = kwargs.get("use_tpu", False)
-    self._ensemble_builder = _EnsembleBuilder(
-        head=head,
-        mixture_weight_type=mixture_weight_type,
-        mixture_weight_initializer=mixture_weight_initializer,
-        warm_start_mixture_weights=warm_start_mixture_weights,
-        checkpoint_dir=self._model_dir,
-        adanet_lambda=adanet_lambda,
-        adanet_beta=adanet_beta,
-        use_bias=use_bias,
-        metric_fn=metric_fn,
-        use_tpu=use_tpu)
+    ensemble_builder = _EnsembleBuilder(
+        head=head, metric_fn=metric_fn, use_tpu=use_tpu)
     candidate_builder = _CandidateBuilder(
         max_steps=max_iteration_steps,
         adanet_loss_decay=self._adanet_loss_decay)
+    subnetwork_manager = _SubnetworkManager(
+        head=head, metric_fn=metric_fn, use_tpu=use_tpu)
     self._iteration_builder = _IterationBuilder(
         candidate_builder,
-        self._ensemble_builder,
+        subnetwork_manager,
+        ensemble_builder,
+        ensemblers,
         replicate_ensemble_in_training,
         use_tpu=use_tpu)
+    self._ensemble_strategies = ensemble_strategies or [GrowStrategy()]
+
     report_dir = report_dir or os.path.join(self._model_dir, "report")
     self._report_accessor = _ReportAccessor(report_dir)
 
@@ -654,15 +610,17 @@ class Estimator(tf.estimator.Estimator):
 
     # Run train hook 'begin' methods which can add ops to the graph, so that
     # they are still present in the overwritten checkpoint.
-    train_hooks = self._train_hooks or []
-    for candidate in current_iteration.candidates:
-      if not candidate.ensemble_spec.subnetwork_train_op:
-        assert not candidate.ensemble_spec.ensemble_train_op
+    train_hooks = tuple(self._train_hooks) or ()
+    for subnetwork_spec in current_iteration.subnetwork_specs:
+      if not subnetwork_spec.train_op:
         continue
-      train_hooks += candidate.ensemble_spec.subnetwork_train_op.chief_hooks
-      train_hooks += candidate.ensemble_spec.subnetwork_train_op.hooks
-      train_hooks += candidate.ensemble_spec.ensemble_train_op.chief_hooks
-      train_hooks += candidate.ensemble_spec.ensemble_train_op.hooks
+      train_hooks += subnetwork_spec.train_op.chief_hooks
+      train_hooks += subnetwork_spec.train_op.hooks
+    for candidate in current_iteration.candidates:
+      if not candidate.ensemble_spec.train_op:
+        continue
+      train_hooks += candidate.ensemble_spec.train_op.chief_hooks
+      train_hooks += candidate.ensemble_spec.train_op.hooks
 
     for hook in train_hooks:
       if isinstance(hook, tf.train.CheckpointSaverHook):
@@ -799,9 +757,11 @@ class Estimator(tf.estimator.Estimator):
 
     assert self._best_ensemble_index is not None
     best_candidate = current_iteration.candidates[self._best_ensemble_index]
-    best_ensemble = best_candidate.ensemble_spec.ensemble
-    best_name = best_ensemble.weighted_subnetworks[-1].name
-    included_subnetwork_names = [best_name]
+    best_architecture = best_candidate.ensemble_spec.architecture
+    included_subnetwork_names = [
+        name for i, name in best_architecture.subnetworks
+        if i == current_iteration.number
+    ]
     with tf.Session() as sess:
       init = tf.group(tf.global_variables_initializer(),
                       tf.local_variables_initializer(), tf.tables_initializer())
@@ -844,7 +804,7 @@ class Estimator(tf.estimator.Estimator):
     for summary in current_iteration.summaries:
       output_dir = self.model_dir
       if summary.scope:
-        output_dir = os.path.join(output_dir, "candidate", summary.scope)
+        output_dir = os.path.join(output_dir, summary.namespace, summary.scope)
       summary_saver_hook = tf.train.SummarySaverHook(
           save_steps=self.config.save_summary_steps,
           output_dir=output_dir,
@@ -866,17 +826,29 @@ class Estimator(tf.estimator.Estimator):
     if training:
       return []
     evaluation_hooks = []
+    for subnetwork_spec in current_iteration.subnetwork_specs:
+      evaluation_hooks.append(
+          self._create_eval_metric_saver_hook(
+              subnetwork_spec.eval_metrics,
+              subnetwork_spec.name,
+              kind="subnetwork"))
     for candidate in current_iteration.candidates:
-      eval_subdir = "eval"
-      if self._evaluation_name:
-        eval_subdir = "eval_{}".format(self._evaluation_name)
-      eval_metric_hook = _EvalMetricSaverHook(
-          name=candidate.ensemble_spec.name,
-          eval_metrics=candidate.ensemble_spec.eval_metrics,
-          output_dir=os.path.join(self.model_dir, "candidate",
-                                  candidate.ensemble_spec.name, eval_subdir))
-      evaluation_hooks.append(eval_metric_hook)
+      evaluation_hooks.append(
+          self._create_eval_metric_saver_hook(
+              candidate.ensemble_spec.eval_metrics,
+              candidate.ensemble_spec.name,
+              kind="ensemble"))
     return evaluation_hooks
+
+  def _create_eval_metric_saver_hook(self, eval_metrics, name, kind):
+    eval_subdir = "eval"
+    if self._evaluation_name:
+      eval_subdir = "eval_{}".format(self._evaluation_name)
+    return _EvalMetricSaverHook(
+        name=name,
+        kind=kind,
+        eval_metrics=eval_metrics,
+        output_dir=os.path.join(self.model_dir, kind, name, eval_subdir))
 
   def _save_architecture(self, filename, architecture):
     """Persists the ensemble's architecture in a serialized format.
@@ -915,6 +887,24 @@ class Estimator(tf.estimator.Estimator):
     with tf.gfile.GFile(filename, "rb") as gfile:
       return _Architecture.deserialize(gfile.read())
 
+  def _find_ensemble_candidate(self, ensemble_candidates, subnetwork_builders,
+                               previous_ensemble_subnetwork_builders):
+    """Returns the ensemble candidate with the given subnetwork builders."""
+
+    subnetwork_builders = set(subnetwork_builders)
+    previous_ensemble_subnetwork_builders = set(
+        previous_ensemble_subnetwork_builders or [])
+    for candidate in ensemble_candidates:
+      if set(candidate.subnetwork_builders) != subnetwork_builders:
+        continue
+      if set(candidate.previous_ensemble_subnetwork_builders or
+             []) != previous_ensemble_subnetwork_builders:
+        continue
+      return candidate
+    raise ValueError(
+        "Could not find a matching ensemble candidate. "
+        "Are you sure the `adanet.ensemble.Strategy` is deterministic?")
+
   # TODO: Refactor architecture building logic to its own module.
   def _architecture_ensemble_spec(self, architecture, features, mode, labels,
                                   params):
@@ -944,7 +934,7 @@ class Estimator(tf.estimator.Estimator):
 
     previous_ensemble_spec = None
     previous_ensemble = None
-    for iteration_number, names in architecture.subnetworks:
+    for iteration_number, names in architecture.subnetworks_grouped_by_iteration:
       previous_ensemble_reports, all_reports = [], []
       if self._report_materializer:
         previous_ensemble_reports, all_reports = (
@@ -966,14 +956,26 @@ class Estimator(tf.estimator.Estimator):
               .format(iteration_number, name))
         rebuild_subnetwork_builders.append(subnetwork_builder_names[name])
       previous_ensemble_summary = None
+      previous_ensemble_subnetwork_builders = None
       if previous_ensemble_spec:
         # Always skip summaries when rebuilding previous architecture,
         # since they are not useful.
         previous_ensemble_summary = _ScopedSummary(
-            previous_ensemble_spec.name, skip_summary=True)
-
+            namespace="ensemble",
+            scope=previous_ensemble_spec.name,
+            skip_summary=True)
+        previous_ensemble_subnetwork_builders = (
+            previous_ensemble_spec.subnetwork_builders)
+      ensemble_candidates = []
+      for ensemble_strategy in self._ensemble_strategies:
+        ensemble_candidates += ensemble_strategy.generate_ensemble_candidates(
+            rebuild_subnetwork_builders, previous_ensemble_subnetwork_builders)
+      ensemble_candidate = self._find_ensemble_candidate(
+          ensemble_candidates, rebuild_subnetwork_builders,
+          previous_ensemble_subnetwork_builders)
       current_iteration = self._iteration_builder.build_iteration(
           iteration_number=iteration_number,
+          ensemble_candidates=[ensemble_candidate],
           subnetwork_builders=rebuild_subnetwork_builders,
           features=features,
           labels=labels,
@@ -982,6 +984,8 @@ class Estimator(tf.estimator.Estimator):
           previous_ensemble_spec=previous_ensemble_spec,
           rebuilding=True,
           params=params)
+      max_candidates = 2 if previous_ensemble_spec else 1
+      assert len(current_iteration.candidates) == max_candidates
       previous_ensemble_spec = current_iteration.candidates[-1].ensemble_spec
       previous_ensemble = previous_ensemble_spec.ensemble
     return previous_ensemble_spec
@@ -1031,19 +1035,16 @@ class Estimator(tf.estimator.Estimator):
       if i >= iteration_number:
         break
 
-      # Assumes that only one subnetwork is added to the ensemble in
-      # each iteration.
-      chosen_subnetwork_in_this_iteration = [
+      chosen_subnetworks_in_this_iteration = [
           subnetwork_report for subnetwork_report in iteration_reports
           if subnetwork_report.included_in_final_ensemble
-      ][0]
-      previous_ensemble_reports.append(chosen_subnetwork_in_this_iteration)
-
+      ]
+      previous_ensemble_reports += chosen_subnetworks_in_this_iteration
       all_reports.extend(iteration_reports)
 
     return previous_ensemble_reports, all_reports
 
-  def _create_estimator_spec(self, current_iteration, mode, scaffold):
+  def _create_estimator_spec(self, current_iteration, mode):
     """Creates the EstimatorSpec which will be returned by _adanet_model_fn."""
 
     training = mode == tf.estimator.ModeKeys.TRAIN
@@ -1057,7 +1058,7 @@ class Estimator(tf.estimator.Estimator):
         training_chief_hooks=iteration_estimator_spec.training_chief_hooks,
         training_hooks=self._training_hooks(current_iteration, training),
         evaluation_hooks=self._evaluation_hooks(current_iteration, training),
-        scaffold=scaffold,
+        scaffold=tf.train.Scaffold(summary_op=tf.constant("")),
         export_outputs=iteration_estimator_spec.export_outputs)
 
   def _adanet_model_fn(self, features, labels, mode, params):
@@ -1121,7 +1122,8 @@ class Estimator(tf.estimator.Estimator):
           "Importing architecture from %s: [%s].", architecture_filename,
           ", ".join(
               sorted([
-                  "'{}:{}'".format(t, n) for t, n in architecture.subnetworks
+                  "'{}:{}'".format(t, n)
+                  for t, n in architecture.subnetworks_grouped_by_iteration
               ])))
 
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
@@ -1129,12 +1131,17 @@ class Estimator(tf.estimator.Estimator):
       previous_ensemble_spec = None
       previous_ensemble = None
       previous_ensemble_summary = None
+      previous_ensemble_subnetwork_builders = None
       if architecture:
         previous_ensemble_spec = self._architecture_ensemble_spec(
             architecture, features, mode, labels, params)
         previous_ensemble = previous_ensemble_spec.ensemble
         previous_ensemble_summary = _ScopedSummary(
-            previous_ensemble_spec.name, skip_summary=skip_summaries)
+            namespace="ensemble",
+            scope=previous_ensemble_spec.name,
+            skip_summary=skip_summaries)
+        previous_ensemble_subnetwork_builders = (
+            previous_ensemble_spec.subnetwork_builders)
       restore_saver = None
       if self._Keys.INCREMENT_ITERATION in params:
         # Create Saver now so that it only restores the current variables in the
@@ -1150,8 +1157,13 @@ class Estimator(tf.estimator.Estimator):
           iteration_number=iteration_number,
           previous_ensemble_reports=previous_ensemble_reports,
           all_reports=all_reports)
+      ensemble_candidates = []
+      for ensemble_strategy in self._ensemble_strategies:
+        ensemble_candidates += ensemble_strategy.generate_ensemble_candidates(
+            subnetwork_builders, previous_ensemble_subnetwork_builders)
       current_iteration = self._iteration_builder.build_iteration(
           iteration_number=iteration_number,
+          ensemble_candidates=ensemble_candidates,
           subnetwork_builders=subnetwork_builders,
           features=features,
           labels=labels,
@@ -1168,18 +1180,7 @@ class Estimator(tf.estimator.Estimator):
         initializer=tf.zeros_initializer(),
         trainable=False)
 
-    adanet_summary = _ScopedSummary("global", skip_summaries)
-    adanet_summary.scalar("iteration/adanet/iteration", iteration_number_tensor)
-    adanet_summary.scalar("iteration_step/adanet/iteration_step",
-                          current_iteration.step)
-    if current_iteration.estimator_spec.loss is not None:
-      adanet_summary.scalar("loss", current_iteration.estimator_spec.loss)
-      adanet_summary.scalar("loss/adanet/adanet_weighted_ensemble",
-                            current_iteration.estimator_spec.loss)
-
-    estimator_spec = self._create_estimator_spec(
-        current_iteration, mode,
-        tf.train.Scaffold(summary_op=adanet_summary.merge_all()))
+    estimator_spec = self._create_estimator_spec(current_iteration, mode)
 
     if self._Keys.EVALUATE_ENSEMBLES in params:
       assert self.config.is_chief

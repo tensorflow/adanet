@@ -24,8 +24,11 @@ import os
 import shutil
 
 from absl.testing import parameterized
+from adanet.core.ensemble import Candidate as EnsembleCandidate
+from adanet.core.ensemble import ComplexityRegularizedEnsembler
+from adanet.core.ensemble import MixtureWeightType
 from adanet.core.ensemble_builder import _EnsembleBuilder
-from adanet.core.ensemble_builder import MixtureWeightType
+from adanet.core.ensemble_builder import _SubnetworkManager
 from adanet.core.subnetwork import Builder
 from adanet.core.subnetwork import Subnetwork
 from adanet.core.summary import Summary
@@ -69,7 +72,7 @@ class _Builder(Builder):
 
     # Subnetworks get iteration steps instead of global steps.
     global_step = tf.train.get_global_step()
-    assert "ensemble_test/iteration_step" == global_step.op.name
+    assert "subnetwork_test/iteration_step" == global_step.op.name
 
     # Subnetworks get scoped summaries.
     assert "fake_scalar" == tf.summary.scalar("scalar", 1.)
@@ -262,7 +265,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_mixture_weight_vars": 2,
       "want_num_trainable_vars": 4,
   })
-  def test_append_new_subnetwork(
+  def test_build_ensemble_spec(
       self,
       want_logits,
       want_loss=None,
@@ -291,15 +294,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
     else:
       head = tf.contrib.estimator.binary_classification_head(
           loss_reduction=tf.losses.Reduction.SUM)
-    builder = _EnsembleBuilder(
-        head=head,
-        mixture_weight_type=mixture_weight_type,
-        mixture_weight_initializer=mixture_weight_initializer,
-        warm_start_mixture_weights=warm_start_mixture_weights,
-        checkpoint_dir=self.test_subdirectory,
-        adanet_lambda=adanet_lambda,
-        adanet_beta=adanet_beta,
-        use_bias=use_bias)
+    builder = _EnsembleBuilder(head=head)
 
     features = {"x": tf.constant([[1.], [2.]])}
     if multi_head:
@@ -312,7 +307,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       self.assertEqual(var_list,
                        tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
       # Subnetworks get iteration steps instead of global steps.
-      self.assertEqual("ensemble_test/iteration_step",
+      self.assertEqual("subnetwork_test/iteration_step",
                        tf.train.get_global_step().op.name)
 
       # Subnetworks get scoped summaries.
@@ -339,18 +334,44 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
       return optimizer.minimize(loss, var_list=var_list)
 
-    ensemble_spec = builder.append_new_subnetwork(
+    previous_ensemble = None
+    previous_ensemble_spec = ensemble_spec_fn()
+    if previous_ensemble_spec:
+      previous_ensemble = previous_ensemble_spec.ensemble
+
+    subnetwork_manager = _SubnetworkManager(head)
+    subnetwork_builder = subnetwork_builder_class(
+        _subnetwork_train_op_fn,
+        _mixture_weights_train_op_fn,
+        use_logits_last_layer,
+        seed,
+        multi_head=multi_head)
+
+    subnetwork_spec = subnetwork_manager.build_subnetwork_spec(
+        name="test",
+        subnetwork_builder=subnetwork_builder,
+        iteration_step=tf.train.get_or_create_global_step(),
+        summary=_FakeSummary(),
+        features=features,
+        mode=mode,
+        labels=labels,
+        previous_ensemble=previous_ensemble)
+    ensemble_spec = builder.build_ensemble_spec(
         # Note: when ensemble_spec is not None and warm_start_mixture_weights
         # is True, we need to make sure that the bias and mixture weights are
         # already saved to the checkpoint_dir.
-        ensemble_name="test",
-        ensemble_spec=ensemble_spec_fn(),
-        subnetwork_builder=subnetwork_builder_class(
-            _subnetwork_train_op_fn,
-            _mixture_weights_train_op_fn,
-            use_logits_last_layer,
-            seed,
-            multi_head=multi_head),
+        name="test",
+        previous_ensemble_spec=previous_ensemble_spec,
+        candidate=EnsembleCandidate("foo", [subnetwork_builder], None),
+        ensembler=ComplexityRegularizedEnsembler(
+            mixture_weight_type=mixture_weight_type,
+            mixture_weight_initializer=mixture_weight_initializer,
+            warm_start_mixture_weights=warm_start_mixture_weights,
+            model_dir=self.test_subdirectory,
+            adanet_lambda=adanet_lambda,
+            adanet_beta=adanet_beta,
+            use_bias=use_bias),
+        subnetwork_specs=[subnetwork_spec],
         summary=_FakeSummary(),
         features=features,
         iteration_number=1,
@@ -376,16 +397,15 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
             want_logits, sess.run(ensemble_spec.ensemble.logits), atol=1e-3)
         self.assertIsNone(ensemble_spec.loss)
         self.assertIsNone(ensemble_spec.adanet_loss)
-        self.assertIsNone(ensemble_spec.subnetwork_train_op)
-        self.assertIsNone(ensemble_spec.ensemble_train_op)
+        self.assertIsNone(ensemble_spec.train_op)
         self.assertIsNotNone(ensemble_spec.export_outputs)
         return
 
       # Verify that train_op works, previous loss should be greater than loss
       # after a train op.
       loss = sess.run(ensemble_spec.loss)
-      train_op = tf.group(ensemble_spec.subnetwork_train_op.train_op,
-                          ensemble_spec.ensemble_train_op.train_op)
+      train_op = tf.group(subnetwork_spec.train_op.train_op,
+                          ensemble_spec.train_op.train_op)
       for _ in range(3):
         sess.run(train_op)
       self.assertGreater(loss, sess.run(ensemble_spec.loss))
@@ -406,19 +426,6 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       self.assertAlmostEqual(
           want_adanet_loss, sess.run(ensemble_spec.adanet_loss), places=3)
 
-  def test_init_error(self):
-    with self.assertRaises(ValueError):
-      _EnsembleBuilder(
-          head=tf.contrib.estimator.binary_classification_head(
-              loss_reduction=tf.losses.Reduction.SUM),
-          mixture_weight_type=MixtureWeightType.MATRIX,
-          mixture_weight_initializer=tf.zeros_initializer(),
-          warm_start_mixture_weights=True,
-          checkpoint_dir=None,
-          adanet_lambda=0.,
-          adanet_beta=0.,
-          use_bias=True)
-
 
 def _make_metrics(sess,
                   metric_fn,
@@ -438,28 +445,44 @@ def _make_metrics(sess,
         loss_reduction=tf.losses.Reduction.SUM)
     labels = tf.constant([0, 1])
   features = {"x": tf.constant([[1.], [2.]])}
-  builder = _EnsembleBuilder(
-      head, MixtureWeightType.SCALAR, metric_fn=metric_fn)
+  builder = _EnsembleBuilder(head, metric_fn=metric_fn)
+  subnetwork_manager = _SubnetworkManager(head, metric_fn)
+  subnetwork_builder = _Builder(
+      lambda unused0, unused1: tf.no_op(),
+      lambda unused0, unused1: tf.no_op(),
+      use_logits_last_layer=True)
 
-  ensemble_spec = builder.append_new_subnetwork(
-      ensemble_name="test",
-      ensemble_spec=None,
-      subnetwork_builder=_Builder(
-          lambda unused0, unused1: tf.no_op(),
-          lambda unused0, unused1: tf.no_op(),
-          use_logits_last_layer=True),
-      iteration_number=0,
+  subnetwork_spec = subnetwork_manager.build_subnetwork_spec(
+      name="test",
+      subnetwork_builder=subnetwork_builder,
       iteration_step=1,
       summary=_FakeSummary(),
       features=features,
       mode=mode,
       labels=labels)
+  ensemble_spec = builder.build_ensemble_spec(
+      name="test",
+      candidate=EnsembleCandidate("foo", [subnetwork_builder], None),
+      ensembler=ComplexityRegularizedEnsembler(
+          mixture_weight_type=MixtureWeightType.SCALAR),
+      subnetwork_specs=[subnetwork_spec],
+      summary=_FakeSummary(),
+      features=features,
+      iteration_number=0,
+      iteration_step=1,
+      labels=labels,
+      mode=mode)
+  fn, kwargs = subnetwork_spec.eval_metrics
+  subnetwork_metric_ops = fn(**kwargs)
   fn, kwargs = ensemble_spec.eval_metrics
-  eval_metric_ops = fn(**kwargs)
+  ensemble_metric_ops = fn(**kwargs)
   sess.run((tf.global_variables_initializer(),
             tf.local_variables_initializer()))
-  metrics = sess.run(eval_metric_ops)
-  return {k: metrics[k][1] for k in metrics}
+  subnetwork_metrics, ensemble_metrics = sess.run((subnetwork_metric_ops,
+                                                   ensemble_metric_ops))
+  return {k: subnetwork_metrics[k][1] for k in subnetwork_metrics}, {
+      k: ensemble_metrics[k][1] for k in ensemble_metrics
+  }
 
 
 class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
@@ -484,25 +507,24 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
       return {"mean_x": tf.metrics.mean(features["x"])}
 
     with self.test_session() as sess:
-      metrics = _make_metrics(sess, metric_fn, mode)
+      subnetwork_metrics, ensemble_metrics = _make_metrics(
+          sess, metric_fn, mode)
 
-    self.assertEmpty(metrics)
+    self.assertEmpty(subnetwork_metrics)
+    self.assertEmpty(ensemble_metrics)
 
   def test_should_add_metrics(self):
 
     def _test_metric_fn(metric_fn):
       with self.test_session() as sess:
-        metrics = _make_metrics(sess, metric_fn)
-      self.assertIn("mean_x/adanet/adanet_weighted_ensemble", metrics)
-      self.assertIn("mean_x/adanet/uniform_average_ensemble", metrics)
-      self.assertIn("mean_x/adanet/subnetwork", metrics)
-      self.assertEqual(1.5, metrics["mean_x/adanet/adanet_weighted_ensemble"])
-      self.assertEqual(1.5, metrics["mean_x/adanet/uniform_average_ensemble"])
-      self.assertEqual(1.5, metrics["mean_x/adanet/subnetwork"])
+        subnetwork_metrics, ensemble_metrics = _make_metrics(sess, metric_fn)
+      self.assertIn("mean_x", subnetwork_metrics)
+      self.assertIn("mean_x", ensemble_metrics)
+      self.assertEqual(1.5, subnetwork_metrics["mean_x"])
+      self.assertEqual(1.5, ensemble_metrics["mean_x"])
       # assert that it keeps original head metrics
-      self.assertIn("auc/adanet/adanet_weighted_ensemble", metrics)
-      self.assertIn("auc/adanet/uniform_average_ensemble", metrics)
-      self.assertIn("auc/adanet/subnetwork", metrics)
+      self.assertIn("auc", subnetwork_metrics)
+      self.assertIn("auc", ensemble_metrics)
 
     def metric_fn_1(features):
       return {"mean_x": tf.metrics.mean(features["x"])}
@@ -519,7 +541,7 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
       return {}
 
     with self.assertRaisesRegexp(ValueError, "not_recognized"):
-      _EnsembleBuilder(head, MixtureWeightType.SCALAR, metric_fn=metric_fn)
+      _EnsembleBuilder(head, metric_fn=metric_fn)
 
   def test_all_supported_args(self):
 
@@ -547,8 +569,9 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
 
     def _test_metric_fn(metric_fn):
       with self.test_session() as sess:
-        metrics = _make_metrics(sess, metric_fn)
-      self.assertEqual(2., metrics["two/adanet/subnetwork"])
+        subnetwork_metrics, ensemble_metrics = _make_metrics(sess, metric_fn)
+      self.assertEqual(2., subnetwork_metrics["two"])
+      self.assertEqual(2., ensemble_metrics["two"])
 
     def metric_fn_1():
       return {"two": tf.metrics.mean(tf.constant([2.]))}
@@ -560,12 +583,16 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
 
     def _test_metric_fn(metric_fn):
       with self.test_session() as sess:
-        metrics = _make_metrics(sess, metric_fn=None)
-      self.assertNotEqual(2., metrics["auc/adanet/subnetwork"])
+        subnetwork_metrics, ensemble_metrics = _make_metrics(
+            sess, metric_fn=None)
+      self.assertNotEqual(2., subnetwork_metrics["auc"])
+      self.assertNotEqual(2., ensemble_metrics["auc"])
 
       with tf.Graph().as_default() as g, self.test_session(g) as sess:
-        metrics = _make_metrics(sess, metric_fn=metric_fn)
-      self.assertEqual(2., metrics["auc/adanet/subnetwork"])
+        subnetwork_metrics, ensemble_metrics = _make_metrics(
+            sess, metric_fn=metric_fn)
+      self.assertEqual(2., subnetwork_metrics["auc"])
+      self.assertEqual(2., ensemble_metrics["auc"])
 
     def metric_fn_1():
       return {"auc": tf.metrics.mean(tf.constant([2.]))}

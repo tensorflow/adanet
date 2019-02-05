@@ -104,14 +104,18 @@ class ComplexityRegularized(
     An :class:`adanet.ensemble.Weighted` instance.
   """
 
-  def __new__(cls, weighted_subnetworks, bias, logits, subnetworks,
-              complexity_regularization):
+  def __new__(cls,
+              weighted_subnetworks,
+              bias,
+              logits,
+              subnetworks=None,
+              complexity_regularization=None):
     return super(ComplexityRegularized, cls).__new__(
         cls,
-        weighted_subnetworks=tuple(weighted_subnetworks),
+        weighted_subnetworks=list(weighted_subnetworks),
         bias=bias,
         logits=logits,
-        subnetworks=tuple(subnetworks),
+        subnetworks=list(subnetworks or []),
         complexity_regularization=complexity_regularization)
 
 
@@ -240,7 +244,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
             weight_initializer = {
                 key: self._load_variable_from_model_dir(
                     weighted_subnetwork.weight[key].op.name)
-                for key in weighted_subnetwork.subnetwork.last_layer
+                for key in sorted(weighted_subnetwork.subnetwork.last_layer)
             }
           else:
             weight_initializer = self._load_variable_from_model_dir(
@@ -255,8 +259,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
         subnetwork_index += 1
 
     for subnetwork in subnetworks:
-      with tf.variable_scope(
-          "weighted_subnetwork_{}".format(subnetwork_index)):
+      with tf.variable_scope("weighted_subnetwork_{}".format(subnetwork_index)):
         weighted_subnetworks.append(
             self._build_weighted_subnetwork(subnetwork, num_subnetworks))
       subnetwork_index += 1
@@ -315,7 +318,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
                                  subnetwork,
                                  num_subnetworks,
                                  weight_initializer=None):
-    """Builds an `WeightedSubnetwork`.
+    """Builds an `adanet.ensemble.WeightedSubnetwork`.
 
     Args:
       subnetwork: The `Subnetwork` to weight.
@@ -464,7 +467,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
     return {
         key: self._create_ensemble_logits_helper(
             weighted_subnetworks, bias, summary, key=key)
-        for key in weighted_subnetworks[0].subnetwork.logits
+        for key in sorted(weighted_subnetworks[0].subnetwork.logits)
     }
 
   def _create_ensemble_logits_helper(self,

@@ -21,7 +21,9 @@ from __future__ import print_function
 
 from absl.testing import parameterized
 from adanet.core.candidate import _Candidate
+from adanet.core.ensemble import Candidate as EnsembleCandidate
 from adanet.core.ensemble_builder import _EnsembleSpec
+from adanet.core.ensemble_builder import _SubnetworkSpec
 from adanet.core.iteration import _Iteration
 from adanet.core.iteration import _IterationBuilder
 from adanet.core.subnetwork import Builder as SubnetworkBuilder
@@ -53,8 +55,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
   }, {
       "testcase_name": "two_candidates",
       "number": 0,
-      "candidates": [_dummy_candidate(),
-                     _dummy_candidate()],
+      "candidates": [_dummy_candidate(), _dummy_candidate()],
       "estimator_spec": tu.dummy_estimator_spec(),
       "best_candidate_index": 0,
       "is_over_fn": lambda: True,
@@ -87,18 +88,27 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
       "best_candidate_index": 0,
       "is_over_fn": lambda: True,
   }, {
-      "testcase_name": "pass_subnetwork_report",
-      "number": 1,
+      "testcase_name":
+          "pass_subnetwork_report",
+      "number":
+          1,
       "candidates": [_dummy_candidate()],
-      "estimator_spec": tu.dummy_estimator_spec(),
-      "best_candidate_index": 0,
-      "is_over_fn": lambda: True,
-      "subnetwork_reports_fn": lambda: {
-          "foo": SubnetworkReport(
-              hparams={"dropout": 1.0},
-              attributes={"aoo": tf.constant("aoo")},
-              metrics={"moo": (tf.constant("moo1"), tf.constant("moo2"))})
-      },
+      "estimator_spec":
+          tu.dummy_estimator_spec(),
+      "best_candidate_index":
+          0,
+      "is_over_fn":
+          lambda: True,
+      "subnetwork_reports_fn":
+          lambda: {
+              "foo":
+                  SubnetworkReport(
+                      hparams={"dropout": 1.0},
+                      attributes={"aoo": tf.constant("aoo")},
+                      metrics={
+                          "moo": (tf.constant("moo1"), tf.constant("moo2"))
+                      })
+          },
   })
   def test_new(self,
                number,
@@ -116,6 +126,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
       iteration = _Iteration(
           number=number,
           candidates=candidates,
+          subnetwork_specs=None,
           estimator_spec=estimator_spec,
           best_candidate_index=best_candidate_index,
           summaries=[],
@@ -147,7 +158,9 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
       "candidates": lambda: None,
   }, {
       "testcase_name": "non_list_candidates",
-      "candidates": lambda: {"foo": _dummy_candidate()},
+      "candidates": lambda: {
+          "foo": _dummy_candidate()
+      },
   }, {
       "testcase_name": "none_estimator_spec",
       "estimator_spec": None,
@@ -174,6 +187,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
         _Iteration(
             number=number,
             candidates=candidates(),
+            subnetwork_specs=None,
             estimator_spec=estimator_spec,
             best_candidate_index=best_candidate_index,
             summaries=[],
@@ -296,29 +310,71 @@ class _FakeEnsembleBuilder(object):
     else:
       self._eval_metrics = None
 
-  def append_new_subnetwork(
-      self, ensemble_name, ensemble_spec, subnetwork_builder, iteration_number,
-      iteration_step, summary, features, mode, labels, params):
-    del ensemble_name
+  def build_ensemble_spec(self,
+                          name,
+                          candidate,
+                          ensembler,
+                          subnetwork_specs,
+                          summary,
+                          features,
+                          mode,
+                          iteration_step,
+                          iteration_number,
+                          labels=None,
+                          previous_ensemble_spec=None,
+                          params=None):
+    del ensembler
+    del subnetwork_specs
     del summary
-    del mode
     del features
+    del mode
     del labels
-    del iteration_number
     del iteration_step
+    del iteration_number
     del params
 
     num_subnetworks = 0
-    if ensemble_spec:
+    if previous_ensemble_spec:
       num_subnetworks += 1
 
     return tu.dummy_ensemble_spec(
-        name=subnetwork_builder.name,
+        name=name,
         num_subnetworks=num_subnetworks,
-        random_seed=subnetwork_builder.seed,
+        random_seed=candidate.subnetwork_builders[0].seed,
+        subnetwork_builders=candidate.subnetwork_builders,
         dict_predictions=self._dict_predictions,
         eval_metrics=self._eval_metrics,
         export_output_key=self._export_output_key)
+
+
+class _FakeSubnetworkManager(object):
+
+  def build_subnetwork_spec(self,
+                            name,
+                            subnetwork_builder,
+                            iteration_step,
+                            summary,
+                            features,
+                            mode,
+                            labels=None,
+                            previous_ensemble=None,
+                            params=None):
+    del iteration_step
+    del summary
+    del features
+    del mode
+    del labels
+    del previous_ensemble
+    del params
+
+    return _SubnetworkSpec(
+        name=name,
+        subnetwork=None,
+        builder=subnetwork_builder,
+        predictions=None,
+        loss=None,
+        train_op=None,
+        eval_metrics=None)
 
 
 class _FakeCandidateBuilder(object):
@@ -334,10 +390,14 @@ class _FakeCandidateBuilder(object):
     del iteration_step  # Unused
     del summary  # Unused
     del previous_ensemble_spec  # Unused
+
+    is_training = False
+    if ensemble_spec.subnetwork_builders:
+      is_training = "training" in ensemble_spec.subnetwork_builders[0].name
     return _Candidate(
         ensemble_spec=ensemble_spec,
         adanet_loss=ensemble_spec.adanet_loss,
-        is_training="training" in ensemble_spec.name,
+        is_training=is_training,
         is_previous_best=is_previous_best)
 
 
@@ -360,356 +420,315 @@ def _export_output_tensors(export_outputs):
   return outputs
 
 
+class _FakeEnsembler(object):
+
+  @property
+  def name(self):
+    return "fake_ensembler"
+
+
 class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
   # pylint: disable=g-long-lambda
-  @parameterized.named_parameters(
-      {
-          "testcase_name": "single_subnetwork_fn",
-          "ensemble_builder": _FakeEnsembleBuilder(),
-          "subnetwork_builders": [_FakeBuilder("training")],
-          "features": lambda: [[1., -1., 0.]],
-          "labels": lambda: [1],
-          "want_loss": 1.403943,
-          "want_predictions": 2.129,
-          "want_best_candidate_index": 0,
-      }, {
-          "testcase_name":
-              "single_subnetwork_with_eval_metrics",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(eval_metric_ops_fn=lambda: {
-                  "a": (tf.constant(1), tf.constant(2))
-              }),
-          "subnetwork_builders": [_FakeBuilder("training",),],
-          "mode":
-              tf.estimator.ModeKeys.EVAL,
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "want_loss":
-              1.403943,
-          "want_predictions":
-              2.129,
-          "want_eval_metric_ops": ["a"],
-          "want_best_candidate_index":
-              0,
-      }, {
-          "testcase_name":
-              "single_subnetwork_with_non_tensor_eval_metric_op",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(
-                  eval_metric_ops_fn=lambda: {
-                      "a": (tf.constant(1), tf.no_op())
-                  }
-              ),
-          "subnetwork_builders": [_FakeBuilder("training",),],
-          "mode":
-              tf.estimator.ModeKeys.EVAL,
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "want_loss":
-              1.403943,
-          "want_predictions":
-              2.129,
-          "want_eval_metric_ops": ["a"],
-          "want_best_candidate_index":
-              0,
-      }, {
-          "testcase_name": "single_subnetwork_done_training_fn",
-          "ensemble_builder": _FakeEnsembleBuilder(),
-          "subnetwork_builders": [_FakeBuilder("done")],
-          "features": lambda: [[1., -1., 0.]],
-          "labels": lambda: [1],
-          "want_loss": 1.403943,
-          "want_predictions": 2.129,
-          "want_best_candidate_index": 0,
-          "want_is_over": True,
-      }, {
-          "testcase_name": "single_dict_predictions_subnetwork_fn",
-          "ensemble_builder": _FakeEnsembleBuilder(dict_predictions=True),
-          "subnetwork_builders": [_FakeBuilder("training")],
-          "features": lambda: [[1., -1., 0.]],
-          "labels": lambda: [1],
-          "want_loss": 1.403943,
-          "want_predictions": {
-              "classes": 2,
-              "logits": 2.129
-          },
-          "want_best_candidate_index": 0,
-      }, {
-          "testcase_name": "previous_ensemble",
-          "ensemble_builder": _FakeEnsembleBuilder(),
-          "subnetwork_builders": [_FakeBuilder("training")],
-          "features": lambda: [[1., -1., 0.]],
-          "labels": lambda: [1],
-          "previous_ensemble_spec": lambda: tu.dummy_ensemble_spec("old"),
-          "want_loss": 1.403943,
-          "want_predictions": 2.129,
-          "want_best_candidate_index": 1,
-      }, {
-          "testcase_name":
-              "previous_ensemble_is_best",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(),
-          "subnetwork_builders": [_FakeBuilder("training")],
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "previous_ensemble_spec":
-              lambda: tu.dummy_ensemble_spec("old", random_seed=12),
-          "want_loss":
-              -.437,
-          "want_predictions":
-              .688,
-          "want_best_candidate_index":
-              0,
-      }, {
-          "testcase_name":
-              "previous_ensemble_spec_and_eval_metrics",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(eval_metric_ops_fn=lambda: {
-                  "a": (tf.constant(1), tf.constant(2))
-              }),
-          "subnetwork_builders": [_FakeBuilder("training")],
-          "mode":
-              tf.estimator.ModeKeys.EVAL,
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "previous_ensemble_spec":
-              lambda: tu.dummy_ensemble_spec("old", eval_metrics=(lambda: {
+  @parameterized.named_parameters({
+      "testcase_name": "single_subnetwork_fn",
+      "ensemble_builder": _FakeEnsembleBuilder(),
+      "subnetwork_builders": [_FakeBuilder("training")],
+      "features": lambda: [[1., -1., 0.]],
+      "labels": lambda: [1],
+      "want_loss": 1.403943,
+      "want_predictions": 2.129,
+      "want_best_candidate_index": 0,
+  }, {
+      "testcase_name":
+          "single_subnetwork_with_eval_metrics",
+      "ensemble_builder":
+          _FakeEnsembleBuilder(eval_metric_ops_fn=lambda:
+                               {"a": (tf.constant(1), tf.constant(2))}),
+      "subnetwork_builders": [_FakeBuilder("training",),],
+      "mode":
+          tf.estimator.ModeKeys.EVAL,
+      "features":
+          lambda: [[1., -1., 0.]],
+      "labels":
+          lambda: [1],
+      "want_loss":
+          1.403943,
+      "want_predictions":
+          2.129,
+      "want_eval_metric_ops": ["a"],
+      "want_best_candidate_index":
+          0,
+  }, {
+      "testcase_name":
+          "single_subnetwork_with_non_tensor_eval_metric_op",
+      "ensemble_builder":
+          _FakeEnsembleBuilder(
+              eval_metric_ops_fn=lambda: {"a": (tf.constant(1), tf.no_op())}),
+      "subnetwork_builders": [_FakeBuilder("training",),],
+      "mode":
+          tf.estimator.ModeKeys.EVAL,
+      "features":
+          lambda: [[1., -1., 0.]],
+      "labels":
+          lambda: [1],
+      "want_loss":
+          1.403943,
+      "want_predictions":
+          2.129,
+      "want_eval_metric_ops": ["a"],
+      "want_best_candidate_index":
+          0,
+  }, {
+      "testcase_name": "single_subnetwork_done_training_fn",
+      "ensemble_builder": _FakeEnsembleBuilder(),
+      "subnetwork_builders": [_FakeBuilder("done")],
+      "features": lambda: [[1., -1., 0.]],
+      "labels": lambda: [1],
+      "want_loss": 1.403943,
+      "want_predictions": 2.129,
+      "want_best_candidate_index": 0,
+      "want_is_over": True,
+  }, {
+      "testcase_name": "single_dict_predictions_subnetwork_fn",
+      "ensemble_builder": _FakeEnsembleBuilder(dict_predictions=True),
+      "subnetwork_builders": [_FakeBuilder("training")],
+      "features": lambda: [[1., -1., 0.]],
+      "labels": lambda: [1],
+      "want_loss": 1.403943,
+      "want_predictions": {
+          "classes": 2,
+          "logits": 2.129
+      },
+      "want_best_candidate_index": 0,
+  }, {
+      "testcase_name": "previous_ensemble",
+      "ensemble_builder": _FakeEnsembleBuilder(),
+      "subnetwork_builders": [_FakeBuilder("training")],
+      "features": lambda: [[1., -1., 0.]],
+      "labels": lambda: [1],
+      "previous_ensemble_spec": lambda: tu.dummy_ensemble_spec("old"),
+      "want_loss": 1.403943,
+      "want_predictions": 2.129,
+      "want_best_candidate_index": 1,
+  }, {
+      "testcase_name":
+          "previous_ensemble_is_best",
+      "ensemble_builder":
+          _FakeEnsembleBuilder(),
+      "subnetwork_builders": [_FakeBuilder("training")],
+      "features":
+          lambda: [[1., -1., 0.]],
+      "labels":
+          lambda: [1],
+      "previous_ensemble_spec":
+          lambda: tu.dummy_ensemble_spec("old", random_seed=12),
+      "want_loss":
+          -.437,
+      "want_predictions":
+          .688,
+      "want_best_candidate_index":
+          0,
+  }, {
+      "testcase_name":
+          "previous_ensemble_spec_and_eval_metrics",
+      "ensemble_builder":
+          _FakeEnsembleBuilder(eval_metric_ops_fn=lambda:
+                               {"a": (tf.constant(1), tf.constant(2))}),
+      "subnetwork_builders": [_FakeBuilder("training")],
+      "mode":
+          tf.estimator.ModeKeys.EVAL,
+      "features":
+          lambda: [[1., -1., 0.]],
+      "labels":
+          lambda: [1],
+      "previous_ensemble_spec":
+          lambda: tu.dummy_ensemble_spec(
+              "old",
+              eval_metrics=(lambda: {
                   "a": (tf.constant(1), tf.constant(2))
               }, {})),
-          "want_loss":
-              1.403943,
-          "want_predictions":
-              2.129,
-          "want_eval_metric_ops": ["a"],
-          "want_best_candidate_index":
-              1,
-      }, {
-          "testcase_name":
-              "two_subnetwork_fns",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(),
-          "subnetwork_builders": [
-              _FakeBuilder("training"),
-              _FakeBuilder("training2", random_seed=7)
-          ],
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "want_loss":
-              1.40394,
-          "want_predictions":
-              2.129,
-          "want_best_candidate_index":
-              0,
-      }, {
-          "testcase_name":
-              "two_subnetwork_fns_other_best",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(),
-          "subnetwork_builders": [
-              _FakeBuilder("training"),
-              _FakeBuilder("training2", random_seed=12)
-          ],
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "want_loss":
-              -.437,
-          "want_predictions":
-              .688,
-          "want_best_candidate_index":
-              1,
-      }, {
-          "testcase_name":
-              "two_subnetwork_one_training_fns",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(),
-          "subnetwork_builders": [
-              _FakeBuilder("training"),
-              _FakeBuilder("done", random_seed=7)
-          ],
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "want_loss":
-              1.403943,
-          "want_predictions":
-              2.129,
-          "want_best_candidate_index":
-              0,
-      }, {
-          "testcase_name":
-              "two_subnetwork_done_training_fns",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(),
-          "subnetwork_builders": [
-              _FakeBuilder("done"),
-              _FakeBuilder("done1", random_seed=7)
-          ],
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "want_loss":
-              1.403943,
-          "want_predictions":
-              2.129,
-          "want_best_candidate_index":
-              0,
-          "want_is_over":
-              True,
-      }, {
-          "testcase_name":
-              "two_dict_predictions_subnetwork_fns",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(dict_predictions=True),
-          "subnetwork_builders": [
-              _FakeBuilder("training"),
-              _FakeBuilder("training2", random_seed=7)
-          ],
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "want_loss":
-              1.404,
-          "want_predictions": {
+      "want_loss":
+          1.403943,
+      "want_predictions":
+          2.129,
+      "want_eval_metric_ops": ["a"],
+      "want_best_candidate_index":
+          1,
+  }, {
+      "testcase_name": "two_subnetwork_fns",
+      "ensemble_builder": _FakeEnsembleBuilder(),
+      "subnetwork_builders":
+          [_FakeBuilder("training"),
+           _FakeBuilder("training2", random_seed=7)],
+      "features": lambda: [[1., -1., 0.]],
+      "labels": lambda: [1],
+      "want_loss": 1.40394,
+      "want_predictions": 2.129,
+      "want_best_candidate_index": 0,
+  }, {
+      "testcase_name": "two_subnetwork_fns_other_best",
+      "ensemble_builder": _FakeEnsembleBuilder(),
+      "subnetwork_builders":
+          [_FakeBuilder("training"),
+           _FakeBuilder("training2", random_seed=12)],
+      "features": lambda: [[1., -1., 0.]],
+      "labels": lambda: [1],
+      "want_loss": -.437,
+      "want_predictions": .688,
+      "want_best_candidate_index": 1,
+  }, {
+      "testcase_name": "two_subnetwork_one_training_fns",
+      "ensemble_builder": _FakeEnsembleBuilder(),
+      "subnetwork_builders":
+          [_FakeBuilder("training"),
+           _FakeBuilder("done", random_seed=7)],
+      "features": lambda: [[1., -1., 0.]],
+      "labels": lambda: [1],
+      "want_loss": 1.403943,
+      "want_predictions": 2.129,
+      "want_best_candidate_index": 0,
+  }, {
+      "testcase_name": "two_subnetwork_done_training_fns",
+      "ensemble_builder": _FakeEnsembleBuilder(),
+      "subnetwork_builders":
+          [_FakeBuilder("done"),
+           _FakeBuilder("done1", random_seed=7)],
+      "features": lambda: [[1., -1., 0.]],
+      "labels": lambda: [1],
+      "want_loss": 1.403943,
+      "want_predictions": 2.129,
+      "want_best_candidate_index": 0,
+      "want_is_over": True,
+  }, {
+      "testcase_name": "two_dict_predictions_subnetwork_fns",
+      "ensemble_builder": _FakeEnsembleBuilder(dict_predictions=True),
+      "subnetwork_builders":
+          [_FakeBuilder("training"),
+           _FakeBuilder("training2", random_seed=7)],
+      "features": lambda: [[1., -1., 0.]],
+      "labels": lambda: [1],
+      "want_loss": 1.404,
+      "want_predictions": {
+          "classes": 2,
+          "logits": 2.129
+      },
+      "want_best_candidate_index": 0,
+  }, {
+      "testcase_name":
+          "two_dict_predictions_subnetwork_fns_predict_classes",
+      "ensemble_builder":
+          _FakeEnsembleBuilder(
+              dict_predictions=True,
+              export_output_key=tu.ExportOutputKeys.CLASSIFICATION_CLASSES),
+      "subnetwork_builders":
+          [_FakeBuilder("training"),
+           _FakeBuilder("training2", random_seed=7)],
+      "mode":
+          tf.estimator.ModeKeys.PREDICT,
+      "features":
+          lambda: [[1., -1., 0.]],
+      "labels":
+          lambda: [1],
+      "want_loss":
+          1.404,
+      "want_predictions": {
+          "classes": 2,
+          "logits": 2.129
+      },
+      "want_best_candidate_index":
+          0,
+      "want_export_outputs": {
+          tu.ExportOutputKeys.CLASSIFICATION_CLASSES: [2.129],
+          "serving_default": [2.129],
+      },
+  }, {
+      "testcase_name":
+          "two_dict_predictions_subnetwork_fns_predict_scores",
+      "ensemble_builder":
+          _FakeEnsembleBuilder(
+              dict_predictions=True,
+              export_output_key=tu.ExportOutputKeys.CLASSIFICATION_SCORES),
+      "subnetwork_builders":
+          [_FakeBuilder("training"),
+           _FakeBuilder("training2", random_seed=7)],
+      "mode":
+          tf.estimator.ModeKeys.PREDICT,
+      "features":
+          lambda: [[1., -1., 0.]],
+      "labels":
+          lambda: [1],
+      "want_loss":
+          1.404,
+      "want_predictions": {
+          "classes": 2,
+          "logits": 2.129
+      },
+      "want_best_candidate_index":
+          0,
+      "want_export_outputs": {
+          tu.ExportOutputKeys.CLASSIFICATION_SCORES: [2.129],
+          "serving_default": [2.129],
+      },
+  }, {
+      "testcase_name":
+          "two_dict_predictions_subnetwork_fns_predict_regression",
+      "ensemble_builder":
+          _FakeEnsembleBuilder(
+              dict_predictions=True,
+              export_output_key=tu.ExportOutputKeys.REGRESSION),
+      "subnetwork_builders":
+          [_FakeBuilder("training"),
+           _FakeBuilder("training2", random_seed=7)],
+      "mode":
+          tf.estimator.ModeKeys.PREDICT,
+      "features":
+          lambda: [[1., -1., 0.]],
+      "labels":
+          lambda: [1],
+      "want_predictions": {
+          "classes": 2,
+          "logits": 2.129
+      },
+      "want_best_candidate_index":
+          0,
+      "want_export_outputs": {
+          tu.ExportOutputKeys.REGRESSION: 2.129,
+          "serving_default": 2.129,
+      },
+  }, {
+      "testcase_name":
+          "two_dict_predictions_subnetwork_fns_predict_prediction",
+      "ensemble_builder":
+          _FakeEnsembleBuilder(
+              dict_predictions=True,
+              export_output_key=tu.ExportOutputKeys.PREDICTION),
+      "subnetwork_builders":
+          [_FakeBuilder("training"),
+           _FakeBuilder("training2", random_seed=7)],
+      "mode":
+          tf.estimator.ModeKeys.PREDICT,
+      "features":
+          lambda: [[1., -1., 0.]],
+      "labels":
+          lambda: [1],
+      "want_predictions": {
+          "classes": 2,
+          "logits": 2.129
+      },
+      "want_best_candidate_index":
+          0,
+      "want_export_outputs": {
+          tu.ExportOutputKeys.PREDICTION: {
               "classes": 2,
               "logits": 2.129
           },
-          "want_best_candidate_index":
-              0,
-      }, {
-          "testcase_name":
-              "two_dict_predictions_subnetwork_fns_predict_classes",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(
-                  dict_predictions=True,
-                  export_output_key=tu.ExportOutputKeys.CLASSIFICATION_CLASSES),
-          "subnetwork_builders": [
-              _FakeBuilder("training"),
-              _FakeBuilder("training2", random_seed=7)
-          ],
-          "mode":
-              tf.estimator.ModeKeys.PREDICT,
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "want_loss":
-              1.404,
-          "want_predictions": {
+          "serving_default": {
               "classes": 2,
               "logits": 2.129
           },
-          "want_best_candidate_index":
-              0,
-          "want_export_outputs": {
-              tu.ExportOutputKeys.CLASSIFICATION_CLASSES: [2.129],
-              "serving_default": [2.129],
-          },
-      }, {
-          "testcase_name":
-              "two_dict_predictions_subnetwork_fns_predict_scores",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(
-                  dict_predictions=True,
-                  export_output_key=tu.ExportOutputKeys.CLASSIFICATION_SCORES),
-          "subnetwork_builders": [
-              _FakeBuilder("training"),
-              _FakeBuilder("training2", random_seed=7)
-          ],
-          "mode":
-              tf.estimator.ModeKeys.PREDICT,
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "want_loss":
-              1.404,
-          "want_predictions": {
-              "classes": 2,
-              "logits": 2.129
-          },
-          "want_best_candidate_index":
-              0,
-          "want_export_outputs": {
-              tu.ExportOutputKeys.CLASSIFICATION_SCORES: [2.129],
-              "serving_default": [2.129],
-          },
-      }, {
-          "testcase_name":
-              "two_dict_predictions_subnetwork_fns_predict_regression",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(
-                  dict_predictions=True,
-                  export_output_key=tu.ExportOutputKeys.REGRESSION),
-          "subnetwork_builders": [
-              _FakeBuilder("training"),
-              _FakeBuilder("training2", random_seed=7)
-          ],
-          "mode":
-              tf.estimator.ModeKeys.PREDICT,
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "want_predictions": {
-              "classes": 2,
-              "logits": 2.129
-          },
-          "want_best_candidate_index":
-              0,
-          "want_export_outputs": {
-              tu.ExportOutputKeys.REGRESSION: 2.129,
-              "serving_default": 2.129,
-          },
-      }, {
-          "testcase_name":
-              "two_dict_predictions_subnetwork_fns_predict_prediction",
-          "ensemble_builder":
-              _FakeEnsembleBuilder(
-                  dict_predictions=True,
-                  export_output_key=tu.ExportOutputKeys.PREDICTION),
-          "subnetwork_builders": [
-              _FakeBuilder("training"),
-              _FakeBuilder("training2", random_seed=7)
-          ],
-          "mode":
-              tf.estimator.ModeKeys.PREDICT,
-          "features":
-              lambda: [[1., -1., 0.]],
-          "labels":
-              lambda: [1],
-          "want_predictions": {
-              "classes": 2,
-              "logits": 2.129
-          },
-          "want_best_candidate_index":
-              0,
-          "want_export_outputs": {
-              tu.ExportOutputKeys.PREDICTION: {
-                  "classes": 2,
-                  "logits": 2.129
-              },
-              "serving_default": {
-                  "classes": 2,
-                  "logits": 2.129
-              },
-          },
-      })
+      },
+  })
   def test_build_iteration(self,
                            ensemble_builder,
                            subnetwork_builders,
@@ -724,9 +743,16 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                            want_export_outputs=None,
                            mode=tf.estimator.ModeKeys.TRAIN):
     global_step = tf.train.create_global_step()
-    builder = _IterationBuilder(_FakeCandidateBuilder(), ensemble_builder)
+    builder = _IterationBuilder(
+        _FakeCandidateBuilder(),
+        _FakeSubnetworkManager(),
+        ensemble_builder,
+        ensemblers=[_FakeEnsembler()])
     iteration = builder.build_iteration(
         iteration_number=0,
+        ensemble_candidates=[
+            EnsembleCandidate(b.name, [b], None) for b in subnetwork_builders
+        ],
         subnetwork_builders=subnetwork_builders,
         features=features(),
         labels=labels(),
@@ -771,16 +797,12 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "subnetwork_builders": [],
       "want_raises": ValueError,
   }, {
-      "testcase_name":
-          "same_subnetwork_builder_names",
-      "ensemble_builder":
-          _FakeEnsembleBuilder(),
-      "subnetwork_builders": [
-          _FakeBuilder("same_name"),
-          _FakeBuilder("same_name")
-      ],
-      "want_raises":
-          ValueError,
+      "testcase_name": "same_subnetwork_builder_names",
+      "ensemble_builder": _FakeEnsembleBuilder(),
+      "subnetwork_builders":
+          [_FakeBuilder("same_name"),
+           _FakeBuilder("same_name")],
+      "want_raises": ValueError,
   }, {
       "testcase_name": "same_name_as_previous_ensemble_spec",
       "ensemble_builder": _FakeEnsembleBuilder(),
@@ -794,10 +816,9 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           _FakeEnsembleBuilder(
               dict_predictions=True,
               export_output_key=tu.ExportOutputKeys.INVALID),
-      "subnetwork_builders": [
-          _FakeBuilder("training"),
-          _FakeBuilder("training2", random_seed=7)
-      ],
+      "subnetwork_builders":
+          [_FakeBuilder("training"),
+           _FakeBuilder("training2", random_seed=7)],
       "mode":
           tf.estimator.ModeKeys.PREDICT,
       "want_raises":
@@ -809,13 +830,20 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                                  want_raises,
                                  previous_ensemble_spec_fn=lambda: None,
                                  mode=tf.estimator.ModeKeys.TRAIN):
-    builder = _IterationBuilder(_FakeCandidateBuilder(), ensemble_builder)
+    builder = _IterationBuilder(
+        _FakeCandidateBuilder(),
+        _FakeSubnetworkManager(),
+        ensemble_builder,
+        ensemblers=[_FakeEnsembler()])
     features = [[1., -1., 0.]]
     labels = [1]
     with self.test_session():
       with self.assertRaises(want_raises):
         builder.build_iteration(
             iteration_number=0,
+            ensemble_candidates=[
+                EnsembleCandidate("test", subnetwork_builders, None)
+            ],
             subnetwork_builders=subnetwork_builders,
             features=features,
             labels=labels,
@@ -828,15 +856,25 @@ class _HeadEnsembleBuilder(object):
   def __init__(self, head):
     self._head = head
 
-  def append_new_subnetwork(
-      self, ensemble_name, ensemble_spec, subnetwork_builder, iteration_number,
-      iteration_step, summary, features, mode, labels, params):
-    del ensemble_name
-    del ensemble_spec
-    del subnetwork_builder
-    del iteration_number
-    del iteration_step
+  def build_ensemble_spec(self,
+                          name,
+                          candidate,
+                          ensembler,
+                          subnetwork_specs,
+                          summary,
+                          features,
+                          mode,
+                          iteration_step,
+                          iteration_number,
+                          labels=None,
+                          previous_ensemble_spec=None,
+                          params=None):
+    del ensembler
+    del subnetwork_specs
     del summary
+    del iteration_step
+    del iteration_number
+    del previous_ensemble_spec
     del params
 
     logits = [[.5]]
@@ -844,14 +882,14 @@ class _HeadEnsembleBuilder(object):
     estimator_spec = self._head.create_estimator_spec(
         features=features, mode=mode, labels=labels, logits=logits)
     return _EnsembleSpec(
-        name="test",
+        name=name,
         ensemble=None,
         architecture=None,
+        subnetwork_builders=candidate.subnetwork_builders,
         predictions=estimator_spec.predictions,
         loss=None,
         adanet_loss=.1,
-        subnetwork_train_op=None,
-        ensemble_train_op=None,
+        train_op=None,
         eval_metrics=None,
         export_outputs=estimator_spec.export_outputs)
 
@@ -867,13 +905,21 @@ class IterationExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
   })
   def test_head_export_outputs(self, head):
     ensemble_builder = _HeadEnsembleBuilder(head)
-    builder = _IterationBuilder(_FakeCandidateBuilder(), ensemble_builder)
+    builder = _IterationBuilder(
+        _FakeCandidateBuilder(),
+        _FakeSubnetworkManager(),
+        ensemble_builder,
+        ensemblers=[_FakeEnsembler()])
     features = [[1., -1., 0.]]
     labels = [1]
     mode = tf.estimator.ModeKeys.PREDICT
+    subnetwork_builders = [_FakeBuilder("test")]
     iteration = builder.build_iteration(
         iteration_number=0,
-        subnetwork_builders=[_FakeBuilder("test")],
+        ensemble_candidates=[
+            EnsembleCandidate("test", subnetwork_builders, None)
+        ],
+        subnetwork_builders=subnetwork_builders,
         features=features,
         labels=labels,
         mode=mode)

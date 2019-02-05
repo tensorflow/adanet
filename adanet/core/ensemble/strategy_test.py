@@ -31,21 +31,49 @@ class StrategyTest(tf.test.TestCase):
   def setUp(self):
     self.fake_builder_1 = mock.create_autospec(spec=subnetwork.Builder)
     self.fake_builder_2 = mock.create_autospec(spec=subnetwork.Builder)
+    self.fake_builder_3 = mock.create_autospec(spec=subnetwork.Builder)
+    self.fake_builder_4 = mock.create_autospec(spec=subnetwork.Builder)
 
   def test_grow_strategy(self):
-    self.assertEqual(
-        ensemble.GrowStrategy().generate_ensemble_candidates(
-            [self.fake_builder_1, self.fake_builder_2]), [
-                ensemble.Candidate([self.fake_builder_1]),
-                ensemble.Candidate([self.fake_builder_2])
-            ])
+    want = [
+        ensemble.Candidate(self.fake_builder_1.name, [self.fake_builder_1], []),
+        ensemble.Candidate(self.fake_builder_2.name, [self.fake_builder_2], [])
+    ]
+    got = ensemble.GrowStrategy().generate_ensemble_candidates(
+        [self.fake_builder_1, self.fake_builder_2], None)
+    self.assertEqual(want, got)
+
+  def test_grow_strategy_with_previous_ensemble_subnetwork_builders(self):
+    want = [
+        ensemble.Candidate(self.fake_builder_1.name, [self.fake_builder_1],
+                           [self.fake_builder_3, self.fake_builder_4]),
+        ensemble.Candidate(self.fake_builder_2.name, [self.fake_builder_2],
+                           [self.fake_builder_3, self.fake_builder_4])
+    ]
+    got = ensemble.GrowStrategy().generate_ensemble_candidates(
+        [self.fake_builder_1, self.fake_builder_2],
+        [self.fake_builder_3, self.fake_builder_4])
+    self.assertEqual(want, got)
 
   def test_all_strategy(self):
-    self.assertEqual(
-        ensemble.AllStrategy().generate_ensemble_candidates(
-            [self.fake_builder_1, self.fake_builder_2]),
-        [ensemble.Candidate([self.fake_builder_1, self.fake_builder_2])])
+    want = [
+        ensemble.Candidate("all", [self.fake_builder_1, self.fake_builder_2],
+                           [])
+    ]
+    got = ensemble.AllStrategy().generate_ensemble_candidates(
+        [self.fake_builder_1, self.fake_builder_2], None)
+    self.assertEqual(want, got)
+
+  def test_all_strategy_with_previous_ensemble_subnetwork_builders(self):
+    want = [
+        ensemble.Candidate("all", [self.fake_builder_1, self.fake_builder_2],
+                           [self.fake_builder_3, self.fake_builder_4])
+    ]
+    got = ensemble.AllStrategy().generate_ensemble_candidates(
+        [self.fake_builder_1, self.fake_builder_2],
+        [self.fake_builder_3, self.fake_builder_4])
+    self.assertEqual(want, got)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
   tf.test.main()

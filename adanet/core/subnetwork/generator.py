@@ -177,10 +177,9 @@ class Builder(object):
     # pyformat: disable
     """Returns the candidate `Subnetwork` to add to the ensemble.
 
-    This method will be called only once, before
-    :meth:`build_subnetwork_train_op`
-    and :meth:`build_mixture_weights_train_op` are called. This method should
-    construct the candidate subnetwork's graph operations and variables.
+    This method will be called only once before
+    :meth:`build_subnetwork_train_op`. This method should construct the
+    candidate subnetwork's graph operations and variables.
 
     Accessing the global step via :meth:`tf.train.get_or_create_global_step()`
     or :meth:`tf.train.get_global_step()` within this scope will return an
@@ -243,47 +242,13 @@ class Builder(object):
       Either a train op or an :class:`adanet.subnetwork.TrainOpSpec`.
     """
 
-  @abc.abstractmethod
-  def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
-                                     iteration_step, summary):
-    # pyformat: disable
-    """Returns an op for training the ensemble's mixture weights.
-
-    Allows AdaNet to learn the mixture weights of each subnetwork
-    according to Equation (6).
-
-    This method will be called once after `build_subnetwork`.
-
-    Accessing the global step via :meth:`tf.train.get_or_create_global_step()`
-    or :meth:`tf.train.get_global_step()` within this scope will return an
-    incrementable iteration step since the beginning of the iteration.
-
-    Args:
-      loss: A :class:`tf.Tensor` containing the ensemble's loss to minimize.
-      var_list: List of ensemble mixture weight `tf.Variables` to update as
-        become part of the training operation.
-      logits: The ensemble's logits :class:`tf.Tensor` from applying the mixture
-        weights and bias to the ensemble's subnetworks.
-      labels: Labels :class:`tf.Tensor` or a dictionary of string label name to
-        :class:`tf.Tensor` (for multi-head).
-      iteration_step: Integer :class:`tf.Tensor` representing the step since the
-        beginning of the current iteration, as opposed to the global step.
-      summary: An :class:`adanet.Summary` for scoping summaries to individual
-        subnetworks in Tensorboard. Using :class:`tf.summary` within this scope
-        will use this :class:`adanet.Summary` under the hood.
-
-    Returns:
-      Either a train op or an :class:`adanet.subnetwork.TrainOpSpec`.
-    """
-    # pyformat: enable
-
   def build_subnetwork_report(self):
     """Returns a `subnetwork.Report` to materialize and record.
 
     This method will be called once after :meth:`build_subnetwork`.
-    Do NOT depend on variables created in :meth:`build_subnetwork_train_op` or
-    :meth:`build_mixture_weights_train_op`, because they are not called before
-    :meth:`build_subnetwork_report` is called.
+    Do NOT depend on variables created in :meth:`build_subnetwork_train_op`,
+    because they are not called before :meth:`build_subnetwork_report` is
+    called.
 
     If it returns None, AdaNet records the name and standard eval metrics.
     """

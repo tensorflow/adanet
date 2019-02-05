@@ -23,8 +23,13 @@ from adanet.core import architecture_pb2 as arch_proto
 class _Architecture(object):
   """An AdaNet model architecture.
 
-  This data structure is the blueprint for reconstructing an an AdaNet model. It
-  is serializable and deserializable for persistent storage.
+  This data structure is the blueprint for reconstructing an AdaNet model. It
+  contains not only information about the underlying Ensemble, but also the
+  `adanet.subnetwork.Builder` instances that compose the ensemble, the
+  `adanet.ensemble.Ensembler` that constructed it, as well as the sequence
+  of states in the search space that led to the construction of this model.
+
+  It is serializable and deserializable for persistent storage.
   """
 
   def __init__(self):
@@ -32,10 +37,20 @@ class _Architecture(object):
 
   @property
   def subnetworks(self):
+    """The component subnetworks.
+
+    Returns:
+      An Iterable of (iteration_number, builder_name) tuples.
+    """
+
+    return tuple(self._subnets)
+
+  @property
+  def subnetworks_grouped_by_iteration(self):
     """The component subnetworks grouped by iteration number.
 
     Returns:
-      An Iterable of (iteration_number, builder_name) tuples where the builder
+      An Iterable of (iteration_number, builder_names) tuples where the builder
         names are grouped by iteration number.
     """
 

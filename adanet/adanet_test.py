@@ -28,6 +28,16 @@ class AdaNetTest(tf.test.TestCase):
 
   def test_public(self):
     self.assertIsNotNone(adanet.AutoEnsembleEstimator)
+    self.assertIsNotNone(adanet.ensemble.Ensemble)
+    self.assertIsNotNone(adanet.ensemble.Ensembler)
+    self.assertIsNotNone(adanet.ensemble.AllStrategy)
+    self.assertIsNotNone(adanet.ensemble.Candidate)
+    self.assertIsNotNone(adanet.ensemble.GrowStrategy)
+    self.assertIsNotNone(adanet.ensemble.Strategy)
+    self.assertIsNotNone(adanet.ensemble.ComplexityRegularized)
+    self.assertIsNotNone(adanet.ensemble.ComplexityRegularizedEnsembler)
+    self.assertIsNotNone(adanet.ensemble.MixtureWeightType)
+    self.assertIsNotNone(adanet.ensemble.WeightedSubnetwork)
     self.assertIsNotNone(adanet.Ensemble)
     self.assertIsNotNone(adanet.Estimator)
     self.assertIsNotNone(adanet.Evaluator)

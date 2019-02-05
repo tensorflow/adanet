@@ -23,7 +23,8 @@ import os
 
 from absl.testing import parameterized
 from adanet.core import testing_utils as tu
-from adanet.core.ensemble_builder import MixtureWeightType
+from adanet.core.ensemble import AllStrategy
+from adanet.core.ensemble import MixtureWeightType
 from adanet.core.estimator import Estimator
 from adanet.core.evaluator import Evaluator
 from adanet.core.report_materializer import ReportMaterializer
@@ -124,6 +125,10 @@ class _DNNBuilder(Builder):
           kernel_initializer=tf.glorot_uniform_initializer(seed=seed))
 
     summary.scalar("scalar", 3)
+    batch_size = features["x"].get_shape().as_list()[0]
+    summary.image("image", tf.ones([batch_size, 3, 3, 1]))
+    with tf.variable_scope("nested"):
+      summary.scalar("scalar", 5)
 
     return Subnetwork(
         last_layer=last_layer if self._return_penultimate_layer else logits,
@@ -566,6 +571,18 @@ class EstimatorTest(tu.AdanetTestCase):
           200,
       "want_loss":
           0.29696745,
+  }, {
+      "testcase_name":
+          "all_strategy",
+      "subnetwork_generator":
+          SimpleGenerator(
+              [_DNNBuilder("dnn"),
+               _DNNBuilder("dnn2", layer_size=3)]),
+      "ensemble_strategies": [AllStrategy()],
+      "max_iteration_steps":
+          200,
+      "want_loss":
+          0.29196805,
   })
   def test_lifecycle(self,
                      subnetwork_generator,
@@ -576,6 +593,7 @@ class EstimatorTest(tu.AdanetTestCase):
                      use_bias=True,
                      replicate_ensemble_in_training=False,
                      hooks=None,
+                     ensemble_strategies=None,
                      max_steps=300,
                      steps=None,
                      report_materializer=None):
@@ -590,6 +608,7 @@ class EstimatorTest(tu.AdanetTestCase):
         mixture_weight_initializer=tf.zeros_initializer(),
         warm_start_mixture_weights=True,
         evaluator=evaluator,
+        ensemble_strategies=ensemble_strategies,
         report_materializer=report_materializer,
         use_bias=use_bias,
         replicate_ensemble_in_training=replicate_ensemble_in_training,
@@ -1117,7 +1136,13 @@ def _check_eventfile_for_keyword(keyword, dir_):
     if last_event.summary is not None:
       for value in last_event.summary.value:
         if keyword == value.tag:
-          return value.simple_value
+          if value.HasField("simple_value"):
+            return value.simple_value
+          if value.HasField("image"):
+            return (value.image.height, value.image.width,
+                    value.image.colorspace)
+          if value.HasField("tensor"):
+            return value.tensor.string_val
 
   raise ValueError("Keyword '{}' not found in path '{}'.".format(
       keyword, filenames))
@@ -1172,7 +1197,8 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
   def test_summaries(self):
     """Tests that summaries are written to candidate directory."""
 
-    run_config = tf.estimator.RunConfig(tf_random_seed=42)
+    run_config = tf.estimator.RunConfig(
+        tf_random_seed=42, log_step_count_steps=2, save_summary_steps=2)
     subnetwork_generator = SimpleGenerator(
         [_DNNBuilder("dnn", mixture_weight_learning_rate=.001)])
     report_materializer = ReportMaterializer(
@@ -1196,30 +1222,43 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
         ensemble_loss,
         _check_eventfile_for_keyword("loss", self.test_subdirectory),
         places=3)
+    self.assertIsNotNone(
+        _check_eventfile_for_keyword("global_step/sec", self.test_subdirectory))
     self.assertEqual(
         0.,
         _check_eventfile_for_keyword("iteration/adanet/iteration",
                                      self.test_subdirectory))
 
-    candidate_subdir = os.path.join(self.test_subdirectory, "candidate/t0_dnn")
+    subnetwork_subdir = os.path.join(self.test_subdirectory,
+                                     "subnetwork/t0_dnn")
     self.assertAlmostEqual(
-        3., _check_eventfile_for_keyword("scalar", candidate_subdir), places=3)
+        3., _check_eventfile_for_keyword("scalar", subnetwork_subdir), places=3)
+    self.assertEqual((3, 3, 1),
+                     _check_eventfile_for_keyword("image/image/0",
+                                                  subnetwork_subdir))
+    self.assertAlmostEqual(
+        5.,
+        _check_eventfile_for_keyword("nested/scalar", subnetwork_subdir),
+        places=3)
+
+    ensemble_subdir = os.path.join(self.test_subdirectory,
+                                   "ensemble/t0_dnn_complexity_regularized")
     self.assertAlmostEqual(
         ensemble_loss,
         _check_eventfile_for_keyword(
-            "adanet_loss/adanet/adanet_weighted_ensemble", candidate_subdir),
+            "adanet_loss/adanet/adanet_weighted_ensemble", ensemble_subdir),
         places=3)
     self.assertAlmostEqual(
         0.,
         _check_eventfile_for_keyword(
             "complexity_regularization/adanet/adanet_weighted_ensemble",
-            candidate_subdir),
+            ensemble_subdir),
         places=3)
     self.assertAlmostEqual(
         0.,
         _check_eventfile_for_keyword(
             "mixture_weight_norms/adanet/"
-            "adanet_weighted_ensemble/subnetwork_0", candidate_subdir),
+            "adanet_weighted_ensemble/subnetwork_0", ensemble_subdir),
         places=3)
 
   @parameterized.named_parameters({
@@ -1239,21 +1278,28 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
       "want_summaries": [],
       "want_loss": .9910,
   }, {
-      "testcase_name": "evaluation_name",
-      "head": _EvalMetricsHead({}),
-      "evaluation_name": "continuous",
+      "testcase_name":
+          "evaluation_name",
+      "head":
+          _EvalMetricsHead({}),
+      "evaluation_name":
+          "continuous",
       "want_summaries": [],
-      "want_loss": .9910,
-      "global_subdir": "eval_continuous",
-      "candidate_subdir": "candidate/t0_linear/eval_continuous",
+      "want_loss":
+          .9910,
+      "global_subdir":
+          "eval_continuous",
+      "subnetwork_subdir":
+          "subnetwork/t0_linear/eval_continuous",
+      "ensemble_subdir":
+          "ensemble/t0_linear_complexity_regularized/eval_continuous",
   }, {
       "testcase_name":
           "regression_head",
       "head":
           tf.contrib.estimator.regression_head(
               loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
-      "want_summaries":
-          ["average_loss", "average_loss/adanet/adanet_weighted_ensemble"],
+      "want_summaries": ["average_loss"],
       "want_loss":
           .96453667,
   }, {
@@ -1262,8 +1308,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
       "head":
           tf.contrib.estimator.binary_classification_head(
               loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
-      "want_summaries":
-          ["average_loss", "average_loss/adanet/adanet_weighted_ensemble"],
+      "want_summaries": ["average_loss"],
       "want_loss":
           0.6909014,
   }, {
@@ -1285,21 +1330,20 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
           "float32",
           "float64",
           "serialized_summary/0",
-          "float32/adanet/adanet_weighted_ensemble",
-          "float64/adanet/adanet_weighted_ensemble",
-          "serialized_summary/adanet/adanet_weighted_ensemble/0",
       ],
       "want_loss":
           .9910,
   })
-  def test_eval_metrics(self,
-                        head,
-                        want_loss,
-                        want_summaries,
-                        evaluation_name=None,
-                        metric_fn=None,
-                        global_subdir="eval",
-                        candidate_subdir="candidate/t0_linear/eval"):
+  def test_eval_metrics(
+      self,
+      head,
+      want_loss,
+      want_summaries,
+      evaluation_name=None,
+      metric_fn=None,
+      global_subdir="eval",
+      subnetwork_subdir="subnetwork/t0_linear/eval",
+      ensemble_subdir="ensemble/t0_linear_complexity_regularized/eval"):
     """Test that AdaNet evaluation metrics get persisted correctly."""
 
     seed = 42
@@ -1342,35 +1386,24 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
     self.assertAlmostEqual(want_loss, metrics["loss"], places=3)
 
     global_subdir = os.path.join(self.test_subdirectory, global_subdir)
-    candidate_subdir = os.path.join(self.test_subdirectory, candidate_subdir)
-    self.assertAlmostEqual(metrics["loss"],
-                           _check_eventfile_for_keyword("loss", global_subdir))
-    self.assertIsNotNone(
-        _check_eventfile_for_keyword(
-            "architecture/adanet/ensembles/0",
-            global_subdir,
-        ))
-    self.assertAlmostEqual(
-        metrics["loss"],
-        _check_eventfile_for_keyword(
-            "loss/adanet/adanet_weighted_ensemble",
-            candidate_subdir,
-        ),
-        msg="Candidate loss and reported loss should be equal.")
-    self.assertIsNotNone(
-        _check_eventfile_for_keyword(
-            "loss/adanet/uniform_average_ensemble",
-            candidate_subdir,
-        ))
-    self.assertIsNotNone(
-        _check_eventfile_for_keyword(
-            "loss/adanet/subnetwork",
-            candidate_subdir,
-        ))
+    subnetwork_subdir = os.path.join(self.test_subdirectory, subnetwork_subdir)
+    ensemble_subdir = os.path.join(self.test_subdirectory, ensemble_subdir)
+    self.assertTrue(
+        _check_eventfile_for_keyword("loss", subnetwork_subdir) > 0.)
     for metric in want_summaries:
       self.assertIsNotNone(
-          _check_eventfile_for_keyword(metric, global_subdir),
+          _check_eventfile_for_keyword(metric, subnetwork_subdir),
           msg="{} should be under 'eval'.".format(metric))
+    for dir_ in [global_subdir, ensemble_subdir]:
+      self.assertAlmostEqual(metrics["loss"],
+                             _check_eventfile_for_keyword("loss", dir_))
+      self.assertEqual([b"| linear |"],
+                       _check_eventfile_for_keyword(
+                           "architecture/adanet/ensembles/0", dir_))
+      for metric in want_summaries:
+        self.assertIsNotNone(
+            _check_eventfile_for_keyword(metric, dir_),
+            msg="{} should be under 'eval'.".format(metric))
 
 
 class EstimatorMembersOverrideTest(tu.AdanetTestCase):
