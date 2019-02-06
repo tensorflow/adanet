@@ -478,11 +478,11 @@ def _make_metrics(sess,
   ensemble_metric_ops = fn(**kwargs)
   sess.run((tf.global_variables_initializer(),
             tf.local_variables_initializer()))
-  subnetwork_metrics, ensemble_metrics = sess.run((subnetwork_metric_ops,
-                                                   ensemble_metric_ops))
-  return {k: subnetwork_metrics[k][1] for k in subnetwork_metrics}, {
-      k: ensemble_metrics[k][1] for k in ensemble_metrics
-  }
+  sess.run((subnetwork_metric_ops, ensemble_metric_ops))
+  # Return the idempotent tensor part of the (tensor, op) metrics tuple.
+  return {
+      k: sess.run(subnetwork_metric_ops[k][0]) for k in subnetwork_metric_ops
+  }, {k: sess.run(ensemble_metric_ops[k][0]) for k in ensemble_metric_ops}
 
 
 class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
@@ -610,6 +610,24 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
 
     with self.test_session() as sess:
       _make_metrics(sess, metric_fn, multi_head=True)
+
+  def test_operation_metrics(self):
+
+    def metric_fn():
+      var = tf.get_variable(
+          "metric_var",
+          shape=[],
+          trainable=False,
+          initializer=tf.zeros_initializer(),
+          collections=[tf.GraphKeys.LOCAL_VARIABLES])
+      # A metric with an op that doesn't return a Tensor.
+      op = tf.group(tf.assign_add(var, 1))
+      return {"operation_metric": (var, op)}
+
+    with self.test_session() as sess:
+      subnetwork_metrics, ensemble_metrics = _make_metrics(sess, metric_fn)
+      self.assertEqual(1., subnetwork_metrics["operation_metric"])
+      self.assertEqual(1., ensemble_metrics["operation_metric"])
 
 
 if __name__ == "__main__":
