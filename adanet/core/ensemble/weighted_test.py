@@ -336,6 +336,13 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
       self.assertAlmostEqual(complexity_regularization,
                              expected_complexity_regularization)
 
+  def test_build_ensemble_subnetwork_has_scalar_logits(self):
+    logits = tf.ones(shape=(100,))
+    ensemble_spec = self._build_easy_ensemble([
+        subnetwork.Subnetwork(last_layer=logits, logits=logits, complexity=0.)
+    ])
+    self.assertEqual([1], ensemble_spec.bias.shape.as_list())
+
   def test_build_train_op_no_op(self):
     self.assertEqual(
         ensemble.ComplexityRegularizedEnsembler().build_train_op(

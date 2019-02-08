@@ -433,8 +433,8 @@ class ComplexityRegularizedEnsembler(Ensembler):
     if prior is None or not self._warm_start_mixture_weights:
       prior = tf.zeros_initializer()
       logits = _lookup_if_dict(weighted_subnetworks[0].subnetwork.logits, key)
-      logits_dimension = logits.get_shape().as_list()[-1]
-      shape = logits_dimension
+      dims = logits.shape.as_list()
+      shape = dims[-1] if len(dims) > 1 else 1
     else:
       prior = self._load_variable_from_model_dir(
           _lookup_if_dict(prior, key).op.name)
