@@ -372,7 +372,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
       if self._mixture_weight_type == MixtureWeightType.MATRIX:
         weight_shape = [last_layer_size, logits_size]
 
-    with tf.variable_scope("{}logits".format(key + "_" if key else "")):
+    with tf.variable_scope("{}_logits".format(key) if key else "logits"):
       weight = tf.get_variable(
           name="mixture_weight",
           shape=weight_shape,
@@ -439,7 +439,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
       prior = self._load_variable_from_model_dir(
           _lookup_if_dict(prior, key).op.name)
     return tf.get_variable(
-        name="{}bias".format(key + "_" if key else ""),
+        name="{}_bias".format(key) if key else "bias",
         shape=shape,
         initializer=prior,
         trainable=self._use_bias)
@@ -480,7 +480,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
     subnetwork_logits = []
     for weighted_subnetwork in weighted_subnetworks:
       subnetwork_logits.append(_lookup_if_dict(weighted_subnetwork.logits, key))
-    with tf.variable_scope("{}logits".format(key + "_" if key else "")):
+    with tf.variable_scope("{}_logits".format(key) if key else "logits"):
       ensemble_logits = _lookup_if_dict(bias, key)
       for logits in subnetwork_logits:
         ensemble_logits = tf.add(ensemble_logits, logits)
