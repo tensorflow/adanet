@@ -335,10 +335,10 @@ class ComplexityRegularizedEnsembler(Ensembler):
 
     if isinstance(subnetwork.last_layer, dict):
       logits, weight = {}, {}
-      for key in sorted(subnetwork.last_layer):
+      for i, key in enumerate(sorted(subnetwork.last_layer)):
         logits[key], weight[key] = self._build_weighted_subnetwork_helper(
             subnetwork, num_subnetworks, _lookup_if_dict(
-                weight_initializer, key), key)
+                weight_initializer, key), key, i)
     else:
       logits, weight = self._build_weighted_subnetwork_helper(
           subnetwork, num_subnetworks, weight_initializer)
@@ -350,7 +350,8 @@ class ComplexityRegularizedEnsembler(Ensembler):
                                         subnetwork,
                                         num_subnetworks,
                                         weight_initializer=None,
-                                        key=None):
+                                        key=None,
+                                        index=None):
     """Returns the logits and weight of the `WeightedSubnetwork` for key."""
 
     # Treat subnetworks as if their weights are frozen, and ensure that
@@ -372,7 +373,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
       if self._mixture_weight_type == MixtureWeightType.MATRIX:
         weight_shape = [last_layer_size, logits_size]
 
-    with tf.variable_scope("{}_logits".format(key) if key else "logits"):
+    with tf.variable_scope("logits_{}".format(index) if index else "logits"):
       weight = tf.get_variable(
           name="mixture_weight",
           shape=weight_shape,
@@ -421,12 +422,16 @@ class ComplexityRegularizedEnsembler(Ensembler):
     if not isinstance(weighted_subnetworks[0].subnetwork.logits, dict):
       return self._create_bias_term_helper(weighted_subnetworks, prior)
     bias_terms = {}
-    for key in sorted(weighted_subnetworks[0].subnetwork.logits):
+    for i, key in enumerate(sorted(weighted_subnetworks[0].subnetwork.logits)):
       bias_terms[key] = self._create_bias_term_helper(weighted_subnetworks,
-                                                      prior, key)
+                                                      prior, key, i)
     return bias_terms
 
-  def _create_bias_term_helper(self, weighted_subnetworks, prior, key=None):
+  def _create_bias_term_helper(self,
+                               weighted_subnetworks,
+                               prior,
+                               key=None,
+                               index=None):
     """Returns a bias term for weights with the given key."""
 
     shape = None
@@ -439,7 +444,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
       prior = self._load_variable_from_model_dir(
           _lookup_if_dict(prior, key).op.name)
     return tf.get_variable(
-        name="{}_bias".format(key) if key else "bias",
+        name="bias_{}".format(index) if index else "bias",
         shape=shape,
         initializer=prior,
         trainable=self._use_bias)
@@ -464,23 +469,25 @@ class ComplexityRegularizedEnsembler(Ensembler):
     if not isinstance(weighted_subnetworks[0].subnetwork.logits, dict):
       return self._create_ensemble_logits_helper(weighted_subnetworks, bias,
                                                  summary)
+    logits_dict = weighted_subnetworks[0].subnetwork.logits
     return {
         key: self._create_ensemble_logits_helper(
-            weighted_subnetworks, bias, summary, key=key)
-        for key in sorted(weighted_subnetworks[0].subnetwork.logits)
+            weighted_subnetworks, bias, summary, key=key, index=i)
+        for i, key in enumerate(sorted(logits_dict))
     }
 
   def _create_ensemble_logits_helper(self,
                                      weighted_subnetworks,
                                      bias,
                                      summary,
-                                     key=None):
+                                     key=None,
+                                     index=None):
     """Returns the AdaNet ensemble logits and regularization term for key."""
 
     subnetwork_logits = []
     for weighted_subnetwork in weighted_subnetworks:
       subnetwork_logits.append(_lookup_if_dict(weighted_subnetwork.logits, key))
-    with tf.variable_scope("{}_logits".format(key) if key else "logits"):
+    with tf.variable_scope("logits_{}".format(index) if index else "logits"):
       ensemble_logits = _lookup_if_dict(bias, key)
       for logits in subnetwork_logits:
         ensemble_logits = tf.add(ensemble_logits, logits)
