@@ -61,16 +61,18 @@ feature_columns = ...
 # Learn to ensemble linear and neural network models.
 estimator = adanet.AutoEnsembleEstimator(
     head=head,
-    candidate_pool=[
-        tf.estimator.LinearEstimator(
-            head=head,
-            feature_columns=feature_columns,
-            optimizer=tf.train.FtrlOptimizer(...)),
-        tf.estimator.DNNEstimator(
-            head=head,
-            feature_columns=feature_columns,
-            optimizer=tf.train.ProximalAdagradOptimizer(...),
-            hidden_units=[1000, 500, 100])],
+    candidate_pool={
+        "linear":
+            tf.estimator.LinearEstimator(
+                head=head,
+                feature_columns=feature_columns,
+                optimizer=tf.train.FtrlOptimizer(...)),
+        "dnn":
+            tf.estimator.DNNEstimator(
+                head=head,
+                feature_columns=feature_columns,
+                optimizer=tf.train.ProximalAdagradOptimizer(...),
+                hidden_units=[1000, 500, 100])},
     max_iteration_steps=50)
 
 estimator.train(input_fn=train_input_fn, steps=100)
