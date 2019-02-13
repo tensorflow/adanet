@@ -23,7 +23,6 @@ import collections
 
 from adanet.core import dict_utils
 from adanet.core import subnetwork
-from adanet.core.summary import _ScopedSummary
 
 import numpy as np
 import six
@@ -62,7 +61,7 @@ class _Iteration(
       subnetwork_specs: List of `_SubnetworkSpec` instances.
       estimator_spec: `EstimatorSpec` instance.
       best_candidate_index: Int `Tensor` indicating the best candidate's index.
-      summaries: List of `_ScopedSummary` instances for each candidate.
+      summaries: List of `adanet.Summary` instances for each candidate.
       is_over_fn: A fn()->Boolean `Variable` indicating if iteration is over.
       subnetwork_reports: Dict mapping string names to `subnetwork.Report`s, one
         per candidate.
@@ -118,6 +117,7 @@ class _IterationBuilder(object):
                subnetwork_manager,
                ensemble_builder,
                ensemblers,
+               summary_maker,
                replicate_ensemble_in_training=False,
                use_tpu=False):
     """Creates an `_IterationBuilder` instance.
@@ -128,6 +128,8 @@ class _IterationBuilder(object):
       ensemble_builder: An `_EnsembleBuilder` instance.
       ensemblers: An iterable of :class:`adanet.ensemble.Ensembler` objects that
         define how to ensemble a group of subnetworks.
+      summary_maker: A function that constructs an `adanet.Summary` instance
+        from (namespace, scope, and skip_summary).
       replicate_ensemble_in_training: Whether to build the frozen subnetworks in
         `training` mode during training.
       use_tpu: Whether AdaNet is running on TPU.
@@ -140,6 +142,7 @@ class _IterationBuilder(object):
     self._subnetwork_manager = subnetwork_manager
     self._ensemble_builder = ensemble_builder
     self._ensemblers = ensemblers
+    self._summary_maker = summary_maker
     self._replicate_ensemble_in_training = replicate_ensemble_in_training
     self._use_tpu = use_tpu
     super(_IterationBuilder, self).__init__()
@@ -172,7 +175,7 @@ class _IterationBuilder(object):
       mode: Defines whether this is training, evaluation or prediction. See
         `ModeKeys`.
       labels: `Tensor` of labels. Can be `None`.
-      previous_ensemble_summary: The `_ScopedSummary` for the previous ensemble.
+      previous_ensemble_summary: The `adanet.Summary` for the previous ensemble.
       previous_ensemble_spec: Optional `_EnsembleSpec` for iteration t-1.
       rebuilding: Boolean whether the iteration is being rebuilt only to restore
         the previous best subnetworks and ensembles.
@@ -266,10 +269,11 @@ class _IterationBuilder(object):
       for subnetwork_builder in subnetwork_builders:
         subnetwork_name = "t{}_{}".format(iteration_number,
                                           subnetwork_builder.name)
-        subnetwork_summary = _ScopedSummary(
+        subnetwork_summary = self._summary_maker(
             namespace="subnetwork",
             scope=subnetwork_name,
             skip_summary=skip_summaries or rebuilding)
+
         summaries.append(subnetwork_summary)
         subnetwork_spec = self._subnetwork_manager.build_subnetwork_spec(
             name=subnetwork_name,
@@ -306,7 +310,7 @@ class _IterationBuilder(object):
             raise ValueError(
                 "Two ensembles have the same name '{}'".format(ensemble_name))
           seen_ensemble_names[ensemble_name] = True
-          summary = _ScopedSummary(
+          summary = self._summary_maker(
               namespace="ensemble",
               scope=ensemble_name,
               skip_summary=skip_summaries or rebuilding)
@@ -371,7 +375,7 @@ class _IterationBuilder(object):
           continue
         training_chief_hooks += spec.train_op.chief_hooks or ()
         training_hooks += spec.train_op.hooks or ()
-      summary = _ScopedSummary(
+      summary = self._summary_maker(
           namespace=None, scope=None, skip_summary=skip_summaries or rebuilding)
       summaries.append(summary)
       with summary.current_scope():

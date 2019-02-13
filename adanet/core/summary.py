@@ -21,12 +21,15 @@ from __future__ import print_function
 
 import abc
 import contextlib
+import os
 
 import tensorflow as tf
 from tensorflow.contrib.tpu.python.tpu import tpu_function
 from tensorflow.python.ops import summary_op_util
 from tensorflow.python.ops import summary_ops_v2 as summary_v2_lib
 from tensorflow.python.summary import summary as summary_lib
+
+_DEFAULT_SCOPE = "default"
 
 
 class Summary(object):
@@ -168,8 +171,9 @@ def _strip_scope(name, scope, additional_scope):
 
   if additional_scope:
     name = name.replace("{}/".format(additional_scope), "")
-  if scope:
-    name = name.replace("{}/".format(scope), "", 1)
+  if not scope:
+    scope = _DEFAULT_SCOPE
+  name = name.replace("{}/".format(scope), "", 1)
   return name
 
 
@@ -330,6 +334,239 @@ class _ScopedSummary(Summary):
 
     current_graph = tf.get_default_graph()
     return [op for op in self._summary_ops if op.graph == current_graph]
+
+
+class _TPUScopedSummary(Summary):
+  """Records summaries in a given scope.
+
+  Only for TPUEstimator.
+
+  Each scope gets assigned a different collection where summary ops gets added.
+
+  This allows Tensorboard to display summaries with different scopes but the
+  same name in the same charts.
+  """
+
+  def __init__(self,
+               logdir,
+               namespace=None,
+               scope=None,
+               skip_summary=False,
+               global_step=None):
+    """Initializes a `_TPUScopedSummary`.
+
+    Args:
+      logdir: String directory path for logging summaries.
+      namespace: String namespace to append to the logdir. Can be shared with
+        other `_ScopedSummary` objects.
+      scope: String scope name.
+      skip_summary: Whether to record summary ops.
+      global_step: Global step `Tensor`.
+
+    Returns:
+      A `_ScopedSummary` instance.
+    """
+
+    assert logdir
+
+    if scope == _DEFAULT_SCOPE:
+      raise ValueError("scope cannot be 'default'.")
+
+    lazy = False
+    if tpu_function.get_tpu_context().number_of_shards:
+      tf.logging.log_first_n(
+          tf.logging.INFO, "Summaries will be created lazily to work with TPU.",
+          1)
+      lazy = True
+
+    self._lazy = lazy
+    if namespace:
+      logdir = os.path.join(logdir, namespace)
+    if scope:
+      logdir = os.path.join(logdir, scope)
+    self._logdir = logdir
+    self._namespace = namespace
+    self._scope = scope
+    self._additional_scope = None
+    self._skip_summary = skip_summary
+    self._summary_ops = []
+    self._actual_summary_scalar_fn = tf.contrib.summary.scalar
+    self._actual_summary_image_fn = tf.contrib.summary.image
+    self._actual_summary_histogram_fn = tf.contrib.summary.histogram
+    self._actual_summary_audio_fn = tf.contrib.summary.audio
+    if global_step is None:
+      global_step = tf.train.get_global_step()
+    self._global_step = global_step
+    self._lazy_summaries = []
+    self._flush_op = {}
+
+  @property
+  def namespace(self):
+    """Returns namespace string."""
+
+    return self._namespace
+
+  @property
+  def scope(self):
+    """Returns scope string."""
+
+    return self._scope
+
+  @contextlib.contextmanager
+  def current_scope(self):
+    """Registers the current context's scope to strip it from summary tags."""
+
+    self._additional_scope = tf.get_default_graph().get_name_scope()
+    yield
+    self._additional_scope = None
+
+  @contextlib.contextmanager
+  def _strip_tag_scope(self, additional_scope):
+    """Monkey patches `summary_op_util.summary_scope` to strip tag scopes."""
+
+    original_summary_scope = summary_op_util.summary_scope
+
+    @contextlib.contextmanager
+    def strip_tag_scope_fn(name, family=None, default_name=None, values=None):
+      tag, scope = (None, None)
+      with original_summary_scope(name, family, default_name, values) as (t, s):
+        tag = _strip_scope(t, self.scope, additional_scope)
+        scope = s
+      yield tag, scope
+
+    summary_op_util.summary_scope = strip_tag_scope_fn
+    yield
+    summary_op_util.summary_scope = original_summary_scope
+
+  def _prefix_scope(self, name):
+    scope = self._scope
+    if not scope:
+      scope = _DEFAULT_SCOPE
+    if name[0] == "/":
+      name = name[1:]
+    return "{scope}/{name}".format(scope=scope, name=name)
+
+  def _create_summary(self, summary_fn, name, tensor):
+    """Creates a summary op.
+
+    On TPU, this will create a function that takes a `Tensor` and adds it to a
+    list with its matching `tensor` that can be obtained from `lazy_fns`.
+
+    Args:
+      summary_fn: A function that takes a name string and `Tensor` and returns a
+        summary op.
+      name: String name of the summary.
+      tensor: `Tensor` to pass to the summary.
+    """
+    if self._skip_summary:
+      return
+
+    # additional_scope is set with the context from `current_scope`.
+    # e.g. "foo/bar".
+    additional_scope = self._additional_scope
+    # name_scope is from whichever scope the summary actually gets called in.
+    # e.g. "foo/bar/baz"
+    name_scope = tf.get_default_graph().get_name_scope()
+
+    def _summary_fn(tensor, step):
+      """Creates a summary with the given `Tensor`."""
+
+      writer = tf.contrib.summary.create_file_writer(logdir=self._logdir)
+      summary_name = self._prefix_scope(name)
+      if self._lazy:
+        # Recover the current name scope when this fn is be called, because the
+        # scope may be different when fns are called.
+        # e.g. "foo/bar/baz/scalar" will become "baz/scalar" when
+        # additional_scope is "foo/bar".
+        # TODO: Figure out a cleaner way to handle this.
+        assert not tf.get_default_graph().get_name_scope()
+        summary_name = "{}/{}".format(name_scope, summary_name)
+      with writer.as_default(), self._strip_tag_scope(additional_scope):
+        summary = summary_fn(summary_name, tensor, step)
+
+      self._summary_ops.append(summary)
+      self._flush_op[summary.graph] = writer.close()
+      return summary
+
+    if self._lazy:
+      self._lazy_summaries.append((_summary_fn, tensor))
+      return
+    with tf.contrib.summary.always_record_summaries():
+      _summary_fn(tensor, step=self._global_step)
+
+  def scalar(self, name, tensor, family=None):
+
+    def _summary_fn(name, tensor, step):
+      return self._actual_summary_scalar_fn(
+          name=name, tensor=tensor, family=family, step=step)
+
+    self._create_summary(_summary_fn, name,
+                         tf.reshape(tf.convert_to_tensor(tensor), [1]))
+
+  def image(self, name, tensor, max_outputs=3, family=None):
+
+    def _summary_fn(name, tensor, step):
+      return self._actual_summary_image_fn(
+          name=name,
+          tensor=tensor,
+          max_images=max_outputs,
+          family=family,
+          step=step)
+
+    self._create_summary(_summary_fn, name, tf.cast(tensor, tf.float32))
+
+  def histogram(self, name, values, family=None):
+
+    def _summary_fn(name, tensor, step):
+      return self._actual_summary_histogram_fn(
+          name=name, tensor=tensor, family=family, step=step)
+
+    self._create_summary(_summary_fn, name, tf.convert_to_tensor(values))
+
+  def audio(self, name, tensor, sample_rate, max_outputs=3, family=None):
+
+    def _summary_fn(name, tensor, step):
+      return self._actual_summary_audio_fn(
+          name=name,
+          tensor=tensor,
+          sample_rate=sample_rate,
+          max_outputs=max_outputs,
+          family=family,
+          step=step)
+
+    self._create_summary(_summary_fn, name, tf.cast(tensor, tf.float32))
+
+  def lazy_fns(self):
+    """Returns an iterable of functions that convert a Tensor to a summary.
+
+    Used for TPU host calls.
+
+    Returns:
+      Iterable of functions that take a single `Tensor` argument.
+    """
+    return tuple(self._lazy_summaries)
+
+  def merge_all(self):
+    """Returns the list of this graph's scoped summary ops.
+
+    Note: this is an abuse of the tf.summary.merge_all API since it is expected
+    to return a summary op with all summaries merged. However, ScopedSummary is
+    only used in the internal implementation, so this should be OK.
+
+    Returns:
+      Iterable of summary ops for the default graph.
+    """
+
+    current_graph = tf.get_default_graph()
+    return [op for op in self._summary_ops if op.graph == current_graph]
+
+  def flush(self):
+    """Returns this graph's op for flushing to disk."""
+
+    current_graph = tf.get_default_graph()
+    if current_graph in self._flush_op:
+      return self._flush_op[current_graph]
+    return tf.no_op()
 
 
 class _SummaryWrapper(object):

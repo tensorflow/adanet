@@ -19,77 +19,90 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import contextlib
+import collections
 import functools
 
 from adanet.core.estimator import Estimator
 import tensorflow as tf
+from tensorflow.contrib.tpu.python.tpu import tpu_function
+from tensorflow.python.framework import ops  # pylint: disable=g-direct-tensorflow-import
 
-from tensorflow.contrib.tpu.python.tpu import tpu_function  # pylint: disable=g-direct-tensorflow-import
-from tensorflow.python import summary  # pylint: disable=g-direct-tensorflow-import
 
+# TODO: Move hooks to their own module.
+class _StepCounterHook(tf.train.SessionRunHook):
+  """Hook that counts steps per second.
 
-# TODO: support summaries on TPU during training.
-@contextlib.contextmanager
-def _rewire_summaries():
-  """Rewire Tensorflow summaries to be no-ops when running on TPU.
+  TODO: Remove once Estimator uses summaries v2 by default.
 
-  Summaries are not currently supported on TPU.
-
-  Yields:
-    Context where summary functions are rewired to be no-ops when on TPU.
   """
 
-  if not tpu_function.get_tpu_context().number_of_shards:
-    yield
-    return
+  def __init__(self,
+               every_n_steps=100,
+               every_n_secs=None,
+               output_dir=None,
+               summary_writer=None):
 
-  tf.logging.log_first_n(
-      tf.logging.WARN,
-      "Converting summaries to no-ops on TPU since they are not supported.", 1)
-  old_summary_audio = summary.audio
-  old_summary_histogram = summary.histogram
-  old_summary_image = summary.image
-  old_summary_scalar = summary.scalar
-  old_summary_tensor_summary = summary.tensor_summary
-  old_summary_text = summary.text
+    if (every_n_steps is None) == (every_n_secs is None):
+      raise ValueError(
+          "exactly one of every_n_steps and every_n_secs should be provided.")
+    self._timer = tf.train.SecondOrStepTimer(
+        every_steps=every_n_steps, every_secs=every_n_secs)
 
-  def _no_op(*args, **kwargs):
-    del args, kwargs  # Unused
-    return tf.constant("", name="summary_no_op")
+    assert output_dir
+    self._summary_writer = summary_writer
+    self._output_dir = output_dir
+    self._last_global_step = None
+    self._steps_per_run = 1
 
-  # Monkey-patch global attributes.
-  summary.audio = _no_op
-  summary.histogram = _no_op
-  summary.image = _no_op
-  summary.scalar = _no_op
-  summary.tensor_summary = _no_op
-  summary.text = _no_op
+  def begin(self):
+    if self._summary_writer is None and self._output_dir:
+      self._summary_writer = tf.summary.FileWriter(
+          self._output_dir,
+          session=ops.get_default_session(),
+          filename_suffix=".step")
+    self._global_step_tensor = tf.train.get_global_step()
+    if self._global_step_tensor is None:
+      raise RuntimeError(
+          "Global step should be created to use StepCounterHook.")
+    self._summary_tag = tf.train.get_global_step().op.name + "/sec"
 
-  tf.summary.audio = _no_op
-  tf.summary.histogram = _no_op
-  tf.summary.image = _no_op
-  tf.summary.scalar = _no_op
-  tf.summary.tensor_summary = _no_op
-  tf.summary.text = _no_op
+  def after_create_session(self, session, coord):
+    del coord
+    # Reset any stale state in case we're recovering from a previous error.
+    session.run(tf.contrib.summary.summary_writer_initializer_op())
+    self._last_global_step = None
+    self._timer.reset()
 
-  try:
-    yield
-  finally:
-    # Revert monkey-patches.
-    summary.audio = old_summary_audio
-    summary.histogram = old_summary_histogram
-    summary.image = old_summary_image
-    summary.scalar = old_summary_scalar
-    summary.tensor_summary = old_summary_tensor_summary
-    summary.text = old_summary_text
+  def before_run(self, run_context):  # pylint: disable=unused-argument
+    return tf.train.SessionRunArgs(self._global_step_tensor)
 
-    tf.summary.audio = old_summary_audio
-    tf.summary.histogram = old_summary_histogram
-    tf.summary.image = old_summary_image
-    tf.summary.scalar = old_summary_scalar
-    tf.summary.tensor_summary = old_summary_tensor_summary
-    tf.summary.text = old_summary_text
+  def _log_and_record(self, elapsed_steps, elapsed_time, global_step):
+    steps_per_sec = elapsed_steps / elapsed_time
+    if self._summary_writer is not None:
+      summary = tf.Summary(value=[
+          tf.Summary.Value(tag=self._summary_tag, simple_value=steps_per_sec)
+      ])
+      self._summary_writer.add_summary(summary, global_step)
+
+  def after_run(self, run_context, run_values):
+    stale_global_step = run_values.results
+    if self._timer.should_trigger_for_step(stale_global_step +
+                                           self._steps_per_run):
+      # Get the real value after train op.
+      global_step = run_context.session.run(self._global_step_tensor)
+      if self._timer.should_trigger_for_step(global_step):
+        elapsed_time, elapsed_steps = self._timer.update_last_triggered_step(
+            global_step)
+        if elapsed_time is not None:
+          with ops.default_session(run_context.session):
+            self._log_and_record(elapsed_steps, elapsed_time, global_step)
+
+    self._last_global_step = stale_global_step
+
+  def end(self, session):
+    if self._summary_writer is not None:
+      with ops.default_session(session):
+        self._summary_writer.flush()
 
 
 class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
@@ -127,6 +140,10 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
           "This adanet.TPUEstimator is meant to be used for running on TPU. "
           "If you want to run on CPU/GPU, use adanet.Estimator instead.")
 
+    # TODO: Figure out why self.config.log_step_count_steps is
+    # always None with TPUEstimator.
+    self._log_step_count_steps = config.log_step_count_steps or 100
+
     super(TPUEstimator, self).__init__(
         head=head,
         subnetwork_generator=subnetwork_generator,
@@ -149,36 +166,6 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         train_batch_size=train_batch_size or 0,
         eval_batch_size=eval_batch_size or train_batch_size or 0,
         **kwargs)
-
-  def train(self,
-            input_fn,
-            hooks=None,
-            steps=None,
-            max_steps=None,
-            saving_listeners=None):
-    # Rewire summaries to be no-ops when running on TPU.
-    with _rewire_summaries():
-      return super(TPUEstimator, self).train(
-          input_fn=input_fn,
-          hooks=hooks,
-          steps=steps,
-          max_steps=max_steps,
-          saving_listeners=saving_listeners)
-
-  def evaluate(self,
-               input_fn,
-               steps=None,
-               hooks=None,
-               checkpoint_path=None,
-               name=None):
-    # Rewire summaries to be no-ops when running on TPU.
-    with _rewire_summaries():
-      return super(TPUEstimator, self).evaluate(
-          input_fn=input_fn,
-          steps=steps,
-          hooks=hooks,
-          checkpoint_path=checkpoint_path,
-          name=name)
 
   def predict(self,
               input_fn,
@@ -228,15 +215,68 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     iteration_estimator_spec = current_iteration.estimator_spec
+    training_hooks = [
+        hook for hook in self._training_hooks(current_iteration, training)
+        if not isinstance(hook, tf.train.SummarySaverHook)
+    ]
     return tf.contrib.tpu.TPUEstimatorSpec(
         mode=mode,
         predictions=iteration_estimator_spec.predictions,
         loss=iteration_estimator_spec.loss,
         train_op=iteration_estimator_spec.train_op,
-        eval_metrics=iteration_estimator_spec.eval_metrics,
-        training_hooks=self._training_hooks(current_iteration, training),
         evaluation_hooks=self._evaluation_hooks(current_iteration, training),
+        host_call=self._create_host_call(current_iteration, training),
+        eval_metrics=iteration_estimator_spec.eval_metrics,
+        training_hooks=training_hooks,
         # Return a constant summary_op, otherwise `Estimator` creates summary
         # ops that do not work on TPU.
         scaffold_fn=lambda: tf.train.Scaffold(summary_op=tf.constant("")),
         export_outputs=iteration_estimator_spec.export_outputs)
+
+  def _create_host_call(self, current_iteration, training):
+    """Construct a host_call writing scalar summaries.
+
+    Args:
+      current_iteration: The current `_Iteration`.
+      training: Boolean indicating whether in training mode.
+
+    Returns:
+      (fn, args) Pair to be called by TPUEstimator as the host_call.
+    """
+
+    summary_kwargs = collections.OrderedDict()
+    gs_t = tf.reshape(tf.to_int32(tf.train.get_global_step()), [1])
+    summary_kwargs["global_step"] = gs_t
+
+    i = 0
+    summary_fns = []
+    for summary in current_iteration.summaries:
+      for summary_fn, tensor in summary.lazy_fns():
+        summary_fns.append(summary_fn)
+        summary_kwargs["summary_{}".format(i)] = tensor
+        i += 1
+
+    def _host_call_fn(**kwargs):
+      """Training host call.
+
+      Creates summaries for training metrics.
+
+      Args:
+        **kwargs: Dict of {str: Tensor} , with `Tensor` of shape `[batch]`. Must
+          contain key "global_step" with value of current global_step Tensor.
+
+      Returns:
+        List of summary ops to run on the CPU host.
+      """
+
+      gs = tf.to_int64(kwargs.pop("global_step")[0])
+      if not training:
+        return [tf.no_op()]
+      with tf.contrib.summary.record_summaries_every_n_global_steps(
+          n=self.config.save_summary_steps, global_step=gs):
+        for i, summary_fn in enumerate(summary_fns):
+          tensor = kwargs.pop("summary_{}".format(i))
+          summary_fn(tensor, step=gs)
+      return tf.contrib.summary.all_summary_ops()
+
+    return _host_call_fn, summary_kwargs

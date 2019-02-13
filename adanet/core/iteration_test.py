@@ -19,6 +19,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import functools
+
 from absl.testing import parameterized
 from adanet.core.candidate import _Candidate
 from adanet.core.ensemble import Candidate as EnsembleCandidate
@@ -29,6 +31,8 @@ from adanet.core.iteration import _IterationBuilder
 from adanet.core.subnetwork import Builder as SubnetworkBuilder
 from adanet.core.subnetwork import Report as SubnetworkReport
 from adanet.core.subnetwork import Subnetwork
+from adanet.core.summary import _ScopedSummary
+from adanet.core.summary import _TPUScopedSummary
 import adanet.core.testing_utils as tu
 import tensorflow as tf
 
@@ -441,6 +445,24 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_best_candidate_index": 0,
   }, {
       "testcase_name":
+          "single_subnetwork_fn_mock_summary",
+      "ensemble_builder":
+          _FakeEnsembleBuilder(),
+      "subnetwork_builders": [_FakeBuilder("training")],
+      "summary_maker":
+          functools.partial(_TPUScopedSummary, logdir="/tmp/fakedir"),
+      "features":
+          lambda: [[1., -1., 0.]],
+      "labels":
+          lambda: [1],
+      "want_loss":
+          1.403943,
+      "want_predictions":
+          2.129,
+      "want_best_candidate_index":
+          0,
+  }, {
+      "testcase_name":
           "single_subnetwork_with_eval_metrics",
       "ensemble_builder":
           _FakeEnsembleBuilder(eval_metric_ops_fn=lambda:
@@ -741,12 +763,14 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                            previous_ensemble_spec=lambda: None,
                            want_loss=None,
                            want_export_outputs=None,
-                           mode=tf.estimator.ModeKeys.TRAIN):
+                           mode=tf.estimator.ModeKeys.TRAIN,
+                           summary_maker=_ScopedSummary):
     global_step = tf.train.create_global_step()
     builder = _IterationBuilder(
         _FakeCandidateBuilder(),
         _FakeSubnetworkManager(),
         ensemble_builder,
+        summary_maker=summary_maker,
         ensemblers=[_FakeEnsembler()])
     iteration = builder.build_iteration(
         iteration_number=0,
@@ -829,11 +853,13 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                                  subnetwork_builders,
                                  want_raises,
                                  previous_ensemble_spec_fn=lambda: None,
-                                 mode=tf.estimator.ModeKeys.TRAIN):
+                                 mode=tf.estimator.ModeKeys.TRAIN,
+                                 summary_maker=_ScopedSummary):
     builder = _IterationBuilder(
         _FakeCandidateBuilder(),
         _FakeSubnetworkManager(),
         ensemble_builder,
+        summary_maker=summary_maker,
         ensemblers=[_FakeEnsembler()])
     features = [[1., -1., 0.]]
     labels = [1]
@@ -909,6 +935,7 @@ class IterationExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
         _FakeCandidateBuilder(),
         _FakeSubnetworkManager(),
         ensemble_builder,
+        summary_maker=_ScopedSummary,
         ensemblers=[_FakeEnsembler()])
     features = [[1., -1., 0.]]
     labels = [1]

@@ -101,7 +101,6 @@ py_library(
     srcs = ["iteration.py"],
     deps = [
         ":dict_utils",
-        ":summary",
         "//adanet/core/subnetwork",
         "@six_archive//:six",
     ],
@@ -115,6 +114,7 @@ py_test(
         ":candidate",
         ":ensemble_builder",
         ":iteration",
+        ":summary",
         ":testing_utils",
         "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
@@ -177,6 +177,7 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":summary",
+        ":testing_utils",
         "@absl_py//absl/testing:parameterized",
         "@six_archive//:six",
     ],

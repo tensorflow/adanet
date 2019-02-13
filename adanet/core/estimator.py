@@ -33,6 +33,7 @@ from adanet.core.ensemble_builder import _SubnetworkManager
 from adanet.core.iteration import _IterationBuilder
 from adanet.core.report_accessor import _ReportAccessor
 from adanet.core.summary import _ScopedSummary
+from adanet.core.summary import _TPUScopedSummary
 from adanet.core.timer import _CountDownTimer
 import numpy as np
 import six
@@ -360,25 +361,38 @@ class Estimator(tf.estimator.Estimator):
     # These are defined after base Estimator's init so that they can
     # use the same temporary model_dir as the underlying Estimator even if
     # model_dir is not provided.
-    use_tpu = kwargs.get("use_tpu", False)
+    self._use_tpu = kwargs.get("use_tpu", False)
     ensemble_builder = _EnsembleBuilder(
-        head=head, metric_fn=metric_fn, use_tpu=use_tpu)
+        head=head, metric_fn=metric_fn, use_tpu=self._use_tpu)
     candidate_builder = _CandidateBuilder(
         max_steps=max_iteration_steps,
         adanet_loss_decay=self._adanet_loss_decay)
     subnetwork_manager = _SubnetworkManager(
-        head=head, metric_fn=metric_fn, use_tpu=use_tpu)
+        head=head, metric_fn=metric_fn, use_tpu=self._use_tpu)
     self._iteration_builder = _IterationBuilder(
         candidate_builder,
         subnetwork_manager,
         ensemble_builder,
         ensemblers,
+        self._summary_maker,
         replicate_ensemble_in_training,
-        use_tpu=use_tpu)
+        use_tpu=self._use_tpu)
     self._ensemble_strategies = ensemble_strategies or [GrowStrategy()]
 
     report_dir = report_dir or os.path.join(self._model_dir, "report")
     self._report_accessor = _ReportAccessor(report_dir)
+
+  def _summary_maker(self, scope=None, skip_summary=False, namespace=None):
+    """Constructs a `_ScopedSummary`."""
+    if self._use_tpu:
+      return _TPUScopedSummary(
+          logdir=self._model_dir,
+          scope=scope,
+          skip_summary=skip_summary,
+          namespace=namespace)
+    else:
+      return _ScopedSummary(
+          scope=scope, skip_summary=skip_summary, namespace=namespace)
 
   def _latest_checkpoint_iteration_number(self):
     """Returns the iteration number from the latest checkpoint."""
@@ -960,7 +974,7 @@ class Estimator(tf.estimator.Estimator):
       if previous_ensemble_spec:
         # Always skip summaries when rebuilding previous architecture,
         # since they are not useful.
-        previous_ensemble_summary = _ScopedSummary(
+        previous_ensemble_summary = self._summary_maker(
             namespace="ensemble",
             scope=previous_ensemble_spec.name,
             skip_summary=True)
@@ -1136,7 +1150,7 @@ class Estimator(tf.estimator.Estimator):
         previous_ensemble_spec = self._architecture_ensemble_spec(
             architecture, features, mode, labels, params)
         previous_ensemble = previous_ensemble_spec.ensemble
-        previous_ensemble_summary = _ScopedSummary(
+        previous_ensemble_summary = self._summary_maker(
             namespace="ensemble",
             scope=previous_ensemble_spec.name,
             skip_summary=skip_summaries)

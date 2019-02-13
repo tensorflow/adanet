@@ -17,6 +17,7 @@ limitations under the License.
  * Under development.
  * Introduce `adanet.ensemble` which contains interfaces and examples of ways to learn ensembles using AdaNet. Users can now extend AdaNet to use custom ensemble-learning methods.
  * Add support for evaluation on TPU using `adanet.TPUEstimator`.
+ * Support recording TensorBoard `scalar`, `image`, `histogram`, and `audio` summaries on TPU during training.
 
 # Release 0.5.0
  * Support training on TPU using `adanet.TPUEstimator`.
