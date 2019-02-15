@@ -66,7 +66,7 @@ class Report(
     def _is_accepted_dtype(tensor):
       """Returns True iff tensor has the dtype we can handle."""
       return tensor.dtype.base_dtype in (tf.bool, tf.int32, tf.float32,
-                                         tf.string)
+                                         tf.float64, tf.string)
 
     # Validate hparams
     for key, value in hparams.items():
@@ -108,8 +108,8 @@ class Report(
       if not _is_accepted_dtype(value[0]):
         raise ValueError(
             "First element of metric '{}' refers to Tensor of the wrong "
-            "dtype {}. Must be one of tf.bool, tf.int32, tf.float32, or"
-            "tf.string.".format(key, value[0].dtype))
+            "dtype {}. Must be one of tf.bool, tf.int32, tf.float32, "
+            "tf.float64 or tf.string.".format(key, value[0].dtype))
 
       if not _is_scalar(value[0]):
         tf.logging.warn(
