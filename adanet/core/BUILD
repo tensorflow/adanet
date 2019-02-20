@@ -29,6 +29,7 @@ py_library(
     deps = [
         ":architecture",
         ":candidate",
+        ":devices",
         ":ensemble_builder",
         ":iteration",
         ":report_accessor",
@@ -344,4 +345,21 @@ py_proto_library(
     srcs = ["architecture.proto"],
     default_runtime = "@com_google_protobuf//:protobuf_python",
     protoc = "@com_google_protobuf//:protoc",
+)
+
+py_library(
+    name = "devices",
+    srcs = ["devices.py"],
+    deps = [
+    ],
+)
+
+py_test(
+    name = "devices_test",
+    srcs = ["devices_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":devices",
+        "@absl_py//absl/testing:parameterized",
+    ],
 )

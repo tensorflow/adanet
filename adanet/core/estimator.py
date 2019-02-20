@@ -26,6 +26,7 @@ import time
 
 from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _CandidateBuilder
+from adanet.core.devices import monkey_patch_default_variable_placement_strategy
 from adanet.core.ensemble import ComplexityRegularizedEnsembler
 from adanet.core.ensemble import GrowStrategy
 from adanet.core.ensemble_builder import _EnsembleBuilder
@@ -362,17 +363,23 @@ class Estimator(tf.estimator.Estimator):
     for key in default_ensembler_kwargs:
       del kwargs[key]
 
-    # This `Estimator` is responsible for bookkeeping across iterations, and
-    # for training the subnetworks in both a local and distributed setting.
-    # Subclassing improves future-proofing against new private methods being
-    # added to `tf.estimator.Estimator` that are expected to be callable by
-    # external functions, such as in b/110435640.
-    super(Estimator, self).__init__(
-        model_fn=self._adanet_model_fn,
-        params={},
-        config=config,
-        model_dir=model_dir,
-        **kwargs)
+    # Monkey patch the default variable placement strategy that Estimator uses
+    # since it does not support workers having different graphs from the chief.
+    # TODO: Consider using `RunConfig.replace` with the new device_fn,
+    # but this can cause issues since RunConfig automatically parses TF_CONFIG
+    # environment variable.
+    with monkey_patch_default_variable_placement_strategy():
+      # This `Estimator` is responsible for bookkeeping across iterations, and
+      # for training the subnetworks in both a local and distributed setting.
+      # Subclassing improves future-proofing against new private methods being
+      # added to `tf.estimator.Estimator` that are expected to be callable by
+      # external functions, such as in b/110435640.
+      super(Estimator, self).__init__(
+          model_fn=self._adanet_model_fn,
+          params={},
+          config=config,
+          model_dir=model_dir,
+          **kwargs)
 
     if default_ensembler_kwargs and ensemblers:
       raise ValueError("When specifying the `ensemblers` argument, "
@@ -461,7 +468,8 @@ class Estimator(tf.estimator.Estimator):
     # Each iteration of this AdaNet loop represents an `_Iteration`. The
     # current iteration number is stored as a variable in the checkpoint so
     # that training can be stopped and started at anytime.
-    with self._train_loop_context():
+    with monkey_patch_default_variable_placement_strategy(
+    ), self._train_loop_context():
       while True:
         current_iteration = self._latest_checkpoint_iteration_number()
         tf.logging.info("Beginning training AdaNet iteration %s",
