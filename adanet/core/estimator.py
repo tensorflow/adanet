@@ -242,6 +242,16 @@ class Estimator(tf.estimator.Estimator):
     adanet_loss_decay: Float decay for the exponential-moving-average of the
       AdaNet objective throughout training. This moving average is a data-
       driven way tracking the best candidate with only the training set.
+    delay_secs_per_worker: Float number of seconds to delay starting the
+      i-th worker. Staggering worker start-up during distributed asynchronous
+      SGD can improve training stability and speed up convergence. Each worker
+      will wait (i+1) * delay_secs_per_worker seconds before beginning training.
+    max_worker_delay_secs: Float max number of seconds to delay starting the
+      i-th worker. Staggering worker start-up during distributed asynchronous
+      SGD can improve training stability and speed up convergence. Each worker
+      will wait up to max_worker_delay_secs before beginning training.
+    worker_wait_secs: Float number of seconds for workers to wait before
+      checking if the chief prepared the next iteration.
     worker_wait_timeout_secs: Float number of seconds for workers to wait for
       chief to prepare the next iteration during distributed training. This is
       needed to prevent workers waiting indefinitely for a chief that may have
@@ -264,6 +274,7 @@ class Estimator(tf.estimator.Estimator):
   Raises:
     ValueError: If `subnetwork_generator` is `None`.
     ValueError: If `max_iteration_steps` is <= 0.
+    ValueError: If a `model_dir` is not specified during distributed training.
   """
   # pyformat: enable
 
@@ -286,6 +297,9 @@ class Estimator(tf.estimator.Estimator):
                force_grow=False,
                replicate_ensemble_in_training=False,
                adanet_loss_decay=.9,
+               delay_secs_per_worker=5,
+               max_worker_delay_secs=60,
+               worker_wait_secs=5,
                worker_wait_timeout_secs=7200,
                model_dir=None,
                report_dir=None,
@@ -300,6 +314,13 @@ class Estimator(tf.estimator.Estimator):
       raise ValueError("subnetwork_generator can't be None.")
     if max_iteration_steps <= 0.:
       raise ValueError("max_iteration_steps must be > 0.")
+    is_distributed_training = config and config.num_worker_replicas > 1
+    is_model_dir_specified = model_dir or (config and config.model_dir)
+    if is_distributed_training and not is_model_dir_specified:
+      # A common model dir for the chief and workers is required for
+      # coordination during distributed training.
+      raise ValueError(
+          "For distributed training, a model_dir must be specified.")
 
     self._subnetwork_generator = subnetwork_generator
     self._adanet_loss_decay = adanet_loss_decay
@@ -315,6 +336,9 @@ class Estimator(tf.estimator.Estimator):
     self._report_materializer = report_materializer
 
     self._force_grow = force_grow
+    self._delay_secs_per_worker = delay_secs_per_worker
+    self._max_worker_delay_secs = max_worker_delay_secs
+    self._worker_wait_secs = worker_wait_secs
     self._worker_wait_timeout_secs = worker_wait_timeout_secs
 
     self._evaluation_name = None
@@ -506,16 +530,19 @@ class Estimator(tf.estimator.Estimator):
                 self._worker_wait_timeout_secs)
             return result
           tf.logging.info("Waiting for chief to finish")
-          time.sleep(5)
+          time.sleep(self._worker_wait_secs)
 
         # Stagger starting workers to prevent training instability.
-        if not self.config.is_chief:
+        # Mimics behavior of tf.estimator.train_and_evaluate.
+        if self.config.task_type == "worker":
           task_id = self.config.task_id or 0
-          # Wait 5 secs more for each new worker up to 60 secs.
-          delay_secs = min(60, task_id * 5)
-          tf.logging.info("Waiting %d secs before starting training.",
-                          delay_secs)
-          time.sleep(delay_secs)
+          # Stagger each worker up to 60 secs.
+          delay_secs = min(self._max_worker_delay_secs,
+                           (task_id + 1.) * self._delay_secs_per_worker)
+          if delay_secs > 0.:
+            tf.logging.info("Waiting %d secs before continuing training.",
+                            delay_secs)
+            time.sleep(delay_secs)
 
         tf.logging.info("Finished bookkeeping phase for iteration %s",
                         current_iteration)

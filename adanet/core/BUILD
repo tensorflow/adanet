@@ -56,6 +56,36 @@ py_test(
     ],
 )
 
+py_test(
+    name = "estimator_distributed_test",
+    size = "large",
+    srcs = ["estimator_distributed_test.py"],
+    data = [
+        ":estimator_distributed_test_runner",
+    ],
+    flaky = 1,
+    shard_count = 5,
+    srcs_version = "PY2AND3",
+    deps = [
+        ":estimator",
+        ":testing_utils",
+        ":timer",
+        "//adanet/core/subnetwork",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+# Subprocess binary for estimator_distributed_test.
+py_binary(
+    name = "estimator_distributed_test_runner",
+    testonly = 1,
+    srcs = ["estimator_distributed_test_runner.py"],
+    deps = [
+        ":estimator",
+        "//adanet/core/subnetwork",
+    ],
+)
+
 py_library(
     name = "tpu_estimator",
     srcs = ["tpu_estimator.py"],
