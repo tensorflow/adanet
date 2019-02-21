@@ -62,12 +62,8 @@ def _create_task_process(task_type, task_index, tf_config, output_dir,
   """
 
   process_name = "%s_%s" % (task_type, task_index)
-  args = [
-      os.path.join(
-          tf.flags.FLAGS.test_srcdir,
-          "/adanet/core/estimator_distributed_test_runner"
-      )
-  ]
+  runner_binary = "bazel-bin/adanet/core/estimator_distributed_test_runner"
+  args = [os.path.join(tf.flags.FLAGS.test_srcdir, runner_binary)]
   # Log everything to stderr.
   args.append("--stderrthreshold=info")
   tf.logging.info("Spawning %s process: %s" % (process_name, " ".join(args)))
