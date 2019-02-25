@@ -191,20 +191,28 @@ def train_and_evaluate_estimator():
   }
   if FLAGS.estimator_type == "autoensemble":
     feature_columns = [tf.feature_column.numeric_column("x", shape=[2])]
+    if hasattr(tf.estimator, "LinearEstimator"):
+      linear_estimator_fn = tf.estimator.LinearEstimator
+    else:
+      linear_estimator_fn = tf.contrib.estimator.LinearEstimator
+    if hasattr(tf.estimator, "DNNEstimator"):
+      dnn_estimator_fn = tf.estimator.DNNEstimator
+    else:
+      dnn_estimator_fn = tf.contrib.estimator.DNNEstimator
     candidate_pool = {
         "linear":
-            tf.estimator.LinearEstimator(
+            linear_estimator_fn(
                 head=head,
                 feature_columns=feature_columns,
                 optimizer=tf.train.AdamOptimizer(learning_rate=.001)),
         "dnn":
-            tf.estimator.DNNEstimator(
+            dnn_estimator_fn(
                 head=head,
                 feature_columns=feature_columns,
                 optimizer=tf.train.AdamOptimizer(learning_rate=.001),
                 hidden_units=[3]),
         "dnn2":
-            tf.estimator.DNNEstimator(
+            dnn_estimator_fn(
                 head=head,
                 feature_columns=feature_columns,
                 optimizer=tf.train.AdamOptimizer(learning_rate=.001),
