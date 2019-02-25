@@ -26,8 +26,8 @@ from __future__ import division
 from __future__ import print_function
 
 import contextlib
-import os
 
+from adanet.autoensemble.estimator import AutoEnsembleEstimator
 from adanet.core.estimator import Estimator
 from adanet.core.subnetwork import Builder
 from adanet.core.subnetwork import SimpleGenerator
@@ -47,18 +47,26 @@ except ImportError:
 # pylint: enable=g-import-not-at-top
 # pylint: enable=g-direct-tensorflow-import
 
+tf.flags.DEFINE_enum("estimator_type", "estimator", [
+    "estimator",
+    "autoensemble",
+], "The estimator type to train.")
+
+tf.flags.DEFINE_string("model_dir", "", "The model directory.")
+
+FLAGS = tf.flags.FLAGS
+
 
 class SessionManager(session_manager_lib.SessionManager):
   """A session manager with a shorter recovery time."""
 
-  def __init__(
-      self,
-      local_init_op=None,
-      ready_op=None,
-      ready_for_local_init_op=None,
-      graph=None,
-      recovery_wait_secs=None,
-      local_init_run_options=None):
+  def __init__(self,
+               local_init_op=None,
+               ready_op=None,
+               ready_for_local_init_op=None,
+               graph=None,
+               recovery_wait_secs=None,
+               local_init_run_options=None):
     # Reduced wait time.
     super(SessionManager, self).__init__(
         local_init_op,
@@ -161,26 +169,60 @@ def train_and_evaluate_estimator():
   # For more information on how tf.estimator.RunConfig uses TF_CONFIG, see
   # https://www.tensorflow.org/api_docs/python/tf/estimator/RunConfig.
   config = tf.estimator.RunConfig(
-      tf_random_seed=42, model_dir=os.environ["MODEL_DIR"])
+      tf_random_seed=42,
+      model_dir=FLAGS.model_dir,
+      session_config=tf.ConfigProto(
+          log_device_placement=False,
+          # Ignore other workers; only talk to parameter servers.
+          # Otherwise, when a chief/worker terminates, the others will hang.
+          device_filters=["/job:ps"]))
   head = tf.contrib.estimator.regression_head(
       loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
-  subnetwork_generator = SimpleGenerator([
-      _DNNBuilder("dnn1", config, layer_size=3),
-      _DNNBuilder("dnn2", config, layer_size=4),
-      _DNNBuilder("dnn3", config, layer_size=5),
-  ])
-  estimator = Estimator(
-      head=head,
-      subnetwork_generator=subnetwork_generator,
-      max_iteration_steps=100,
-      force_grow=True,
-      delay_secs_per_worker=.2,
-      max_worker_delay_secs=1,
-      worker_wait_secs=.5,
+  kwargs = {
+      "max_iteration_steps": 100,
+      "force_grow": True,
+      "delay_secs_per_worker": .2,
+      "max_worker_delay_secs": 1,
+      "worker_wait_secs": .5,
       # Set low timeout to reduce wait time for failures.
-      worker_wait_timeout_secs=60,
-      config=config)
+      "worker_wait_timeout_secs": 60,
+      "config": config
+  }
+  if FLAGS.estimator_type == "autoensemble":
+    feature_columns = [tf.feature_column.numeric_column("x", shape=[2])]
+    candidate_pool = {
+        "linear":
+            tf.estimator.LinearEstimator(
+                head=head,
+                feature_columns=feature_columns,
+                optimizer=tf.train.AdamOptimizer(learning_rate=.001)),
+        "dnn":
+            tf.estimator.DNNEstimator(
+                head=head,
+                feature_columns=feature_columns,
+                optimizer=tf.train.AdamOptimizer(learning_rate=.001),
+                hidden_units=[3]),
+        "dnn2":
+            tf.estimator.DNNEstimator(
+                head=head,
+                feature_columns=feature_columns,
+                optimizer=tf.train.AdamOptimizer(learning_rate=.001),
+                hidden_units=[5])
+    }
+
+    estimator = AutoEnsembleEstimator(
+        head=head, candidate_pool=candidate_pool, **kwargs)
+
+  elif FLAGS.estimator_type == "estimator":
+    subnetwork_generator = SimpleGenerator([
+        _DNNBuilder("dnn1", config, layer_size=3),
+        _DNNBuilder("dnn2", config, layer_size=4),
+        _DNNBuilder("dnn3", config, layer_size=5),
+    ])
+
+    estimator = Estimator(
+        head=head, subnetwork_generator=subnetwork_generator, **kwargs)
 
   def input_fn():
     xor_features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
@@ -190,7 +232,7 @@ def train_and_evaluate_estimator():
     return input_features, input_labels
 
   # Train for three iterations.
-  train_spec = tf.estimator.TrainSpec(input_fn=input_fn, max_steps=500)
+  train_spec = tf.estimator.TrainSpec(input_fn=input_fn, max_steps=300)
   eval_spec = tf.estimator.EvalSpec(input_fn=input_fn, steps=1)
 
   # Calling train_and_evaluate is the official way to perform distributed

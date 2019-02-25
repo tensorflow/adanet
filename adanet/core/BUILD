@@ -69,7 +69,6 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":estimator",
-        ":testing_utils",
         ":timer",
         "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
@@ -83,6 +82,7 @@ py_binary(
     srcs = ["estimator_distributed_test_runner.py"],
     deps = [
         ":estimator",
+        "//adanet/autoensemble",
         "//adanet/core/subnetwork",
     ],
 )

@@ -29,7 +29,6 @@ import subprocess
 import time
 
 from absl.testing import parameterized
-from adanet.core import testing_utils as tu
 from adanet.core.timer import _CountDownTimer
 import tensorflow as tf
 
@@ -37,54 +36,54 @@ import tensorflow as tf
 # NOTE: The full process output is written to disk.
 MAX_OUTPUT_CHARS = 15000
 
-# A process. name is a string identifying the process in logs. stdout and
-# stderr are file objects of the process's stdout and stderr, respectively.
+# A process. name is a string identifying the process in logs. stderr is a file
+# object of the process's stderr.
 _ProcessInfo = collections.namedtuple("_ProcessInfo",
-                                      ["name", "popen", "stdout", "stderr"])
+                                      ["name", "popen", "stderr"])
 
 
-def _create_task_process(task_type, task_index, tf_config, output_dir,
+def _create_task_process(task_type, task_index, estimator_type, tf_config,
                          model_dir):
   """Creates a process for a single estimator task.
 
   Args:
     task_type: 'chief', 'worker' or 'ps'.
     task_index: The index of the task within the cluster.
+    estimator_type: The estimator type to train. 'estimator' or 'autoensemble'.
     tf_config: Dictionary representation of the TF_CONFIG environment variable.
       This method creates a copy as to not mutate the input dict.
-    output_dir: Where to place the output files, storing the task's stdout and
-      stderr.
     model_dir: The Estimator's model directory.
 
   Returns:
-    A _ProcessInfo namedtuple of the running process. The stdout and stderr
-    fields of this tuple must be closed by the caller once the process ends.
+    A _ProcessInfo namedtuple of the running process. The stderr field of this
+      tuple must be closed by the caller once the process ends.
   """
 
   process_name = "%s_%s" % (task_type, task_index)
   runner_binary = "bazel-bin/adanet/core/estimator_distributed_test_runner"
   args = [os.path.join(tf.flags.FLAGS.test_srcdir, runner_binary)]
+  args.append("--estimator_type={}".format(estimator_type))
   # Log everything to stderr.
   args.append("--stderrthreshold=info")
+  args.append("--model_dir={}".format(model_dir))
   tf.logging.info("Spawning %s process: %s" % (process_name, " ".join(args)))
-  stdout_filename = os.path.join(output_dir, "%s_stdout.txt" % process_name)
-  stderr_filename = os.path.join(output_dir, "%s_stderr.txt" % process_name)
-  tf.logging.info("Logging to %s", output_dir)
-  stdout_file = open(stdout_filename, "w+")
+  stderr_filename = os.path.join(model_dir, "%s_stderr.txt" % process_name)
+  tf.logging.info("Logging to %s", model_dir)
   stderr_file = open(stderr_filename, "w+")
   tf_config = copy.deepcopy(tf_config)
   tf_config["task"]["type"] = task_type
   tf_config["task"]["index"] = task_index
   json_tf_config = json.dumps(tf_config)
   env = os.environ.copy()
-  # Allow stdout to be viewed before the process ends.
+  # Allow stderr to be viewed before the process ends.
   env["PYTHONUNBUFFERED"] = "1"
   env["TF_CPP_MIN_LOG_LEVEL"] = "0"
   env["TF_CONFIG"] = json_tf_config
-  env["MODEL_DIR"] = model_dir
-  popen = subprocess.Popen(
-      args, stdout=stdout_file, stderr=stderr_file, env=env)
-  return _ProcessInfo(process_name, popen, stdout_file, stderr_file)
+  # Change gRPC polling strategy to prevent blocking forever.
+  # See https://github.com/tensorflow/tensorflow/issues/17852.
+  env["GRPC_POLL_STRATEGY"] = "poll"
+  popen = subprocess.Popen(args, stderr=stderr_file, env=env)
+  return _ProcessInfo(process_name, popen, stderr_file)
 
 
 def _pick_unused_port():
@@ -102,8 +101,16 @@ def _pick_unused_port():
   raise socket.error
 
 
-class EstimatorDistributedTrainingTest(tu.AdanetTestCase):
+class EstimatorDistributedTrainingTest(parameterized.TestCase,
+                                       tf.test.TestCase):
   """Tests distributed training."""
+
+  def setUp(self):
+    super(EstimatorDistributedTrainingTest, self).setUp()
+    # Setup and cleanup test directory.
+    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
+    shutil.rmtree(self.test_subdirectory, ignore_errors=True)
+    os.makedirs(self.test_subdirectory)
 
   def _wait_for_processes(self, wait_processes, kill_processes, timeout_secs):
     """Waits until all `wait_processes` finish, then kills `kill_processes`.
@@ -120,14 +127,14 @@ class EstimatorDistributedTrainingTest(tu.AdanetTestCase):
       timeout_secs: Seconds to wait before timing out and terminating processes.
 
     Returns:
-      A list of strings, each which is a string of the stdout of a wait process.
+      A list of strings, each which is a string of the stderr of a wait process.
 
     Raises:
       Exception: When waiting for tasks to finish times out.
     """
 
     timer = _CountDownTimer(timeout_secs)
-    wait_process_stdouts = [None] * len(wait_processes)
+    wait_process_stderrs = [None] * len(wait_processes)
     finished_wait_processes = set()
     while len(finished_wait_processes) < len(wait_processes):
       if timer.secs_remaining() == 0:
@@ -135,13 +142,8 @@ class EstimatorDistributedTrainingTest(tu.AdanetTestCase):
         for i, wait_process in enumerate(wait_processes):
           if i in finished_wait_processes:
             continue
-          wait_process.stdout.seek(0)
-          wait_process_stdouts[i] = wait_process.stdout.read()
-          tf.logging.info(
-              "stdout for incomplete {} (last {} chars): {}\n".format(
-                  wait_process.name, MAX_OUTPUT_CHARS,
-                  wait_process_stdouts[i][-MAX_OUTPUT_CHARS:]))
           wait_process.stderr.seek(0)
+          wait_process_stderrs[i] = wait_process.stderr.read()
           tf.logging.info(
               "stderr for incomplete {} (last {} chars): {}\n".format(
                   wait_process.name, MAX_OUTPUT_CHARS,
@@ -154,15 +156,11 @@ class EstimatorDistributedTrainingTest(tu.AdanetTestCase):
         if ret_code is None:
           continue
         tf.logging.info("{} finished".format(wait_process.name))
-        wait_process.stdout.seek(0)
-        wait_process_stdouts[i] = wait_process.stdout.read()
-        tf.logging.info("stdout for {} (last {} chars): {}\n".format(
-            wait_process.name, MAX_OUTPUT_CHARS,
-            wait_process_stdouts[i][-MAX_OUTPUT_CHARS:]))
         wait_process.stderr.seek(0)
+        wait_process_stderrs[i] = wait_process.stderr.read()
         tf.logging.info("stderr for {} (last {} chars): {}\n".format(
             wait_process.name, MAX_OUTPUT_CHARS,
-            wait_process.stderr.read()[-MAX_OUTPUT_CHARS:]))
+            wait_process_stderrs[i][-MAX_OUTPUT_CHARS:]))
         self.assertEqual(0, ret_code)
         finished_wait_processes.add(i)
       for kill_process in kill_processes:
@@ -177,15 +175,11 @@ class EstimatorDistributedTrainingTest(tu.AdanetTestCase):
       # Kill each kill process.
       kill_process.popen.kill()
       kill_process.popen.wait()
-      kill_process.stdout.seek(0)
-      tf.logging.info("stdout for {} (last {} chars): {}\n".format(
-          kill_process.name, MAX_OUTPUT_CHARS,
-          kill_process.stdout.read()[-MAX_OUTPUT_CHARS:]))
       kill_process.stderr.seek(0)
       tf.logging.info("stderr for {} (last {} chars): {}\n".format(
           kill_process.name, MAX_OUTPUT_CHARS,
           kill_process.stderr.read()[-MAX_OUTPUT_CHARS:]))
-    return wait_process_stdouts
+    return wait_process_stderrs
 
   @parameterized.named_parameters({
       "testcase_name": "one_worker",
@@ -203,8 +197,20 @@ class EstimatorDistributedTrainingTest(tu.AdanetTestCase):
       "testcase_name": "three_workers_three_ps",
       "num_workers": 3,
       "num_ps": 3,
+  }, {
+      "testcase_name": "five_workers_three_ps",
+      "num_workers": 5,
+      "num_ps": 3,
+  }, {
+      "testcase_name": "autoensemble_five_workers_three_ps",
+      "estimator": "autoensemble",
+      "num_workers": 5,
+      "num_ps": 3,
   })
-  def test_distributed_training(self, num_workers, num_ps):
+  def test_distributed_training(self,
+                                num_workers,
+                                num_ps,
+                                estimator="estimator"):
     """Uses multiprocessing to simulate a distributed training environment."""
 
     # Inspired by `tf.test.create_local_cluster`.
@@ -235,23 +241,19 @@ class EstimatorDistributedTrainingTest(tu.AdanetTestCase):
     worker_processes = []
     ps_processes = []
 
-    output_dir = os.path.join(self.get_temp_dir(), self.id())
-    tf.logging.info("Logging process outputs to %s", output_dir)
-    shutil.rmtree(output_dir, ignore_errors=True)
-    tf.gfile.MakeDirs(output_dir)
     model_dir = self.test_subdirectory
 
     # Chief
     worker_processes.append(
-        _create_task_process("chief", 0, tf_config, output_dir, model_dir))
+        _create_task_process("chief", 0, estimator, tf_config, model_dir))
     # Workers
     for i in range(len(ws_targets[1:])):
       worker_processes.append(
-          _create_task_process("worker", i, tf_config, output_dir, model_dir))
+          _create_task_process("worker", i, estimator, tf_config, model_dir))
     # Parameter Servers (PS)
     for i in range(len(ps_targets)):
       ps_processes.append(
-          _create_task_process("ps", i, tf_config, output_dir, model_dir))
+          _create_task_process("ps", i, estimator, tf_config, model_dir))
 
     # Run processes.
     try:
@@ -264,7 +266,6 @@ class EstimatorDistributedTrainingTest(tu.AdanetTestCase):
           process.popen.kill()
         except OSError:
           pass  # It's OK (and expected) if the process already exited.
-        process.stdout.close()
         process.stderr.close()
 
 
