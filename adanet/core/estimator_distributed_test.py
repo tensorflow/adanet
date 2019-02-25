@@ -259,7 +259,7 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
     try:
       # NOTE: Parameter servers do not shut down on their own.
       self._wait_for_processes(
-          worker_processes, kill_processes=ps_processes, timeout_secs=180)
+          worker_processes, kill_processes=ps_processes, timeout_secs=10 * 60)
     finally:
       for process in worker_processes + ps_processes:
         try:
