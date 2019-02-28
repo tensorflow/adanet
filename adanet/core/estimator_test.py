@@ -25,6 +25,7 @@ from absl.testing import parameterized
 from adanet.core import testing_utils as tu
 from adanet.core.ensemble import AllStrategy
 from adanet.core.ensemble import MixtureWeightType
+from adanet.core.ensemble import SoloStrategy
 from adanet.core.estimator import Estimator
 from adanet.core.evaluator import Evaluator
 from adanet.core.report_materializer import ReportMaterializer
@@ -583,6 +584,18 @@ class EstimatorTest(tu.AdanetTestCase):
           200,
       "want_loss":
           0.29196805,
+  }, {
+      "testcase_name":
+          "solo_strategy",
+      "subnetwork_generator":
+          SimpleGenerator(
+              [_DNNBuilder("dnn"),
+               _DNNBuilder("dnn2", layer_size=3)]),
+      "ensemble_strategies": [SoloStrategy()],
+      "max_iteration_steps":
+          200,
+      "want_loss":
+          0.35249719,
   })
   def test_lifecycle(self,
                      subnetwork_generator,

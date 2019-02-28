@@ -34,6 +34,27 @@ class StrategyTest(tf.test.TestCase):
     self.fake_builder_3 = mock.create_autospec(spec=subnetwork.Builder)
     self.fake_builder_4 = mock.create_autospec(spec=subnetwork.Builder)
 
+  def test_solo_strategy(self):
+    want = [
+        ensemble.Candidate(self.fake_builder_1.name, [self.fake_builder_1], []),
+        ensemble.Candidate(self.fake_builder_2.name, [self.fake_builder_2], [])
+    ]
+    got = ensemble.SoloStrategy().generate_ensemble_candidates(
+        [self.fake_builder_1, self.fake_builder_2], None)
+
+    self.assertEqual(want, got)
+
+  def test_solo_strategy_with_previous_ensemble_subnetwork_builders(self):
+    want = [
+        ensemble.Candidate(self.fake_builder_1.name, [self.fake_builder_1], []),
+        ensemble.Candidate(self.fake_builder_2.name, [self.fake_builder_2], [])
+    ]
+    got = ensemble.SoloStrategy().generate_ensemble_candidates(
+        [self.fake_builder_1, self.fake_builder_2],
+        [self.fake_builder_3, self.fake_builder_4])
+
+    self.assertEqual(want, got)
+
   def test_grow_strategy(self):
     want = [
         ensemble.Candidate(self.fake_builder_1.name, [self.fake_builder_1], []),

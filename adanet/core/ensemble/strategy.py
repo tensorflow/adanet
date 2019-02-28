@@ -72,6 +72,23 @@ class Strategy(object):
     """
 
 
+class SoloStrategy(Strategy):
+  """Produces a model composed of a single subnetwork.
+
+  "An ensemble of one."
+
+  This is effectively the same as pruning all previous ensemble subnetworks,
+  and only adding one subnetwork candidate to the ensemble.
+  """
+
+  def generate_ensemble_candidates(self, subnetwork_builders,
+                                   previous_ensemble_subnetwork_builders):
+    return [
+        Candidate(subnetwork_builder.name, [subnetwork_builder], None)
+        for subnetwork_builder in subnetwork_builders
+    ]
+
+
 class GrowStrategy(Strategy):
   """Greedily grows an ensemble, one subnetwork at a time."""
 
