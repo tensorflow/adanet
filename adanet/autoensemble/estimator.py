@@ -199,6 +199,7 @@ class AutoEnsembleEstimator(Estimator):
     worker_wait_timeout_secs: See :class:`adanet.Estimator`.
     model_dir: See :class:`adanet.Estimator`.
     config: See :class:`adanet.Estimator`.
+    debug: See :class:`adanet.Estimator`.
 
   Returns:
     An :class:`adanet.AutoEnsembleEstimator` instance.

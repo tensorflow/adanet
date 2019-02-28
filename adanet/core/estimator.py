@@ -267,6 +267,8 @@ class Estimator(tf.estimator.Estimator):
       `report_materializer` is None, this will not save anything. If `None` or
       empty string, defaults to "<model_dir>/report".
     config: `RunConfig` object to configure the runtime settings.
+    debug: Boolean to enable debug mode which will check features and labels
+      for Infs and NaNs.
     **kwargs: Extra keyword args passed to the parent.
 
   Returns:
@@ -305,6 +307,7 @@ class Estimator(tf.estimator.Estimator):
                model_dir=None,
                report_dir=None,
                config=None,
+               debug=False,
                **kwargs):
     if ensemblers and len(ensemblers) > 1:
       raise ValueError("More than a single Ensembler is not yet supported.")
@@ -407,7 +410,8 @@ class Estimator(tf.estimator.Estimator):
         ensemblers,
         self._summary_maker,
         replicate_ensemble_in_training,
-        use_tpu=self._use_tpu)
+        use_tpu=self._use_tpu,
+        debug=debug)
     self._ensemble_strategies = ensemble_strategies or [GrowStrategy()]
 
     report_dir = report_dir or os.path.join(self._model_dir, "report")

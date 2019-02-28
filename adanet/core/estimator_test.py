@@ -1261,79 +1261,95 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
             "adanet_weighted_ensemble/subnetwork_0", ensemble_subdir),
         places=3)
 
-  @parameterized.named_parameters({
-      "testcase_name": "none_metrics",
-      "head": _EvalMetricsHead(None),
-      "want_summaries": [],
-      "want_loss": .9910,
-  }, {
-      "testcase_name": "metrics_fn",
-      "head": _EvalMetricsHead(None),
-      "metric_fn": lambda predictions: {"avg": tf.metrics.mean(predictions)},
-      "want_summaries": ["avg"],
-      "want_loss": .9910,
-  }, {
-      "testcase_name": "empty_metrics",
-      "head": _EvalMetricsHead({}),
-      "want_summaries": [],
-      "want_loss": .9910,
-  }, {
-      "testcase_name":
-          "evaluation_name",
-      "head":
-          _EvalMetricsHead({}),
-      "evaluation_name":
-          "continuous",
-      "want_summaries": [],
-      "want_loss":
-          .9910,
-      "global_subdir":
-          "eval_continuous",
-      "subnetwork_subdir":
-          "subnetwork/t0_linear/eval_continuous",
-      "ensemble_subdir":
-          "ensemble/t0_linear_complexity_regularized/eval_continuous",
-  }, {
-      "testcase_name":
-          "regression_head",
-      "head":
-          tf.contrib.estimator.regression_head(
-              loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
-      "want_summaries": ["average_loss"],
-      "want_loss":
-          .96453667,
-  }, {
-      "testcase_name":
-          "binary_classification_head",
-      "head":
-          tf.contrib.estimator.binary_classification_head(
-              loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
-      "want_summaries": ["average_loss"],
-      "want_loss":
-          0.6909014,
-  }, {
-      "testcase_name":
-          "all_metrics",
-      "head":
-          _EvalMetricsHead({
-              "float32":
-                  _FakeMetric(1., tf.float32),
-              "float64":
-                  _FakeMetric(1., tf.float64),
-              "serialized_summary":
-                  _FakeMetric(
-                      tf.Summary(value=[
-                          tf.Summary.Value(tag="summary_tag", simple_value=1.)
-                      ]).SerializeToString(), tf.string),
-          }),
-      "want_summaries": [
-          "float32",
-          "float64",
-          "serialized_summary/0",
-      ],
-      "want_loss":
-          .9910,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "none_metrics",
+          "head": _EvalMetricsHead(None),
+          "want_summaries": [],
+          "want_loss": .9910,
+      },
+      {
+          "testcase_name":
+              "metrics_fn",
+          "head":
+              _EvalMetricsHead(None),
+          # pylint: disable=g-long-lambda
+          "metric_fn":
+              lambda predictions: {
+                  "avg": tf.metrics.mean(predictions)
+              },
+          # pylint: enable=g-long-lambda
+          "want_summaries": ["avg"],
+          "want_loss":
+              .9910,
+      },
+      {
+          "testcase_name": "empty_metrics",
+          "head": _EvalMetricsHead({}),
+          "want_summaries": [],
+          "want_loss": .9910,
+      },
+      {
+          "testcase_name":
+              "evaluation_name",
+          "head":
+              _EvalMetricsHead({}),
+          "evaluation_name":
+              "continuous",
+          "want_summaries": [],
+          "want_loss":
+              .9910,
+          "global_subdir":
+              "eval_continuous",
+          "subnetwork_subdir":
+              "subnetwork/t0_linear/eval_continuous",
+          "ensemble_subdir":
+              "ensemble/t0_linear_complexity_regularized/eval_continuous",
+      },
+      {
+          "testcase_name":
+              "regression_head",
+          "head":
+              tf.contrib.estimator.regression_head(
+                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+          "want_summaries": ["average_loss"],
+          "want_loss":
+              .96453667,
+      },
+      {
+          "testcase_name":
+              "binary_classification_head",
+          "head":
+              tf.contrib.estimator.binary_classification_head(
+                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+          "want_summaries": ["average_loss"],
+          "want_loss":
+              0.6909014,
+      },
+      {
+          "testcase_name":
+              "all_metrics",
+          "head":
+              _EvalMetricsHead({
+                  "float32":
+                      _FakeMetric(1., tf.float32),
+                  "float64":
+                      _FakeMetric(1., tf.float64),
+                  "serialized_summary":
+                      _FakeMetric(
+                          tf.Summary(value=[
+                              tf.Summary.Value(
+                                  tag="summary_tag", simple_value=1.)
+                          ]).SerializeToString(), tf.string),
+              }),
+          "want_summaries": [
+              "float32",
+              "float64",
+              "serialized_summary/0",
+          ],
+          "want_loss":
+              .9910,
+      })
   def test_eval_metrics(
       self,
       head,
@@ -2324,6 +2340,59 @@ class EstimatorForceGrowTest(tu.AdanetTestCase):
     self.assertEqual(
         want_subnetworks,
         str(eval_results["architecture/adanet/ensembles"]).count(" linear "))
+
+
+class EstimatorDebugTest(tu.AdanetTestCase):
+  """Tests b/125483534. Detect NaNs in input_fns."""
+
+  # pylint: disable=g-long-lambda
+  @parameterized.named_parameters({
+      "testcase_name":
+          "nan_features",
+      "head":
+          tf.contrib.estimator.regression_head(
+              name="y", loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+      "input_fn":
+          lambda: ({
+              "x": tf.log([[1., 0.]])
+          }, tf.zeros([1, 1]))
+  }, {
+      "testcase_name":
+          "nan_label",
+      "head":
+          tf.contrib.estimator.regression_head(
+              name="y", loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+      "input_fn":
+          lambda: ({
+              "x": tf.ones([1, 2])
+          }, tf.log([[0.]]))
+  }, {
+      "testcase_name":
+          "nan_labels_dict",
+      "head":
+          tf.contrib.estimator.multi_head(heads=[
+              tf.contrib.estimator.regression_head(
+                  name="y",
+                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+          ]),
+      "input_fn":
+          lambda: ({
+              "x": tf.ones([1, 2])
+          }, {
+              "y": tf.log([[0.]])
+          })
+  })
+  # pylint: enable=g-long-lambda
+  def test_nans_from_input_fn(self, head, input_fn):
+    subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
+    estimator = Estimator(
+        head=head,
+        subnetwork_generator=subnetwork_generator,
+        max_iteration_steps=3,
+        model_dir=self.test_subdirectory,
+        debug=True)
+    with self.assertRaises(tf.errors.InvalidArgumentError):
+      estimator.train(input_fn=input_fn, max_steps=3)
 
 
 if __name__ == "__main__":

@@ -109,6 +109,14 @@ def _is_over_var():
   return var
 
 
+def _is_numeric(tensor):
+  """Determines if given tensor is a float numeric."""
+
+  if not isinstance(tensor, tf.Tensor):
+    return False
+  return tensor.dtype in [tf.bfloat16, tf.float16, tf.float32, tf.float64]
+
+
 class _IterationBuilder(object):
   """Builds AdaNet iterations."""
 
@@ -119,7 +127,8 @@ class _IterationBuilder(object):
                ensemblers,
                summary_maker,
                replicate_ensemble_in_training=False,
-               use_tpu=False):
+               use_tpu=False,
+               debug=False):
     """Creates an `_IterationBuilder` instance.
 
     Args:
@@ -133,6 +142,8 @@ class _IterationBuilder(object):
       replicate_ensemble_in_training: Whether to build the frozen subnetworks in
         `training` mode during training.
       use_tpu: Whether AdaNet is running on TPU.
+      debug: Boolean to enable debug mode which will check features and labels
+        for Infs and NaNs.
 
     Returns:
       An `_IterationBuilder` object.
@@ -145,7 +156,44 @@ class _IterationBuilder(object):
     self._summary_maker = summary_maker
     self._replicate_ensemble_in_training = replicate_ensemble_in_training
     self._use_tpu = use_tpu
+    self._debug = debug
     super(_IterationBuilder, self).__init__()
+
+  def _check_numerics(self, features, labels):
+    """Checks for NaNs and Infs in input features and labels.
+
+    Args:
+      features: Dictionary of `Tensor` objects keyed by feature name.
+      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
+        (for multi-head). Can be `None`.
+
+    Returns:
+      A features and labels tuple with same types and respective inputs, but
+      with numeric check ops wrapping them.
+    """
+
+    if not self._debug:
+      return features, labels
+
+    checked_features, checked_labels = {}, {}
+    tf.logging.info("DEBUG: Checking numerics of float features.")
+    for name in sorted(features):
+      if not _is_numeric(features[name]):
+        continue
+      tf.logging.info("DEBUG: Checking numerics of float feature '%s'.", name)
+      checked_features[name] = tf.debugging.check_numerics(
+          features[name], "features '{}'".format(name))
+    if isinstance(labels, dict):
+      for name in sorted(labels):
+        if not _is_numeric(labels[name]):
+          continue
+        tf.logging.info("DEBUG: Checking numerics of float label '%s'.", name)
+        checked_labels[name] = tf.debugging.check_numerics(
+            labels[name], "labels '{}'".format(name))
+    elif labels is not None and _is_numeric(labels):
+      tf.logging.info("DEBUG: Checking numerics of labels.")
+      checked_labels = tf.debugging.check_numerics(labels, "'labels'")
+    return checked_features, checked_labels
 
   def build_iteration(self,
                       iteration_number,
@@ -210,6 +258,8 @@ class _IterationBuilder(object):
       if self._replicate_ensemble_in_training and (
           mode == tf.estimator.ModeKeys.TRAIN):
         builder_mode = mode
+
+    features, labels = self._check_numerics(features, labels)
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
