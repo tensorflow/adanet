@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import collections
 import copy
+import itertools
 import json
 import os
 import shutil
@@ -42,14 +43,15 @@ _ProcessInfo = collections.namedtuple("_ProcessInfo",
                                       ["name", "popen", "stderr"])
 
 
-def _create_task_process(task_type, task_index, estimator_type, tf_config,
-                         model_dir):
+def _create_task_process(task_type, task_index, estimator_type,
+                         placement_strategy, tf_config, model_dir):
   """Creates a process for a single estimator task.
 
   Args:
     task_type: 'chief', 'worker' or 'ps'.
     task_index: The index of the task within the cluster.
     estimator_type: The estimator type to train. 'estimator' or 'autoensemble'.
+    placement_strategy: The distributed placement strategy.
     tf_config: Dictionary representation of the TF_CONFIG environment variable.
       This method creates a copy as to not mutate the input dict.
     model_dir: The Estimator's model directory.
@@ -63,6 +65,7 @@ def _create_task_process(task_type, task_index, estimator_type, tf_config,
   runner_binary = "bazel-bin/adanet/core/estimator_distributed_test_runner"
   args = [os.path.join(tf.flags.FLAGS.test_srcdir, runner_binary)]
   args.append("--estimator_type={}".format(estimator_type))
+  args.append("--placement_strategy={}".format(placement_strategy))
   # Log everything to stderr.
   args.append("--stderrthreshold=info")
   args.append("--model_dir={}".format(model_dir))
@@ -181,35 +184,57 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
           kill_process.stderr.read()[-MAX_OUTPUT_CHARS:]))
     return wait_process_stderrs
 
-  @parameterized.named_parameters({
-      "testcase_name": "one_worker",
-      "num_workers": 1,
-      "num_ps": 0,
-  }, {
-      "testcase_name": "one_worker_one_ps",
-      "num_workers": 1,
-      "num_ps": 1,
-  }, {
-      "testcase_name": "two_workers_one_ps",
-      "num_workers": 2,
-      "num_ps": 1,
-  }, {
-      "testcase_name": "three_workers_three_ps",
-      "num_workers": 3,
-      "num_ps": 3,
-  }, {
-      "testcase_name": "five_workers_three_ps",
-      "num_workers": 5,
-      "num_ps": 3,
-  }, {
-      "testcase_name": "autoensemble_five_workers_three_ps",
-      "estimator": "autoensemble",
-      "num_workers": 5,
-      "num_ps": 3,
-  })
+  # pylint: disable=g-complex-comprehension
+  @parameterized.named_parameters(
+      itertools.chain(*[[
+          {
+              "testcase_name": "{}_one_worker".format(placement),
+              "placement_strategy": placement,
+              "num_workers": 1,
+              "num_ps": 0,
+          },
+          {
+              "testcase_name": "{}_one_worker_one_ps".format(placement),
+              "placement_strategy": placement,
+              "num_workers": 1,
+              "num_ps": 1,
+          },
+          {
+              "testcase_name": "{}_two_workers_one_ps".format(placement),
+              "placement_strategy": placement,
+              "num_workers": 2,
+              "num_ps": 1,
+          },
+          {
+              "testcase_name": "{}_three_workers_three_ps".format(placement),
+              "placement_strategy": placement,
+              "num_workers": 3,
+              "num_ps": 3,
+          },
+          {
+              "testcase_name": "{}_five_workers_three_ps".format(placement),
+              "placement_strategy": placement,
+              "num_workers": 5,
+              "num_ps": 3,
+          },
+          {
+              "testcase_name":
+                  "autoensemble_{}_five_workers_three_ps".format(placement),
+              "estimator":
+                  "autoensemble",
+              "placement_strategy":
+                  placement,
+              "num_workers":
+                  5,
+              "num_ps":
+                  3,
+          },
+      ] for placement in ["replication", "round_robin"]]))
+  # pylint: enable=g-complex-comprehension
   def test_distributed_training(self,
                                 num_workers,
                                 num_ps,
+                                placement_strategy,
                                 estimator="estimator"):
     """Uses multiprocessing to simulate a distributed training environment."""
 
@@ -245,15 +270,18 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
 
     # Chief
     worker_processes.append(
-        _create_task_process("chief", 0, estimator, tf_config, model_dir))
+        _create_task_process("chief", 0, estimator, placement_strategy,
+                             tf_config, model_dir))
     # Workers
     for i in range(len(ws_targets[1:])):
       worker_processes.append(
-          _create_task_process("worker", i, estimator, tf_config, model_dir))
+          _create_task_process("worker", i, estimator, placement_strategy,
+                               tf_config, model_dir))
     # Parameter Servers (PS)
     for i in range(len(ps_targets)):
       ps_processes.append(
-          _create_task_process("ps", i, estimator, tf_config, model_dir))
+          _create_task_process("ps", i, estimator, placement_strategy,
+                               tf_config, model_dir))
 
     # Run processes.
     try:

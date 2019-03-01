@@ -32,6 +32,8 @@ from adanet.core.ensemble import GrowStrategy
 from adanet.core.ensemble_builder import _EnsembleBuilder
 from adanet.core.ensemble_builder import _SubnetworkManager
 from adanet.core.iteration import _IterationBuilder
+from adanet.core.placement import ReplicationStrategy
+from adanet.core.placement import RoundRobinStrategy
 from adanet.core.report_accessor import _ReportAccessor
 from adanet.core.summary import _ScopedSummary
 from adanet.core.summary import _TPUScopedSummary
@@ -366,6 +368,14 @@ class Estimator(tf.estimator.Estimator):
     for key in default_ensembler_kwargs:
       del kwargs[key]
 
+    # Experimental feature.
+    round_robin_placement_arg = "experimental_round_robin_placement_strategy"
+    round_robin_placement = kwargs.pop(round_robin_placement_arg, None)
+    if round_robin_placement:
+      tf.logging.warning(
+          "%s is an experimental feature. Its behavior is not guaranteed "
+          "to be backwards compatible.", round_robin_placement_arg)
+
     # Monkey patch the default variable placement strategy that Estimator uses
     # since it does not support workers having different graphs from the chief.
     # TODO: Consider using `RunConfig.replace` with the new device_fn,
@@ -403,12 +413,17 @@ class Estimator(tf.estimator.Estimator):
         adanet_loss_decay=self._adanet_loss_decay)
     subnetwork_manager = _SubnetworkManager(
         head=head, metric_fn=metric_fn, use_tpu=self._use_tpu)
+    placement_strategy = ReplicationStrategy()
+    if round_robin_placement:
+      placement_strategy = RoundRobinStrategy(self.config.num_worker_replicas,
+                                              self.config.global_id_in_cluster)
     self._iteration_builder = _IterationBuilder(
         candidate_builder,
         subnetwork_manager,
         ensemble_builder,
         ensemblers,
         self._summary_maker,
+        placement_strategy,
         replicate_ensemble_in_training,
         use_tpu=self._use_tpu,
         debug=debug)

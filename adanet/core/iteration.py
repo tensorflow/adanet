@@ -22,6 +22,8 @@ from __future__ import print_function
 import collections
 
 from adanet.core import dict_utils
+from adanet.core import ensemble_builder as ensemble_builder_lib
+from adanet.core import placement
 from adanet.core import subnetwork
 
 import numpy as np
@@ -126,6 +128,7 @@ class _IterationBuilder(object):
                ensemble_builder,
                ensemblers,
                summary_maker,
+               placement_strategy=placement.ReplicationStrategy(),
                replicate_ensemble_in_training=False,
                use_tpu=False,
                debug=False):
@@ -139,6 +142,8 @@ class _IterationBuilder(object):
         define how to ensemble a group of subnetworks.
       summary_maker: A function that constructs an `adanet.Summary` instance
         from (namespace, scope, and skip_summary).
+      placement_strategy: A `PlacementStrategy` for assigning subnetworks and
+        ensembles to specific workers.
       replicate_ensemble_in_training: Whether to build the frozen subnetworks in
         `training` mode during training.
       use_tpu: Whether AdaNet is running on TPU.
@@ -154,6 +159,7 @@ class _IterationBuilder(object):
     self._ensemble_builder = ensemble_builder
     self._ensemblers = ensemblers
     self._summary_maker = summary_maker
+    self._placement_strategy = placement_strategy
     self._replicate_ensemble_in_training = replicate_ensemble_in_training
     self._use_tpu = use_tpu
     self._debug = debug
@@ -316,15 +322,21 @@ class _IterationBuilder(object):
               subnetwork_builder.name))
         seen_builder_names[subnetwork_builder.name] = True
       subnetwork_specs = []
-      for subnetwork_builder in subnetwork_builders:
+      num_subnetworks = len(subnetwork_builders)
+      for i, subnetwork_builder in enumerate(subnetwork_builders):
+        if not self._placement_strategy.should_build_subnetwork(
+            num_subnetworks, i) and not rebuilding:
+          continue
         subnetwork_name = "t{}_{}".format(iteration_number,
                                           subnetwork_builder.name)
         subnetwork_summary = self._summary_maker(
             namespace="subnetwork",
             scope=subnetwork_name,
             skip_summary=skip_summaries or rebuilding)
-
         summaries.append(subnetwork_summary)
+        tf.logging.info("%s subnetwork '%s'",
+                        "Rebuilding" if rebuilding else "Building",
+                        subnetwork_builder.name)
         subnetwork_spec = self._subnetwork_manager.build_subnetwork_spec(
             name=subnetwork_name,
             subnetwork_builder=subnetwork_builder,
@@ -336,6 +348,31 @@ class _IterationBuilder(object):
             previous_ensemble=previous_ensemble,
             params=params)
         subnetwork_specs.append(subnetwork_spec)
+        if not self._placement_strategy.should_build_ensemble(
+            num_subnetworks) and not rebuilding:
+          # Workers that don't build ensembles need a dummy candidate in order
+          # to train the subnetwork.
+          # Because only ensembles can be considered candidates, we need to
+          # convert the subnetwork into a dummy ensemble and subsequently a
+          # dummy candidate. However, this dummy candidate is never considered a
+          # true candidate during candidate evaluation and selection.
+          # TODO: Eliminate need for candidates.
+          dummy_candidate = self._candidate_builder.build_candidate(
+              # pylint: disable=protected-access
+              ensemble_spec=ensemble_builder_lib._EnsembleSpec(
+                  name=subnetwork_name,
+                  ensemble=None,
+                  architecture=None,
+                  subnetwork_builders=subnetwork_builders,
+                  predictions=subnetwork_spec.predictions,
+                  loss=subnetwork_spec.loss,
+                  adanet_loss=0.),
+              # pylint: enable=protected-access
+              training=training,
+              iteration_step=iteration_step_tensor,
+              summary=subnetwork_summary,
+              track_moving_average=False)
+          candidates.append(dummy_candidate)
         # Generate subnetwork reports.
         if mode != tf.estimator.ModeKeys.PREDICT:
           subnetwork_report = subnetwork_builder.build_subnetwork_report()
@@ -354,6 +391,9 @@ class _IterationBuilder(object):
       seen_ensemble_names = {}
       for ensembler in self._ensemblers:
         for ensemble_candidate in ensemble_candidates:
+          if not self._placement_strategy.should_build_ensemble(
+              num_subnetworks) and not rebuilding:
+            continue
           ensemble_name = "t{}_{}_{}".format(
               iteration_number, ensemble_candidate.name, ensembler.name)
           if ensemble_name in seen_ensemble_names:
@@ -439,7 +479,8 @@ class _IterationBuilder(object):
         metric_fn, kwargs = best_eval_metrics
         eval_metric_ops = metric_fn(**kwargs)
       train_op = self._create_train_op(subnetwork_specs, candidates, mode,
-                                       iteration_step, is_over_var_template)
+                                       iteration_step, is_over_var_template,
+                                       num_subnetworks)
       if self._use_tpu:
         estimator_spec = tf.contrib.tpu.TPUEstimatorSpec(
             mode=mode,
@@ -503,7 +544,7 @@ class _IterationBuilder(object):
           lambda: tf.no_op("noassign_is_over"))
 
   def _create_train_op(self, subnetwork_specs, candidates, mode, step,
-                       is_over_var_template):
+                       is_over_var_template, num_subnetworks):
     """Returns the train op for this set of candidates.
 
     This train op combines the train ops from all the candidates into a single
@@ -519,6 +560,8 @@ class _IterationBuilder(object):
       step: Integer `Variable` for the current step of the iteration, as opposed
         to the global step.
       is_over_var_template: A fn()->tf.Variable which returns the is_over_var.
+      num_subnetworks: Integer number of subnetwork builders generated for the
+        current iteration.
 
     Returns:
       A `Tensor` train op.
@@ -528,9 +571,10 @@ class _IterationBuilder(object):
       return tf.no_op()
     with tf.variable_scope("train_op"):
       train_ops = []
-      for subnetwork_spec in subnetwork_specs:
-        if subnetwork_spec.train_op is not None:
-          train_ops.append(subnetwork_spec.train_op.train_op)
+      if self._placement_strategy.should_train_subnetworks(num_subnetworks):
+        for subnetwork_spec in subnetwork_specs:
+          if subnetwork_spec.train_op is not None:
+            train_ops.append(subnetwork_spec.train_op.train_op)
       for candidate in candidates:
         if candidate.ensemble_spec.train_op is not None:
           # The train op of a previous ensemble is None even during `TRAIN`.

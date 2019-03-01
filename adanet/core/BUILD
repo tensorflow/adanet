@@ -32,6 +32,7 @@ py_library(
         ":devices",
         ":ensemble_builder",
         ":iteration",
+        ":placement",
         ":report_accessor",
         ":summary",
         ":timer",
@@ -65,7 +66,7 @@ py_test(
         ":estimator_distributed_test_runner",
     ],
     flaky = 1,
-    shard_count = 5,
+    shard_count = 10,
     srcs_version = "PY2AND3",
     deps = [
         ":estimator",
@@ -132,6 +133,8 @@ py_library(
     srcs = ["iteration.py"],
     deps = [
         ":dict_utils",
+        ":ensemble_builder",
+        ":placement",
         "//adanet/core/subnetwork",
         "@six_archive//:six",
     ],
@@ -360,6 +363,21 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":devices",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+py_library(
+    name = "placement",
+    srcs = ["placement.py"],
+)
+
+py_test(
+    name = "placement_test",
+    srcs = ["placement_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":placement",
         "@absl_py//absl/testing:parameterized",
     ],
 )

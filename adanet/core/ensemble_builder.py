@@ -708,7 +708,6 @@ class _SubnetworkManager(object):
       if "labels" in defined_args:
         build_subnetwork = functools.partial(build_subnetwork, labels=labels)
       subnetwork_scope = tf.get_variable_scope()
-      tf.logging.info("Building subnetwork '%s'", subnetwork_builder.name)
       # TODO: Restore variables after call.
       _clear_trainable_variables()
       with summary.current_scope(), _monkey_patch_context(
