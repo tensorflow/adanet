@@ -1,6 +1,7 @@
 container:
   image: python:latest
 
+
 test_task:
   env:
     TF_LATEST: 1.12.*
