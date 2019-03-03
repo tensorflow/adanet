@@ -32,6 +32,7 @@ jobs:
         command: |
           ./oss_scripts/oss_pip_install.sh
           ./oss_scripts/oss_test.sh
+
       - codecov/upload:
           file: {{ coverage_report_filepath }}
       - store_test_results:
