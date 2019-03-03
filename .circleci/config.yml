@@ -50,7 +50,6 @@ jobs:
           name: run tests
           command: |
             . venv/bin/activate
-            python manage.py test
             ./oss_scripts/oss_pip_install.sh
             ./oss_scripts/oss_test.sh
 
