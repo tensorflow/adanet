@@ -45,15 +45,15 @@ jobs:
             - ./venv
           key: v1-dependencies-{{ checksum "requirements.txt" }}
 
-      - run:
-          name: build and install adanet
-          command: |
-            ./oss_scripts/oss_pip_install.sh
+      # - run:
+      #     name: build and install adanet
+      #     command: |
 
       - run:
           name: run tests
           command: |
             . venv/bin/activate
+            ./oss_scripts/oss_pip_install.sh
             ./oss_scripts/oss_test.sh
 
       - store_artifacts:
