@@ -1,6 +1,6 @@
 version: 2.1
-orbs:
-  codecov: codecov/codecov@1.0.2
+# orbs:
+#   codecov: codecov/codecov@1.0.2
 jobs:
   build:  # required for runs that don't use workflows
     working_directory: ~/adanet
@@ -33,8 +33,9 @@ jobs:
           ./oss_scripts/oss_pip_install.sh
           ./oss_scripts/oss_test.sh
 
-      - codecov/upload:
-          file: {{ coverage_report_filepath }}
+      - run: coverage
+      # - codecov/upload:
+      #     file: {{ coverage_report_filepath }}
       - store_test_results:
           path: test-results
       - store_artifacts:
