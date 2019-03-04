@@ -6,6 +6,9 @@ version: 2
 jobs:
   default_test_job: &default_test_job
 
+    docker:
+      - image: circleci/python:3.6
+
     working_directory: ~/adanet
 
     environment:
