@@ -28,8 +28,8 @@ jobs:
       - run:
           name: install dependencies
           command: |
-            sudo pip install -r requirements.txt
             ./oss_scripts/oss_pip_install.sh
+            sudo pip install -r requirements.txt
 
       - save_cache:
           paths:
@@ -67,18 +67,18 @@ jobs:
   build_and_test_2_7_nightly:
     <<: *default_test_job
     docker:
-      - image: circleci/python:2.7
+      - image: circleci/python:2.7.14
 
     environment:
-      TF_VERSION="tf-nightly"
+      TF_VERSION: tf-nightly
 
   build_and_test_3_6_nightly:
     <<: *default_test_job
     docker:
-      - image: circleci/python:3.6
+      - image: circleci/python:3.6.4
 
     environment:
-      TF_VERSION="tf-nightly"
+      TF_VERSION: tf-nightly
 
 workflows:
   version: 2
