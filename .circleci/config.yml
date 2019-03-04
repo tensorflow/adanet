@@ -61,7 +61,7 @@ jobs:
             cd adanet
 
       - store_artifacts:
-          path: /tmp/absl_testing/*.txt
+          path: /tmp/absl_testing/**/*.txt
           destination: /tmp/absl_testing
 
   build_and_test_2_7_tf_1_9:
