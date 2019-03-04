@@ -28,12 +28,12 @@ jobs:
       - run:
           name: install dependencies
           command: |
-            pip install -r requirements.txt
+            sudo pip install -r requirements.txt
             ./oss_scripts/oss_pip_install.sh
 
       - save_cache:
           paths:
-            - ./venv
+            - /usr/local/lib/python3.6/site-packages/
           key: v1-dependencies-{{ checksum "requirements.txt" }}
 
       - run:
