@@ -1,6 +1,6 @@
 six
 numpy
-tensorflow>=1.9.*
+tensorflow==1.12.0
 nose
 rednose
 coverage

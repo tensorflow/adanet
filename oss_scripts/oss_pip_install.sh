@@ -45,7 +45,8 @@ chmod +x bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
 export PATH="$PATH:$HOME/bin"
 
 # Build adanet pip packaging script
-bazel build //adanet/pip_package:build_pip_package --local_resources 2048,.5,1.0
+bazel build -c opt //... --local_resources 2048,.5,1.0
+# bazel build //adanet/pip_package:build_pip_package --local_resources 2048,.5,1.0
 
 # Create the adanet pip package
 bazel-bin/adanet/pip_package/build_pip_package /tmp/adanet_pkg
