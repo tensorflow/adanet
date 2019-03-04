@@ -64,7 +64,71 @@ jobs:
           path: /tmp/absl_testing/*.txt
           destination: /tmp/absl_testing
 
-  build_and_test_2_7_nightly:
+  build_and_test_2_7_tf_1_9:
+    <<: *default_test_job
+    docker:
+      - image: circleci/python:2.7.14
+
+    environment:
+      TF_VERSION: "1.9.*"
+
+  build_and_test_3_6_tf_1_9:
+    <<: *default_test_job
+    docker:
+      - image: circleci/python:3.6.4
+
+    environment:
+      TF_VERSION: "1.9.*"
+
+  build_and_test_2_7_tf_1_10:
+    <<: *default_test_job
+    docker:
+      - image: circleci/python:2.7.14
+
+    environment:
+      TF_VERSION: "1.10.*"
+
+  build_and_test_3_6_tf_1_10:
+    <<: *default_test_job
+    docker:
+      - image: circleci/python:3.6.4
+
+    environment:
+      TF_VERSION: "1.10.*"
+
+  build_and_test_2_7_tf_1_11:
+    <<: *default_test_job
+    docker:
+      - image: circleci/python:2.7.14
+
+    environment:
+      TF_VERSION: "1.11.*"
+
+  build_and_test_3_6_tf_1_11:
+    <<: *default_test_job
+    docker:
+      - image: circleci/python:3.6.4
+
+    environment:
+      TF_VERSION: "1.11.*"
+
+  build_and_test_2_7_tf_1_12:
+    <<: *default_test_job
+    docker:
+      - image: circleci/python:2.7.14
+
+    environment:
+      TF_VERSION: "1.12.*"
+
+  build_and_test_3_6_tf_1_12:
+    <<: *default_test_job
+    docker:
+      - image: circleci/python:3.6.4
+
+    environment:
+      TF_VERSION: "1.12.*"
+
+  build_and_test_2_7_tf_nightly:
     <<: *default_test_job
     docker:
       - image: circleci/python:2.7.14
@@ -72,7 +136,7 @@ jobs:
     environment:
       TF_VERSION: tf-nightly
 
-  build_and_test_3_6_nightly:
+  build_and_test_3_6_tf_nightly:
     <<: *default_test_job
     docker:
       - image: circleci/python:3.6.4
@@ -84,5 +148,13 @@ workflows:
   version: 2
   build_test:
     jobs:
-      - build_and_test_2_7_nightly
-      - build_and_test_3_6_nightly
+      - build_and_test_2_7_tf_1_9
+      - build_and_test_3_6_tf_1_9
+      - build_and_test_2_7_tf_1_10
+      - build_and_test_3_6_tf_1_10
+      - build_and_test_2_7_tf_1_11
+      - build_and_test_3_6_tf_1_11
+      - build_and_test_2_7_tf_1_12
+      - build_and_test_3_6_tf_1_12
+      - build_and_test_2_7_tf_nightly
+      - build_and_test_3_6_tf_nightly
