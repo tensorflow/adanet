@@ -8,7 +8,7 @@ jobs:
     docker:
       - image: circleci/python:3.6.4
 
-    working_directory: ~/repo
+    working_directory: ~/adanet
 
     environment:
       TF_LATEST: "1.12.*"
@@ -46,49 +46,20 @@ jobs:
           command: coverage
           when: on_success
 
+      - run:
+          name: test pip install adanet
+          command: |
+            # Create the adanet pip package
+            bazel-bin/adanet/pip_package/build_pip_package /tmp/adanet_pkg
+
+            # Install and test the pip package
+            pip install /tmp/adanet_pkg/*.whl --user
+
+            # Finally try importing `adanet` in Python outside the cloned directory:
+            cd ..
+            python -c "import adanet"
+            cd adanet
+
       - store_artifacts:
           path: /tmp/absl_testing/*.txt
           destination: /tmp/absl_testing
-# version: 2.1
-# # orbs:
-# #   codecov: codecov/codecov@1.0.2
-# jobs:
-#   build:  # required for runs that don't use workflows
-#     working_directory: ~/adanet
-#     docker:
-#       - image: circleci/python:3.6.4  # primary container for the build job
-#         environment:
-#           TF_LATEST="1.12.*"
-#           CODECOV_TOKEN="0d2c482b-f42c-4d4c-b092-cb628ad20857"
-#           TF_VERSION="tf-nightly"
-
-#     steps:
-#       - checkout  # checkout source code to working directory
-#       - run: sudo chown -R circleci:circleci /usr/local/bin
-#       - run: sudo chown -R circleci:circleci /usr/local/lib/python3.6/site-packages
-#       - restore_cache:  # ensure this step occurs *before* installing dependencies
-#           key: deps9-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
-#       - run:
-#           command: |
-#             sudo pip install pipenv
-#             sudo pip install codecov
-#             pipenv install
-#       - save_cache:
-#           key: deps9-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
-#           paths:
-#             - ".venv"
-#             - "/usr/local/bin"
-#             - "/usr/local/lib/python3.6/site-packages"
-#       - run:
-#         command: |
-#           ./oss_scripts/oss_pip_install.sh
-#           ./oss_scripts/oss_test.sh
-
-#       - run: coverage
-#       # - codecov/upload:
-#       #     file: {{ coverage_report_filepath }}
-#       - store_test_results:
-#           path: test-results
-#       - store_artifacts:
-#           path: test-results
-#           destination: tr1
