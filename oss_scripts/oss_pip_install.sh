@@ -23,9 +23,9 @@ BAZEL_VERSION=0.20.0
 
 if [[ "$TF_VERSION" == "tf-nightly"  ]]
 then
-  sudo pip install tf-nightly;
+  pip install tf-nightly;
 else
-  sudo pip install -q "tensorflow==$TF_VERSION"
+  pip install -q "tensorflow==$TF_VERSION"
 fi
 
 # Make sure we have the latest version of numpy - avoid problems we were
@@ -34,7 +34,7 @@ fi
 
 # Install Bazel for tests.
 # Step 1: Install required packages
-sudo apt-get install pkg-config zip g++ zlib1g-dev unzip python
+apt-get install pkg-config zip g++ zlib1g-dev unzip python
 
 # Step 2: Download Bazel binary installer
 wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
