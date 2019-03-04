@@ -1,0 +1,16 @@
+container:
+  image: python:latest
+
+test_task:
+  env:
+    TF_LATEST: "1.12.*"
+    CODECOV_TOKEN: 0d2c482b-f42c-4d4c-b092-cb628ad20857
+    TF_VERSION: tf-nightly
+  pip_cache:
+    folder: ~/.cache/pip
+    fingerprint_script: echo $PYTHON_VERSION && cat requirements.txt
+    populate_script: |
+      ./oss_scripts/oss_pip_install.sh
+      sudo pip install -r requirements.txt
+  env_script: echo 'export PATH="$HOME/bin:$PATH"' >> $BASH_ENV
+  test_script: nosetests
