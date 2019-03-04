@@ -42,7 +42,6 @@ wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/baze
 # Step 3: Install Bazel
 chmod +x bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
 ./bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh --user
-export PATH="$PATH:$HOME/bin"
 
 # Build adanet pip packaging script
 bazel build -c opt //... --local_resources 2048,.5,1.0

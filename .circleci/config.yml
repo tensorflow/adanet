@@ -18,6 +18,11 @@ jobs:
     steps:
       - checkout
 
+      - run:
+          name: setup environment variables
+          command: |
+            echo 'export PATH="$HOME/bin:$PATH"' >> $BASH_ENV
+
       # Download and cache dependencies
       - restore_cache:
           keys:
@@ -43,7 +48,9 @@ jobs:
 
       - run:
           name: upload coverage
-          command: coverage
+          command: |
+            sudo pip install codecov
+            codecov
           when: on_success
 
       - run:
