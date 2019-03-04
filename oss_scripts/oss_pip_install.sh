@@ -47,7 +47,7 @@ export PATH="$PATH:$HOME/bin"
 # Build adanet pip packaging script
 bazel build -c opt //... --local_resources 2048,.5,1.0
 
-cp -R bazel-bin/adanet/core/estimator_distributed_test_runner* adanet/core
+# cp -R bazel-bin/adanet/core/estimator_distributed_test_runner* adanet/core
 cp bazel-genfiles/adanet/core/architecture_pb2.py adanet/core
 cp bazel-genfiles/adanet/core/report_pb2.py adanet/core
 
