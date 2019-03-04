@@ -4,16 +4,13 @@
 #
 version: 2
 jobs:
-  build:
-    docker:
-      - image: circleci/python:3.6.4
+  default_test_job: &default_test_job
 
     working_directory: ~/adanet
 
     environment:
       TF_LATEST: "1.12.*"
       CODECOV_TOKEN: 0d2c482b-f42c-4d4c-b092-cb628ad20857
-      TF_VERSION: tf-nightly
 
     steps:
       - checkout
@@ -63,3 +60,24 @@ jobs:
       - store_artifacts:
           path: /tmp/absl_testing/*.txt
           destination: /tmp/absl_testing
+
+  build_and_test_2_7_nightly:
+    <<: *default_test_job
+    docker:
+      - image: circleci/python:2.7
+
+    environment:
+      TF_VERSION="tf-nightly"
+
+  build_and_test_3_6_nightly:
+    <<: *default_test_job
+    docker:
+      - image: circleci/python:3.6
+
+    environment:
+      TF_VERSION="tf-nightly"
+
+# workflows:
+#   version: 2
+#   build_test:
+#     jobs:

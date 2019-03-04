@@ -21,12 +21,12 @@ BAZEL_VERSION=0.20.0
 
 : "${TF_VERSION:?}"
 
-# if [[ "$TF_VERSION" == "tf-nightly"  ]]
-# then
-#   pip install tf-nightly;
-# else
-#   pip install -q "tensorflow==$TF_VERSION"
-# fi
+if [[ "$TF_VERSION" == "tf-nightly"  ]]
+then
+  sudo pip install tf-nightly;
+else
+  sudo pip install -q "tensorflow==$TF_VERSION"
+fi
 
 # Make sure we have the latest version of numpy - avoid problems we were
 # seeing with Python 3
