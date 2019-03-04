@@ -12,5 +12,7 @@ test_task:
     fingerprint_script: echo $PYTHON_VERSION && cat requirements.txt
     populate_script: |
       pip install -r requirements.txt
+  deps_script: |
+    apt-get install -y sudo
   install_script: ./oss_scripts/oss_pip_install.sh
   test_script: nosetests
