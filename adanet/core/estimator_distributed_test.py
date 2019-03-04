@@ -62,7 +62,7 @@ def _create_task_process(task_type, task_index, estimator_type,
   """
 
   process_name = "%s_%s" % (task_type, task_index)
-  runner_binary = "bazel-bin/adanet/core/estimator_distributed_test_runner"
+  runner_binary = "adanet/core/estimator_distributed_test_runner"
   args = [os.path.join(tf.flags.FLAGS.test_srcdir, runner_binary)]
   args.append("--estimator_type={}".format(estimator_type))
   args.append("--placement_strategy={}".format(placement_strategy))
