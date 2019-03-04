@@ -46,7 +46,6 @@ export PATH="$PATH:$HOME/bin"
 
 # Build adanet pip packaging script
 bazel build -c opt //... --local_resources 2048,.5,1.0
-# bazel build //adanet/pip_package:build_pip_package --local_resources 2048,.5,1.0
 
 cp -R bazel-bin/adanet/core/estimator_distributed_test_runner* adanet/core
 cp bazel-genfiles/adanet/core/architecture_pb2.py adanet/core
@@ -56,7 +55,7 @@ cp bazel-genfiles/adanet/core/report_pb2.py adanet/core
 bazel-bin/adanet/pip_package/build_pip_package /tmp/adanet_pkg
 
 # Install and test the pip package
-pip install /tmp/adanet_pkg/*.whl
+pip install /tmp/adanet_pkg/*.whl --user
 
 
 # Finally try importing `adanet` in Python outside the cloned directory:

@@ -6,16 +6,10 @@ version: 2
 jobs:
   build:
     docker:
-      # specify the version you desire here
-      # use `-browsers` prefix for selenium tests, e.g. `3.6.1-browsers`
-      - image: circleci/python:3.6.1
-
-      # Specify service dependencies here if necessary
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
-      # - image: circleci/postgres:9.4
+      - image: circleci/python:3.6.4
 
     working_directory: ~/repo
+
     environment:
       TF_LATEST: "1.12.*"
       CODECOV_TOKEN: 0d2c482b-f42c-4d4c-b092-cb628ad20857
@@ -34,30 +28,26 @@ jobs:
       - run:
           name: install dependencies
           command: |
-            python3 -m venv venv
-            . venv/bin/activate
             pip install -r requirements.txt
-            pip install pipenv
-            pip install codecov
+            ./oss_scripts/oss_pip_install.sh
 
       - save_cache:
           paths:
             - ./venv
           key: v1-dependencies-{{ checksum "requirements.txt" }}
 
-      # - run:
-      #     name: build and install adanet
-      #     command: |
-
       - run:
           name: run tests
           command: |
-            . venv/bin/activate
-            ./oss_scripts/oss_pip_install.sh
-            ./oss_scripts/oss_test.sh
+            nosetests
+
+      - run:
+          name: upload coverage
+          command: coverage
+          when: on_success
 
       - store_artifacts:
-          path: /tmp/absl_testing
+          path: /tmp/absl_testing/*.txt
           destination: /tmp/absl_testing
 # version: 2.1
 # # orbs:
