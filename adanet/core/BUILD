@@ -29,13 +29,12 @@ py_library(
     deps = [
         ":architecture",
         ":candidate",
-        ":devices",
         ":ensemble_builder",
         ":iteration",
-        ":placement",
         ":report_accessor",
         ":summary",
         ":timer",
+        "//adanet/core/distributed",
         "//adanet/core/ensemble",
         "@six_archive//:six",
     ],
@@ -84,6 +83,7 @@ py_binary(
     deps = [
         ":estimator",
         "//adanet/autoensemble",
+        "//adanet/core/distributed",
         "//adanet/core/subnetwork",
     ],
 )
@@ -134,7 +134,7 @@ py_library(
     deps = [
         ":dict_utils",
         ":ensemble_builder",
-        ":placement",
+        "//adanet/core/distributed",
         "//adanet/core/subnetwork",
         "@six_archive//:six",
     ],
@@ -348,36 +348,4 @@ py_proto_library(
     srcs = ["architecture.proto"],
     default_runtime = "@com_google_protobuf//:protobuf_python",
     protoc = "@com_google_protobuf//:protoc",
-)
-
-py_library(
-    name = "devices",
-    srcs = ["devices.py"],
-    deps = [
-    ],
-)
-
-py_test(
-    name = "devices_test",
-    srcs = ["devices_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":devices",
-        "@absl_py//absl/testing:parameterized",
-    ],
-)
-
-py_library(
-    name = "placement",
-    srcs = ["placement.py"],
-)
-
-py_test(
-    name = "placement_test",
-    srcs = ["placement_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":placement",
-        "@absl_py//absl/testing:parameterized",
-    ],
 )

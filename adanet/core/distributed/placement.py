@@ -19,11 +19,33 @@ from __future__ import print_function
 
 import abc
 
+import tensorflow as tf
+
 
 class PlacementStrategy(object):
   """Abstract placement strategy for distributed training."""
 
   __metaclass__ = abc.ABCMeta
+
+  @property
+  def config(self):
+    """Returns this strategy's configuration.
+
+    Returns:
+      The `tf.estimator.RunConfig` instance that defines the cluster.
+    """
+
+    return self._config
+
+  @config.setter
+  def config(self, config):
+    """Configures the placement strategy with the given cluster description.
+
+    Args:
+      config: A `tf.estimator.RunConfig` instance that defines the cluster.
+    """
+
+    self._config = config
 
   @abc.abstractmethod
   def should_build_ensemble(self, num_subnetworks):
@@ -124,8 +146,15 @@ class RoundRobinStrategy(PlacementStrategy):
   except for the chief to initialize the ensemble's non-trainable variables.
 
   Args:
-    num_workers: Integer number of worker replicas in the cluster.
-    worker_index: Index of the current worker in the cluster.
+    drop_remainder: Bool whether to drop remaining subnetworks that haven't been
+      assigned to a worker in the remainder after perfect division of workers by
+      the current iteration's num_subnetworks+1. When True, each subnetwork
+      worker will only train a single subnetwork, and subnetworks that have not
+      been assigned to assigned to a worker are dropped. NOTE: This can result
+      in subnetworks not being assigned to any worker when
+      num_workers < num_subnetworks + 1. When False, remaining subnetworks
+      during the round-robin assignment will be placed on workers that already
+      have a subnetwork.
 
   Returns:
     A :class:`RoundRobinStrategy` instance for the current cluster.
@@ -175,11 +204,28 @@ class RoundRobinStrategy(PlacementStrategy):
   #
   #   return subnetwork_index in self._worker_tasks(...)
 
-  def __init__(self, num_workers, worker_index):
-    self._num_workers = num_workers
-    self._worker_index = worker_index
+  def __init__(self, drop_remainder=False):
+    self._drop_remainder = drop_remainder
+
+  @property
+  def _num_workers(self):
+    return self.config.num_worker_replicas
+
+  @property
+  def _worker_index(self):
+    return self.config.global_id_in_cluster or 0
 
   def _worker_task(self, num_subnetworks):
+    """Returns the worker index modulo the number of subnetworks."""
+
+    if self._drop_remainder and self._num_workers > 1 and (num_subnetworks >
+                                                           self._num_workers):
+      tf.logging.log_first_n(
+          tf.logging.WARN,
+          "With drop_remainer=True, {} workers and {} subnetworks, the last {} "
+          "subnetworks will be dropped and will not be trained",
+          self._num_workers, num_subnetworks,
+          num_subnetworks - self._num_workers - 1)
     # The first worker will always build the ensemble so we add 1.
     return self._worker_index % (num_subnetworks + 1)
 
@@ -198,6 +244,10 @@ class RoundRobinStrategy(PlacementStrategy):
       # The zeroth index worker is an ensemble worker.
       return True
 
+    subnetwork_worker_index = worker_task - 1
+    if self._drop_remainder:
+      return subnetwork_worker_index == subnetwork_index
+
     workers_per_subnetwork = self._num_workers // (num_subnetworks + 1)
     if self._num_workers % (num_subnetworks + 1) == 0:
       num_subnetwork_workers = num_subnetworks
@@ -205,7 +255,6 @@ class RoundRobinStrategy(PlacementStrategy):
       num_subnetwork_workers = self._num_workers % (num_subnetworks + 1) - 1
     else:
       num_subnetwork_workers = num_subnetworks
-    subnetwork_worker_index = worker_task - 1
     return subnetwork_worker_index == subnetwork_index % num_subnetwork_workers
 
   def should_train_subnetworks(self, num_subnetworks):

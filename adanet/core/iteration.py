@@ -22,8 +22,8 @@ from __future__ import print_function
 import collections
 
 from adanet.core import dict_utils
+from adanet.core import distributed
 from adanet.core import ensemble_builder as ensemble_builder_lib
-from adanet.core import placement
 from adanet.core import subnetwork
 
 import numpy as np
@@ -128,7 +128,7 @@ class _IterationBuilder(object):
                ensemble_builder,
                ensemblers,
                summary_maker,
-               placement_strategy=placement.ReplicationStrategy(),
+               placement_strategy=distributed.ReplicationStrategy(),
                replicate_ensemble_in_training=False,
                use_tpu=False,
                debug=False):
@@ -455,6 +455,9 @@ class _IterationBuilder(object):
 
       training_chief_hooks, training_hooks = (), ()
       for subnetwork_spec in subnetwork_specs:
+        if not self._placement_strategy.should_train_subnetworks(
+            num_subnetworks) and not rebuilding:
+          continue
         if not subnetwork_spec.train_op:
           continue
         training_chief_hooks += subnetwork_spec.train_op.chief_hooks or ()

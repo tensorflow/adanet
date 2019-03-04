@@ -26,14 +26,13 @@ import time
 
 from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _CandidateBuilder
-from adanet.core.devices import monkey_patch_default_variable_placement_strategy
+from adanet.core.distributed import ReplicationStrategy
+from adanet.core.distributed.devices import monkey_patch_default_variable_placement_strategy
 from adanet.core.ensemble import ComplexityRegularizedEnsembler
 from adanet.core.ensemble import GrowStrategy
 from adanet.core.ensemble_builder import _EnsembleBuilder
 from adanet.core.ensemble_builder import _SubnetworkManager
 from adanet.core.iteration import _IterationBuilder
-from adanet.core.placement import ReplicationStrategy
-from adanet.core.placement import RoundRobinStrategy
 from adanet.core.report_accessor import _ReportAccessor
 from adanet.core.summary import _ScopedSummary
 from adanet.core.summary import _TPUScopedSummary
@@ -369,12 +368,12 @@ class Estimator(tf.estimator.Estimator):
       del kwargs[key]
 
     # Experimental feature.
-    round_robin_placement_arg = "experimental_round_robin_placement_strategy"
-    round_robin_placement = kwargs.pop(round_robin_placement_arg, None)
-    if round_robin_placement:
+    placement_strategy_arg = "experimental_placement_strategy"
+    placement_strategy = kwargs.pop(placement_strategy_arg, None)
+    if placement_strategy:
       tf.logging.warning(
           "%s is an experimental feature. Its behavior is not guaranteed "
-          "to be backwards compatible.", round_robin_placement_arg)
+          "to be backwards compatible.", placement_strategy_arg)
 
     # Monkey patch the default variable placement strategy that Estimator uses
     # since it does not support workers having different graphs from the chief.
@@ -413,10 +412,9 @@ class Estimator(tf.estimator.Estimator):
         adanet_loss_decay=self._adanet_loss_decay)
     subnetwork_manager = _SubnetworkManager(
         head=head, metric_fn=metric_fn, use_tpu=self._use_tpu)
-    placement_strategy = ReplicationStrategy()
-    if round_robin_placement:
-      placement_strategy = RoundRobinStrategy(self.config.num_worker_replicas,
-                                              self.config.global_id_in_cluster)
+    if not placement_strategy:
+      placement_strategy = ReplicationStrategy()
+    placement_strategy.config = self.config
     self._iteration_builder = _IterationBuilder(
         candidate_builder,
         subnetwork_manager,
