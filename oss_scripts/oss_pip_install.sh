@@ -58,6 +58,7 @@ cp bazel-genfiles/adanet/core/architecture_pb2.py adanet/core
 cp bazel-genfiles/adanet/core/report_pb2.py adanet/core
 
 # Finally try importing `adanet` in Python outside the cloned directory:
-cd ..
-python -c "import adanet"
-cd adanet
+pwd
+# cd ..
+# python -c "import adanet"
+# cd adanet
