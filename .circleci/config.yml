@@ -57,8 +57,8 @@ jobs:
             ./oss_scripts/oss_test.sh
 
       - store_artifacts:
-          path: test-reports
-          destination: test-reports
+          path: /tmp/absl_testing
+          destination: /tmp/absl_testing
 # version: 2.1
 # # orbs:
 # #   codecov: codecov/codecov@1.0.2

@@ -24,11 +24,11 @@ set -e  # fail and exit on any command erroring
 # pip install nose rednose
 
 # Build with Bazel.
-# bazel build -c opt //...
 
 # Copy Bazel generated code for report proto.
 cp bazel-genfiles/adanet/core/architecture_pb2.py adanet/core
 cp bazel-genfiles/adanet/core/report_pb2.py adanet/core
+cp bazel-bin/adanet/core/estimator_distributed_test adanet/core
 
 # Run test suite and collect coverage (see setup.cfg in root).
 nosetests
