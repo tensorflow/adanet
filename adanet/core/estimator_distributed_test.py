@@ -92,7 +92,7 @@ def _create_task_process(task_type, task_index, estimator_type,
 def _pick_unused_port():
   """Returns a free port on localhost."""
 
-  for family in (socket.AF_INET6, socket.AF_INET):
+  for family in [socket.AF_INET]:
     try:
       sock = socket.socket(family, socket.SOCK_STREAM)
       sock.bind(("", 0))  # Passing port '0' binds to a free port on localhost.
