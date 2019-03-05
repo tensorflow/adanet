@@ -7,7 +7,7 @@ test_task:
     TF_LATEST: "1.12.*"
     CODECOV_TOKEN: 0d2c482b-f42c-4d4c-b092-cb628ad20857
     TF_VERSION: tf-nightly
-    # PATH: $HOME/bin:$PATH
+    PATH: $HOME/bin:$PATH
   pip_cache:
     folder: ~/.cache/pip
     fingerprint_script: echo $PYTHON_VERSION && cat requirements.txt
