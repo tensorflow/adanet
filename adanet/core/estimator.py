@@ -559,7 +559,7 @@ class Estimator(tf.estimator.Estimator):
 
         # Stagger starting workers to prevent training instability.
         # Mimics behavior of tf.estimator.train_and_evaluate.
-        if self.config.task_type == "worker":
+        if not self.config.is_chief and self.config.task_type == "worker":
           task_id = self.config.task_id or 0
           # Stagger each worker up to 60 secs.
           delay_secs = min(self._max_worker_delay_secs,
@@ -601,7 +601,12 @@ class Estimator(tf.estimator.Estimator):
       tf.set_random_seed(self.config.tf_random_seed)
       # Create global step before calling model_fn as does superclass.
       tf.train.get_or_create_global_step()
-      features, labels = input_fn()
+      inputs = input_fn()
+      # TODO: Consider tensorflow_estimator/python/estimator/util.py.
+      if isinstance(inputs, tf.data.Dataset):
+        features, labels = inputs.make_one_shot_iterator().get_next()
+      else:
+        features, labels = inputs
       self._adanet_model_fn(features, labels, mode, params)
 
   def _prepare_next_iteration(self, train_input_fn):
