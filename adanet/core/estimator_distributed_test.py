@@ -241,8 +241,8 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
     # Inspired by `tf.test.create_local_cluster`.
     worker_ports = [_pick_unused_port() for _ in range(num_workers)]
     ps_ports = [_pick_unused_port() for _ in range(num_ps)]
-    ws_targets = ["localhost:%s" % port for port in worker_ports]
-    ps_targets = ["localhost:%s" % port for port in ps_ports]
+    ws_targets = ["127.0.0.1:%s" % port for port in worker_ports]
+    ps_targets = ["127.0.0.1:%s" % port for port in ps_ports]
 
     # For details see:
     # https://www.tensorflow.org/api_docs/python/tf/estimator/train_and_evaluate
