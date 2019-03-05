@@ -30,6 +30,7 @@ addons:
     update: true
 install:
   - pip install -r requirements.txt
+  - pip install numpy --upgrade
   - ./oss_scripts/oss_pip_install.sh
 script:
   - nosetests
@@ -37,3 +38,5 @@ after_success:
   # Install codecov for tracking coverage over time.
   - pip install codecov
   - codecov
+after_failure:
+  - cat /tmp/absl_testing/**/*.txt
