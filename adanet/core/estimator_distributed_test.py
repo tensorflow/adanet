@@ -205,18 +205,18 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
           #     "num_workers": 2,
           #     "num_ps": 1,
           # },
-          {
-              "testcase_name": "{}_three_workers_three_ps".format(placement),
-              "placement_strategy": placement,
-              "num_workers": 3,
-              "num_ps": 3,
-          },
           # {
-          #     "testcase_name": "{}_five_workers_three_ps".format(placement),
+          #     "testcase_name": "{}_three_workers_three_ps".format(placement),
           #     "placement_strategy": placement,
-          #     "num_workers": 5,
+          #     "num_workers": 3,
           #     "num_ps": 3,
           # },
+          {
+              "testcase_name": "{}_five_workers_three_ps".format(placement),
+              "placement_strategy": placement,
+              "num_workers": 5,
+              "num_ps": 3,
+          },
           # {
           #     "testcase_name":
           #         "autoensemble_{}_five_workers_three_ps".format(placement),
