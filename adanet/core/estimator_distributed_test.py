@@ -92,13 +92,13 @@ def _create_task_process(task_type, task_index, estimator_type,
 def _pick_unused_port():
   """Returns a free port on localhost."""
 
-  for family in (socket.AF_INET6, socket.AF_INET):
+  for host, family in (("0.0.0.0", socket.AF_INET), ("::1", socket.AF_INET6)):
     try:
       sock = socket.socket(family, socket.SOCK_STREAM)
       sock.bind(("", 0))  # Passing port '0' binds to a free port on localhost.
       port = sock.getsockname()[1]
       sock.close()
-      return port
+      return "{}:{}".format(host, port)
     except socket.error:
       continue
   raise socket.error
@@ -239,10 +239,10 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
     """Uses multiprocessing to simulate a distributed training environment."""
 
     # Inspired by `tf.test.create_local_cluster`.
-    worker_ports = [_pick_unused_port() for _ in range(num_workers)]
-    ps_ports = [_pick_unused_port() for _ in range(num_ps)]
-    ws_targets = ["localhost:%s" % port for port in worker_ports]
-    ps_targets = ["localhost:%s" % port for port in ps_ports]
+    ws_targets = [_pick_unused_port() for _ in range(num_workers)]
+    ps_targets = [_pick_unused_port() for _ in range(num_ps)]
+    # ws_targets = ["0.0.0.0:%s" % port for port in worker_ports]
+    # ps_targets = ["0.0.0.0:%s" % port for port in ps_ports]
 
     # For details see:
     # https://www.tensorflow.org/api_docs/python/tf/estimator/train_and_evaluate
