@@ -323,9 +323,6 @@ py_test(
 py_library(
     name = "architecture",
     srcs = ["architecture.py"],
-    deps = [
-        ":architecture_pb2",
-    ],
 )
 
 py_test(
@@ -336,16 +333,4 @@ py_test(
         ":architecture",
         "@absl_py//absl/testing:parameterized",
     ],
-)
-
-proto_library(
-    name = "architecture_proto",
-    srcs = ["architecture.proto"],
-)
-
-py_proto_library(
-    name = "architecture_pb2",
-    srcs = ["architecture.proto"],
-    default_runtime = "@com_google_protobuf//:protobuf_python",
-    protoc = "@com_google_protobuf//:protoc",
 )

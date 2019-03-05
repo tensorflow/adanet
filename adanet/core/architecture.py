@@ -17,7 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.core import architecture_pb2 as arch_proto
+import json
 
 
 class _Architecture(object):
@@ -77,12 +77,14 @@ class _Architecture(object):
   def serialize(self):
     """Returns a string serialization of this object."""
 
-    ensemble_arch_pb = arch_proto.Ensemble()
+    ensemble_arch = {"subnetworks": []}
     for iteration_number, builder_name in self._subnets:
-      subnetwork_arch_pb = ensemble_arch_pb.subnetworks.add()
-      subnetwork_arch_pb.iteration_number = iteration_number
-      subnetwork_arch_pb.builder_name = builder_name
-    return ensemble_arch_pb.SerializeToString()
+      subnetwork_arch = {
+          "iteration_number": int(iteration_number),
+          "builder_name": builder_name,
+      }
+      ensemble_arch["subnetworks"].append(subnetwork_arch)
+    return json.dumps(ensemble_arch, sort_keys=True)
 
   @staticmethod
   def deserialize(serialized_architecture):
@@ -96,9 +98,9 @@ class _Architecture(object):
       A deserialized `_Architecture` instance.
     """
 
-    ensemble_arch_pb = arch_proto.Ensemble()
-    ensemble_arch_pb.ParseFromString(serialized_architecture)
+    ensemble_arch = json.loads(serialized_architecture)
     architecture = _Architecture()
-    for subnet in ensemble_arch_pb.subnetworks:
-      architecture.add_subnetwork(subnet.iteration_number, subnet.builder_name)
+    for subnet in ensemble_arch["subnetworks"]:
+      architecture.add_subnetwork(subnet["iteration_number"],
+                                  subnet["builder_name"])
     return architecture

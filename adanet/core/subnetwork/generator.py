@@ -163,7 +163,13 @@ class Builder(object):
 
   @abc.abstractproperty
   def name(self):
-    """Returns the unique name of this subnetwork within an iteration."""
+    r"""Returns the unique name of this subnetwork within an iteration.
+
+    TODO: Validate name matches ^[A-Za-z0-9_.\\-/]*$
+
+    Returns:
+      String name of this subnetwork.
+    """
 
   @abc.abstractmethod
   def build_subnetwork(self,

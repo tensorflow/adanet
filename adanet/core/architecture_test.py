@@ -81,7 +81,9 @@ class ArchitectureTest(parameterized.TestCase, tf.test.TestCase):
                      arch.subnetworks_grouped_by_iteration)
     serialized = arch.serialize()
     self.assertEqual(
-        b"\n\x08\x12\x06linear\n\x05\x12\x03dnn\n\x07\x08\x01\x12\x03dnn",
+        '{"subnetworks": [{"builder_name": "linear", "iteration_number": 0}, '
+        '{"builder_name": "dnn", "iteration_number": 0}, '
+        '{"builder_name": "dnn", "iteration_number": 1}]}',
         serialized)
     deserialized_arch = _Architecture.deserialize(serialized)
     self.assertEqual(arch.subnetworks_grouped_by_iteration,

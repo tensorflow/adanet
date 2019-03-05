@@ -653,7 +653,7 @@ class Estimator(tf.estimator.Estimator):
     """Returns the filename of the given iteration's frozen graph."""
 
     frozen_checkpoint = os.path.join(self.model_dir, "architecture")
-    return "{}-{}.pb".format(frozen_checkpoint, iteration_number)
+    return "{}-{}.json".format(frozen_checkpoint, iteration_number)
 
   def _overwrite_checkpoint(self, current_iteration, iteration_number_tensor,
                             restore_saver):
