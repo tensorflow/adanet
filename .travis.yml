@@ -43,9 +43,8 @@ script:
   - cat /etc/hosts
   - ping localhost -c 3
   - nosetests adanet/core/estimator_distributed_test.py
+  - cat /tmp/absl_testing/**/*.txt
 after_success:
   # Install codecov for tracking coverage over time.
   - pip install codecov
   - codecov
-after_failure:
-  - cat /tmp/absl_testing/**/*.txt
