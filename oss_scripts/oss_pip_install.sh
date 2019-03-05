@@ -35,7 +35,7 @@ fi
 # Install Bazel for tests.
 # Step 1: Install required packages
 apt-get update
-apt-get install pkg-config zip g++ zlib1g-dev unzip python
+apt-get install pkg-config zip g++ zlib1g-dev unzip python -y
 
 # Step 2: Download Bazel binary installer
 wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
