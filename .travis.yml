@@ -10,6 +10,7 @@ env:
   global:
     - TF_LATEST="1.12.*"
     - CODECOV_TOKEN="0d2c482b-f42c-4d4c-b092-cb628ad20857"
+    - BAZEL_VERSION=0.20.0
   matrix:
     # We test against recent versions of TensorFlow and tf-nightly.
     # If updating, also update TF_LATEST above
@@ -19,11 +20,20 @@ env:
     - TF_VERSION="1.11.*"
     - TF_VERSION="1.12.*"
     - TF_VERSION="tf-nightly"
+before_install:
+  - sudo apt-get -y install pkg-config zip g++ zlib1g-dev unzip
+  - wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
+  - chmod +x bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
+  - ./bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh --user
+addons:
+  apt:
+    update: true
 install:
-  # Install codecov for tracking coverage over time.
-  - pip install codecov
+  - pip install -r requirements.txt
   - ./oss_scripts/oss_pip_install.sh
 script:
-  - ./oss_scripts/oss_test.sh
+  - nosetests
 after_success:
+  # Install codecov for tracking coverage over time.
+  - pip install codecov
   - codecov
