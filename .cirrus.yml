@@ -1,8 +1,8 @@
 container:
   image: python:latest
-  additional_containers:
-    - name: bazel
-      image: l.gcr.io/google/bazel:0.20.0
+  # additional_containers:
+  #   - name: bazel
+  #     image: l.gcr.io/google/bazel:0.20.0
 
 test_task:
   env:
@@ -15,5 +15,8 @@ test_task:
     fingerprint_script: echo $PYTHON_VERSION && cat requirements.txt
     populate_script: |
       pip install -r requirements.txt
-  install_script: ./oss_scripts/oss_pip_install.sh
+
+  install_script: |
+    apt-get update
+    ./oss_scripts/oss_pip_install.sh
   test_script: nosetests
