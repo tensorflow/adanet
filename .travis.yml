@@ -25,6 +25,9 @@ before_install:
   - wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
   - chmod +x bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
   - ./bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh --user
+  - sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+  - sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+  - ip addr # for confirmation. can be skipped
 addons:
   apt:
     update: true
