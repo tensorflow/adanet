@@ -65,7 +65,7 @@ def copy_update(hparams, **kwargs):
   values = hparams.values()
   values.update(kwargs)
   values = copy.deepcopy(values)
-  hp = tf.HParams(**values)
+  hp = tf.contrib.training.HParams(**values)
   return hp
 
 

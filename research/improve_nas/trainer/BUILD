@@ -6,6 +6,7 @@ py_binary(
     deps = [
         ":adanet_improve_nas",
         ":cifar10",
+        ":fake_data",
         "@absl_py//absl/flags",
     ],
 )
@@ -20,6 +21,17 @@ py_library(
     ],
 )
 
+py_test(
+    name = "improve_nas_test",
+    srcs = ["improve_nas_test.py"],
+    deps = [
+        ":fake_data",
+        ":improve_nas",
+        "//adanet",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)
+
 py_library(
     name = "adanet_improve_nas",
     srcs = ["adanet_improve_nas.py"],
@@ -27,6 +39,17 @@ py_library(
         ":improve_nas",
         ":optimizer",
         "//adanet",
+    ],
+)
+
+py_test(
+    name = "adanet_improve_nas_test",
+    srcs = ["adanet_improve_nas_test.py"],
+    deps = [
+        ":adanet_improve_nas",
+        ":fake_data",
+        "//adanet",
+        "@absl_py//absl/testing:parameterized",
     ],
 )
 
@@ -45,6 +68,21 @@ py_library(
     srcs = ["cifar10.py"],
     deps = [
         ":image_processing",
+    ],
+)
+
+py_test(
+    name = "cifar10_test",
+    srcs = ["cifar10_test.py"],
+    deps = [
+        ":cifar10",
+    ],
+)
+
+py_library(
+    name = "fake_data",
+    srcs = ["fake_data.py"],
+    deps = [
     ],
 )
 

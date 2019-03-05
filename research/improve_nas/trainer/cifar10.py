@@ -14,7 +14,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -22,14 +21,13 @@ from __future__ import print_function
 import functools
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.datasets import cifar10
 
-cifar10 = None
 # pylint: disable=g-import-not-at-top
 try:
   from adanet.research.improve_nas.trainer import image_processing
 except ImportError as e:
   from trainer import image_processing
-  from tensorflow.keras.datasets import cifar10
 # pylint: enable=g-import-not-at-top
 
 FEATURES = 'x'
@@ -41,12 +39,10 @@ class Provider(object):
 
   def __init__(self,
                params_string='',
-               seed=None,
-               parallel_threads=4):
+               seed=None):
     """Returns a CIFAR-10 `Provider`."""
     # For testing
     self._seed = seed
-    self._parallel_threads = parallel_threads
     default_params = tf.contrib.training.HParams(
         cutout=True, augmentation=PreprocessingType.BASIC)
     self._params = default_params.parse(params_string)
@@ -82,8 +78,20 @@ class Provider(object):
 
   def _cifar10_dataset(self, partition):
     """Returns a partition of the CIFAR-10 `Dataset`."""
-
-    (x_train, y_train), (x_test, y_test) = cifar10.load_data()
+    cifar10_data = None
+    try:
+      cifar10_data = cifar10.load_data()
+      tf.logging.info('Loaded cifar10.')
+    except:  # pylint: disable=bare-except
+      tf.logging.info(
+          'Can not load cifar10 from internet. Creating dummy data for '
+          'testing.')
+      data = np.zeros((3, 32, 32, 3))
+      labels = np.array([[5], [3], [9]])
+      data[:, 0, 0] = [148, 141, 174]
+      data[:, -1, 0, 0] = 128
+      cifar10_data = ((data, labels), (data, labels))
+    (x_train, y_train), (x_test, y_test) = cifar10_data
     x = None
     y = None
     if partition == 'train':
