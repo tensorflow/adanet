@@ -24,6 +24,7 @@ env:
 before_install:
   - cat /etc/hosts
   - echo "127.0.0.1 localhost" | sudo tee -a /etc/hosts
+  - echo "::1 localhost ip6-localhost ip6-loopback" | sudo tee -a /etc/hosts
   - cat /etc/hosts
   - sudo apt-get -y install pkg-config zip g++ zlib1g-dev unzip
   - wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
