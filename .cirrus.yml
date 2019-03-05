@@ -1,6 +1,7 @@
 container:
   image: python:latest
-  image: l.gcr.io/google/bazel:0.20.0
+  additional_containers:
+    image: l.gcr.io/google/bazel:0.20.0
 
 test_task:
   env:
