@@ -26,11 +26,13 @@ import tensorflow as tf
 try:
   from adanet.research.improve_nas.trainer import adanet_improve_nas
   from adanet.research.improve_nas.trainer import cifar10
+  from adanet.research.improve_nas.trainer import cifar100
   from adanet.research.improve_nas.trainer import fake_data
   print("Imported from adanet.")
 except ImportError as e:
   from trainer import adanet_improve_nas
   from trainer import cifar10
+  from trainer import cifar100
   from trainer import fake_data
   print("Imported from trainer.")
 # pylint: enable=g-import-not-at-top
@@ -47,8 +49,8 @@ flags.DEFINE_string(
     """A comma-separated list of `name=value` hyperparameter values.""")
 flags.DEFINE_string(
     "dataset", "",
-    "Dataset name: 'cifar10' or 'fake'. 'fake' dataset is mainly for test "
-    "runs.")
+    "Dataset name: 'cifar10', 'cifar100' or 'fake'. 'fake' dataset is mainly "
+    "for test runs.")
 flags.DEFINE_integer("tf_random_seed", None,
                      "Graph level random seed for TensorFlow.")
 flags.DEFINE_integer("eval_steps", None,
@@ -133,6 +135,8 @@ def main(argv):
   tf.logging.info("Running Experiment with HParams: %s", hparams)
   if FLAGS.dataset == "cifar10":
     data_provider = cifar10.Provider()
+  elif FLAGS.dataset == "cifar100":
+    data_provider = cifar100.Provider()
   elif FLAGS.dataset == "fake":
     data_provider = fake_data.FakeImageProvider(
         num_examples=10,

@@ -80,6 +80,22 @@ py_test(
 )
 
 py_library(
+    name = "cifar100",
+    srcs = ["cifar100.py"],
+    deps = [
+        ":image_processing",
+    ],
+)
+
+py_test(
+    name = "cifar100_test",
+    srcs = ["cifar100_test.py"],
+    deps = [
+        ":cifar100",
+    ],
+)
+
+py_library(
     name = "fake_data",
     srcs = ["fake_data.py"],
     deps = [
