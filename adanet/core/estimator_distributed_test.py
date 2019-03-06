@@ -187,30 +187,30 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
   # pylint: disable=g-complex-comprehension
   @parameterized.named_parameters(
       itertools.chain(*[[
-          # {
-          #     "testcase_name": "{}_one_worker".format(placement),
-          #     "placement_strategy": placement,
-          #     "num_workers": 1,
-          #     "num_ps": 0,
-          # },
-          # {
-          #     "testcase_name": "{}_one_worker_one_ps".format(placement),
-          #     "placement_strategy": placement,
-          #     "num_workers": 1,
-          #     "num_ps": 1,
-          # },
-          # {
-          #     "testcase_name": "{}_two_workers_one_ps".format(placement),
-          #     "placement_strategy": placement,
-          #     "num_workers": 2,
-          #     "num_ps": 1,
-          # },
-          # {
-          #     "testcase_name": "{}_three_workers_three_ps".format(placement),
-          #     "placement_strategy": placement,
-          #     "num_workers": 3,
-          #     "num_ps": 3,
-          # },
+          {
+              "testcase_name": "{}_one_worker".format(placement),
+              "placement_strategy": placement,
+              "num_workers": 1,
+              "num_ps": 0,
+          },
+          {
+              "testcase_name": "{}_one_worker_one_ps".format(placement),
+              "placement_strategy": placement,
+              "num_workers": 1,
+              "num_ps": 1,
+          },
+          {
+              "testcase_name": "{}_two_workers_one_ps".format(placement),
+              "placement_strategy": placement,
+              "num_workers": 2,
+              "num_ps": 1,
+          },
+          {
+              "testcase_name": "{}_three_workers_three_ps".format(placement),
+              "placement_strategy": placement,
+              "num_workers": 3,
+              "num_ps": 3,
+          },
           {
               "testcase_name": "{}_five_workers_three_ps".format(placement),
               "placement_strategy": placement,
