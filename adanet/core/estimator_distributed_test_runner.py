@@ -185,7 +185,7 @@ def train_and_evaluate_estimator():
       loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
   kwargs = {
-      "max_iteration_steps": 100,
+      "max_iteration_steps": 50,
       "force_grow": True,
       "delay_secs_per_worker": .2,
       "max_worker_delay_secs": 1,
@@ -247,11 +247,11 @@ def train_and_evaluate_estimator():
     return input_features, input_labels
 
   train_hooks = [
-      tf.train.ProfilerHook(save_steps=50, output_dir=FLAGS.model_dir)
+      tf.train.ProfilerHook(save_steps=25, output_dir=FLAGS.model_dir)
   ]
   # Train for three iterations.
   train_spec = tf.estimator.TrainSpec(
-      input_fn=input_fn, max_steps=300, hooks=train_hooks)
+      input_fn=input_fn, max_steps=150, hooks=train_hooks)
   eval_spec = tf.estimator.EvalSpec(input_fn=input_fn, steps=1)
 
   # Calling train_and_evaluate is the official way to perform distributed
