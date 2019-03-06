@@ -1,5 +1,5 @@
 sudo: required
-# dist: xenial
+dist: xenial
 language: python
 git:
   depth: 10
