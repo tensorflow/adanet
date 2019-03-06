@@ -170,20 +170,20 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.016], [.117]],
       "want_loss": 1.338,
       "want_adanet_loss": 1.338,
-      "want_mixture_weight_vars": 1,
+      "want_ensemble_trainable_vars": 1,
   }, {
       "testcase_name": "no_previous_ensemble_prune_all",
       "want_logits": [[.016], [.117]],
       "want_loss": 1.338,
       "want_adanet_loss": 1.338,
-      "want_mixture_weight_vars": 1,
+      "want_ensemble_trainable_vars": 1,
       "subnetwork_builder_class": _BuilderPrunerAll
   }, {
       "testcase_name": "no_previous_ensemble_prune_leave_one",
       "want_logits": [[.016], [.117]],
       "want_loss": 1.338,
       "want_adanet_loss": 1.338,
-      "want_mixture_weight_vars": 1,
+      "want_ensemble_trainable_vars": 1,
       "subnetwork_builder_class": _BuilderPrunerLeaveOne
   }, {
       "testcase_name": "default_mixture_weight_initializer_scalar",
@@ -193,7 +193,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.580], [.914]],
       "want_loss": 1.362,
       "want_adanet_loss": 1.362,
-      "want_mixture_weight_vars": 1,
+      "want_ensemble_trainable_vars": 1,
   }, {
       "testcase_name": "default_mixture_weight_initializer_vector",
       "mixture_weight_initializer": None,
@@ -202,7 +202,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.580], [.914]],
       "want_loss": 1.362,
       "want_adanet_loss": 1.362,
-      "want_mixture_weight_vars": 1,
+      "want_ensemble_trainable_vars": 1,
   }, {
       "testcase_name": "default_mixture_weight_initializer_matrix",
       "mixture_weight_initializer": None,
@@ -210,7 +210,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.016], [.117]],
       "want_loss": 1.338,
       "want_adanet_loss": 1.338,
-      "want_mixture_weight_vars": 1,
+      "want_ensemble_trainable_vars": 1,
   }, {
       "testcase_name": "default_mixture_weight_initializer_matrix_on_logits",
       "mixture_weight_initializer": None,
@@ -219,32 +219,33 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.030], [.047]],
       "want_loss": 1.378,
       "want_adanet_loss": 1.378,
-      "want_mixture_weight_vars": 1,
+      "want_ensemble_trainable_vars": 1,
   }, {
       "testcase_name": "no_previous_ensemble_use_bias",
       "use_bias": True,
       "want_logits": [[0.013], [0.113]],
       "want_loss": 1.338,
       "want_adanet_loss": 1.338,
-      "want_mixture_weight_vars": 2,
+      "want_ensemble_trainable_vars": 2,
   }, {
       "testcase_name": "no_previous_ensemble_predict_mode",
       "mode": tf.estimator.ModeKeys.PREDICT,
       "want_logits": [[0.], [0.]],
+      "want_ensemble_trainable_vars": 1,
   }, {
       "testcase_name": "no_previous_ensemble_lambda",
       "adanet_lambda": .01,
       "want_logits": [[.014], [.110]],
       "want_loss": 1.340,
       "want_adanet_loss": 1.343,
-      "want_mixture_weight_vars": 1,
+      "want_ensemble_trainable_vars": 1,
   }, {
       "testcase_name": "no_previous_ensemble_beta",
       "adanet_beta": .1,
       "want_logits": [[.006], [.082]],
       "want_loss": 1.349,
       "want_adanet_loss": 1.360,
-      "want_mixture_weight_vars": 1,
+      "want_ensemble_trainable_vars": 1,
   }, {
       "testcase_name": "no_previous_ensemble_lambda_and_beta",
       "adanet_lambda": .01,
@@ -252,7 +253,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_logits": [[.004], [.076]],
       "want_loss": 1.351,
       "want_adanet_loss": 1.364,
-      "want_mixture_weight_vars": 1,
+      "want_ensemble_trainable_vars": 1,
   }, {
       "testcase_name": "multi_head",
       "want_logits": {
@@ -262,15 +263,15 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "want_loss": 2.675,
       "want_adanet_loss": 2.675,
       "multi_head": True,
-      "want_mixture_weight_vars": 2,
-      "want_num_trainable_vars": 4,
+      "want_ensemble_trainable_vars": 2,
+      "want_subnetwork_trainable_vars": 4,
   })
   def test_build_ensemble_spec(
       self,
       want_logits,
       want_loss=None,
       want_adanet_loss=None,
-      want_mixture_weight_vars=None,
+      want_ensemble_trainable_vars=None,
       adanet_lambda=0.,
       adanet_beta=0.,
       ensemble_spec_fn=lambda: None,
@@ -282,8 +283,9 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       subnetwork_builder_class=_Builder,
       mode=tf.estimator.ModeKeys.TRAIN,
       multi_head=False,
-      want_num_trainable_vars=2):
+      want_subnetwork_trainable_vars=2):
     seed = 64
+
     if multi_head:
       head = tf.contrib.estimator.multi_head(heads=[
           tf.contrib.estimator.binary_classification_head(
@@ -296,14 +298,8 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
           loss_reduction=tf.losses.Reduction.SUM)
     builder = _EnsembleBuilder(head=head)
 
-    features = {"x": tf.constant([[1.], [2.]])}
-    if multi_head:
-      labels = {"head1": tf.constant([0, 1]), "head2": tf.constant([0, 1])}
-    else:
-      labels = tf.constant([0, 1])
-
     def _subnetwork_train_op_fn(loss, var_list):
-      self.assertLen(var_list, want_num_trainable_vars)
+      self.assertLen(var_list, want_subnetwork_trainable_vars)
       self.assertEqual(var_list,
                        tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
       # Subnetworks get iteration steps instead of global steps.
@@ -319,7 +315,7 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
       return optimizer.minimize(loss, var_list=var_list)
 
     def _mixture_weights_train_op_fn(loss, var_list):
-      self.assertLen(var_list, want_mixture_weight_vars)
+      self.assertLen(var_list, want_ensemble_trainable_vars)
       self.assertEqual(var_list,
                        tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
       # Subnetworks get iteration steps instead of global steps.
@@ -347,84 +343,102 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
         seed,
         multi_head=multi_head)
 
-    subnetwork_spec = subnetwork_manager.build_subnetwork_spec(
-        name="test",
-        subnetwork_builder=subnetwork_builder,
-        iteration_step=tf.train.get_or_create_global_step(),
-        summary=_FakeSummary(),
-        features=features,
-        mode=mode,
-        labels=labels,
-        previous_ensemble=previous_ensemble)
-    ensemble_spec = builder.build_ensemble_spec(
-        # Note: when ensemble_spec is not None and warm_start_mixture_weights
-        # is True, we need to make sure that the bias and mixture weights are
-        # already saved to the checkpoint_dir.
-        name="test",
-        previous_ensemble_spec=previous_ensemble_spec,
-        candidate=EnsembleCandidate("foo", [subnetwork_builder], None),
-        ensembler=ComplexityRegularizedEnsembler(
-            mixture_weight_type=mixture_weight_type,
-            mixture_weight_initializer=mixture_weight_initializer,
-            warm_start_mixture_weights=warm_start_mixture_weights,
-            model_dir=self.test_subdirectory,
-            adanet_lambda=adanet_lambda,
-            adanet_beta=adanet_beta,
-            use_bias=use_bias),
-        subnetwork_specs=[subnetwork_spec],
-        summary=_FakeSummary(),
-        features=features,
-        iteration_number=1,
-        iteration_step=tf.train.get_or_create_global_step(),
-        labels=labels,
-        mode=mode)
+    with tf.Graph().as_default() as g:
+      # A trainable variable to later verify that creating models does not
+      # affect the global variables collection.
+      _ = tf.get_variable("some_var", 0., trainable=True)
 
-    with self.test_session() as sess:
-      sess.run(tf.global_variables_initializer())
+      features = {"x": tf.constant([[1.], [2.]])}
+      if multi_head:
+        labels = {"head1": tf.constant([0, 1]), "head2": tf.constant([0, 1])}
+      else:
+        labels = tf.constant([0, 1])
 
-      # Get the real global step outside a subnetwork's context.
-      self.assertEqual("global_step", tf.train.get_global_step().op.name)
+      subnetwork_spec = subnetwork_manager.build_subnetwork_spec(
+          name="test",
+          subnetwork_builder=subnetwork_builder,
+          iteration_step=tf.train.get_or_create_global_step(),
+          summary=_FakeSummary(),
+          features=features,
+          mode=mode,
+          labels=labels,
+          previous_ensemble=previous_ensemble)
+      ensemble_spec = builder.build_ensemble_spec(
+          # Note: when ensemble_spec is not None and warm_start_mixture_weights
+          # is True, we need to make sure that the bias and mixture weights are
+          # already saved to the checkpoint_dir.
+          name="test",
+          previous_ensemble_spec=previous_ensemble_spec,
+          candidate=EnsembleCandidate("foo", [subnetwork_builder], None),
+          ensembler=ComplexityRegularizedEnsembler(
+              mixture_weight_type=mixture_weight_type,
+              mixture_weight_initializer=mixture_weight_initializer,
+              warm_start_mixture_weights=warm_start_mixture_weights,
+              model_dir=self.test_subdirectory,
+              adanet_lambda=adanet_lambda,
+              adanet_beta=adanet_beta,
+              use_bias=use_bias),
+          subnetwork_specs=[subnetwork_spec],
+          summary=_FakeSummary(),
+          features=features,
+          iteration_number=1,
+          iteration_step=tf.train.get_or_create_global_step(),
+          labels=labels,
+          mode=mode)
 
-      # Get global tf.summary outside a subnetwork's context.
-      self.assertNotEqual("fake_scalar", tf.summary.scalar("scalar", 1.))
-      self.assertNotEqual("fake_image", tf.summary.image("image", 1.))
-      self.assertNotEqual("fake_histogram", tf.summary.histogram(
-          "histogram", 1.))
-      self.assertNotEqual("fake_audio", tf.summary.audio("audio", 1., 1.))
+      with tf.Session(graph=g).as_default() as sess:
+        sess.run(tf.global_variables_initializer())
 
-      if mode == tf.estimator.ModeKeys.PREDICT:
+        # Equals the number of subnetwork and ensemble trainable variables,
+        # plus the one 'some_var' created earlier.
+        self.assertLen(
+            tf.trainable_variables(),
+            want_subnetwork_trainable_vars + want_ensemble_trainable_vars + 1)
+
+        # Get the real global step outside a subnetwork's context.
+        self.assertEqual("global_step", tf.train.get_global_step().op.name)
+
+        # Get global tf.summary outside a subnetwork's context.
+        self.assertNotEqual("fake_scalar", tf.summary.scalar("scalar", 1.))
+        self.assertNotEqual("fake_image", tf.summary.image("image", 1.))
+        self.assertNotEqual("fake_histogram",
+                            tf.summary.histogram("histogram", 1.))
+        self.assertNotEqual("fake_audio", tf.summary.audio("audio", 1., 1.))
+
+        if mode == tf.estimator.ModeKeys.PREDICT:
+          self.assertAllClose(
+              want_logits, sess.run(ensemble_spec.ensemble.logits), atol=1e-3)
+          self.assertIsNone(ensemble_spec.loss)
+          self.assertIsNone(ensemble_spec.adanet_loss)
+          self.assertIsNone(ensemble_spec.train_op)
+          self.assertIsNotNone(ensemble_spec.export_outputs)
+          return
+
+        # Verify that train_op works, previous loss should be greater than loss
+        # after a train op.
+        loss = sess.run(ensemble_spec.loss)
+        train_op = tf.group(subnetwork_spec.train_op.train_op,
+                            ensemble_spec.train_op.train_op)
+        for _ in range(3):
+          sess.run(train_op)
+        self.assertGreater(loss, sess.run(ensemble_spec.loss))
+
         self.assertAllClose(
             want_logits, sess.run(ensemble_spec.ensemble.logits), atol=1e-3)
-        self.assertIsNone(ensemble_spec.loss)
-        self.assertIsNone(ensemble_spec.adanet_loss)
-        self.assertIsNone(ensemble_spec.train_op)
-        self.assertIsNotNone(ensemble_spec.export_outputs)
-        return
 
-      # Verify that train_op works, previous loss should be greater than loss
-      # after a train op.
-      loss = sess.run(ensemble_spec.loss)
-      train_op = tf.group(subnetwork_spec.train_op.train_op,
-                          ensemble_spec.train_op.train_op)
-      for _ in range(3):
-        sess.run(train_op)
-      self.assertGreater(loss, sess.run(ensemble_spec.loss))
+        # Bias should learn a non-zero value when used.
+        bias = sess.run(ensemble_spec.ensemble.bias)
+        if isinstance(bias, dict):
+          bias = sum(abs(b) for b in bias.values())
+        if use_bias:
+          self.assertNotEqual(0., bias)
+        else:
+          self.assertAlmostEqual(0., bias)
 
-      self.assertAllClose(
-          want_logits, sess.run(ensemble_spec.ensemble.logits), atol=1e-3)
-
-      # Bias should learn a non-zero value when used.
-      bias = sess.run(ensemble_spec.ensemble.bias)
-      if isinstance(bias, dict):
-        bias = sum(abs(b) for b in bias.values())
-      if use_bias:
-        self.assertNotEqual(0., bias)
-      else:
-        self.assertAlmostEqual(0., bias)
-
-      self.assertAlmostEqual(want_loss, sess.run(ensemble_spec.loss), places=3)
-      self.assertAlmostEqual(
-          want_adanet_loss, sess.run(ensemble_spec.adanet_loss), places=3)
+        self.assertAlmostEqual(
+            want_loss, sess.run(ensemble_spec.loss), places=3)
+        self.assertAlmostEqual(
+            want_adanet_loss, sess.run(ensemble_spec.adanet_loss), places=3)
 
 
 def _make_metrics(sess,

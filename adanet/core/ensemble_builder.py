@@ -318,11 +318,12 @@ def _to_train_op_spec(train_op):
 
 
 @contextlib.contextmanager
-def _monkey_patch_context(iteration_step_scope, scoped_summary):
+def _monkey_patch_context(iteration_step_scope, scoped_summary, trainable_vars):
   """Monkey-patches global attributes with subnetwork-specifics ones."""
 
   old_get_global_step_fn = tf.train.get_global_step
   old_get_or_create_global_step_fn = tf.train.get_or_create_global_step
+  old_trainable_vars = tf.trainable_variables()
 
   def iteration_step(graph=None):
     del graph
@@ -339,12 +340,15 @@ def _monkey_patch_context(iteration_step_scope, scoped_summary):
   tf.train.get_or_create_global_step = iteration_step
   training_util.get_global_step = iteration_step
   training_util.get_or_create_global_step = iteration_step
+  _set_trainable_variables(trainable_vars)
 
   try:
     with monkey_patched_summaries(scoped_summary):
       yield
   finally:
     # Revert monkey-patches.
+    new_trainable_vars = _new_trainable_variables(trainable_vars)
+    _set_trainable_variables(old_trainable_vars + new_trainable_vars)
     training_util.get_or_create_global_step = old_get_or_create_global_step_fn
     training_util.get_global_step = old_get_global_step_fn
     tf.train.get_or_create_global_step = old_get_or_create_global_step_fn
@@ -360,6 +364,11 @@ def _set_trainable_variables(var_list):
   for var in var_list:
     assert isinstance(var, tf.Variable)
     tf.add_to_collections(tf.GraphKeys.TRAINABLE_VARIABLES, var)
+
+
+def _new_trainable_variables(old_vars):
+  # Assumes that new trainable variables are always appended to the collection.
+  return tf.trainable_variables()[len(old_vars):]
 
 
 class _EnsembleBuilder(object):
@@ -466,10 +475,11 @@ class _EnsembleBuilder(object):
           subnetwork_map[s.name] for s in candidate.subnetwork_builders
       ]
       ensemble_scope = tf.get_variable_scope()
-      # TODO: Restore variables after call.
-      _clear_trainable_variables()
+      before_var_list = tf.trainable_variables()
       with summary.current_scope(), _monkey_patch_context(
-          iteration_step_scope=ensemble_scope, scoped_summary=summary):
+          iteration_step_scope=ensemble_scope,
+          scoped_summary=summary,
+          trainable_vars=[]):
         ensemble = ensembler.build_ensemble(
             subnetworks,
             previous_ensemble_subnetworks=previous_subnetworks,
@@ -480,7 +490,7 @@ class _EnsembleBuilder(object):
             iteration_step=iteration_step,
             summary=summary,
             previous_ensemble=previous_ensemble)
-      ensemble_var_list = tf.trainable_variables()
+      ensemble_var_list = _new_trainable_variables(before_var_list)
 
       estimator_spec = _create_estimator_spec(
           self._head, features, labels, mode, ensemble.logits, self._use_tpu)
@@ -518,11 +528,12 @@ class _EnsembleBuilder(object):
         # Note that these mixture weights are on top of the last_layer of the
         # subnetwork constructed in TRAIN mode, which means that dropout is
         # still applied when the mixture weights are being trained.
-        _set_trainable_variables(ensemble_var_list)
         ensemble_scope = tf.get_variable_scope()
         with tf.variable_scope("train_mixture_weights"):
           with summary.current_scope(), _monkey_patch_context(
-              iteration_step_scope=ensemble_scope, scoped_summary=summary):
+              iteration_step_scope=ensemble_scope,
+              scoped_summary=summary,
+              trainable_vars=ensemble_var_list):
             # For backwards compatibility.
             subnetwork_builder = candidate.subnetwork_builders[0]
             old_train_op_fn = getattr(subnetwork_builder,
@@ -692,6 +703,7 @@ class _SubnetworkManager(object):
       An new `EnsembleSpec` instance with the `Subnetwork` appended.
     """
 
+    before_var_list = tf.trainable_variables()
     with tf.variable_scope("subnetwork_{}".format(name)):
       build_subnetwork = functools.partial(
           subnetwork_builder.build_subnetwork,
@@ -708,12 +720,12 @@ class _SubnetworkManager(object):
       if "labels" in defined_args:
         build_subnetwork = functools.partial(build_subnetwork, labels=labels)
       subnetwork_scope = tf.get_variable_scope()
-      # TODO: Restore variables after call.
-      _clear_trainable_variables()
       with summary.current_scope(), _monkey_patch_context(
-          iteration_step_scope=subnetwork_scope, scoped_summary=summary):
+          iteration_step_scope=subnetwork_scope,
+          scoped_summary=summary,
+          trainable_vars=[]):
         subnetwork = build_subnetwork()
-      subnetwork_var_list = tf.trainable_variables()
+      subnetwork_var_list = _new_trainable_variables(before_var_list)
 
       estimator_spec = _create_estimator_spec(
           self._head, features, labels, mode, subnetwork.logits, self._use_tpu)
@@ -737,9 +749,10 @@ class _SubnetworkManager(object):
       # Create train ops for training subnetworks and ensembles.
       train_op = None
       if mode == tf.estimator.ModeKeys.TRAIN and subnetwork_builder:
-        _set_trainable_variables(subnetwork_var_list)
         with summary.current_scope(), _monkey_patch_context(
-            iteration_step_scope=subnetwork_scope, scoped_summary=summary):
+            iteration_step_scope=subnetwork_scope,
+            scoped_summary=summary,
+            trainable_vars=subnetwork_var_list):
           train_op = _to_train_op_spec(
               subnetwork_builder.build_subnetwork_train_op(
                   subnetwork=subnetwork,
