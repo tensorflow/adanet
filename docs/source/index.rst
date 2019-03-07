@@ -45,6 +45,7 @@ This is not an official Google product.
   :caption: Package Reference
 
   adanet
+  adanet.ensemble
   adanet.subnetwork
 
 Indices and tables

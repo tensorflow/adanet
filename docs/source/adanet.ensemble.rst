@@ -1,0 +1,95 @@
+.. role:: hidden
+    :class: hidden-section
+
+adanet.ensemble
+==============================
+
+
+.. automodule:: adanet.ensemble
+.. currentmodule:: adanet.ensemble
+
+Ensembles
+---------------
+
+Interfaces and containers for defining ensembles.
+
+:hidden:`Ensemble`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: Ensemble
+    :members:
+
+:hidden:`ComplexityRegularized`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: ComplexityRegularized
+    :members:
+
+:hidden:`MixtureWeightType`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: MixtureWeightType
+    :members:
+
+:hidden:`WeightedSubnetwork`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: WeightedSubnetwork
+    :members:
+
+Ensemblers
+---------------
+
+Ensemble learning definitions.
+
+:hidden:`Ensembler`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: Ensembler
+    :members:
+
+:hidden:`ComplexityRegularizedEnsembler`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: ComplexityRegularizedEnsembler
+    :members:
+
+Strategies
+---------------
+
+Ensemble strategies for grouping subnetworks.
+
+:hidden:`Strategy`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: Strategy
+    :members:
+    :show-inheritance:
+
+:hidden:`SoloStrategy`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: SoloStrategy
+    :members:
+    :show-inheritance:
+
+:hidden:`GrowStrategy`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: GrowStrategy
+    :members:
+    :show-inheritance:
+
+:hidden:`AllStrategy`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: AllStrategy
+    :members:
+    :show-inheritance:
+
+:hidden:`Candidate`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: Candidate
+    :members:
+    :show-inheritance:
