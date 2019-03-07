@@ -19,9 +19,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.core.ensemble_builder import Ensemble
-from adanet.core.ensemble_builder import MixtureWeightType
-from adanet.core.ensemble_builder import WeightedSubnetwork
 from adanet.core.estimator import Estimator
 from adanet.core.evaluator import Evaluator
 from adanet.core.report_materializer import ReportMaterializer
@@ -29,9 +26,6 @@ from adanet.core.summary import Summary
 from adanet.core.tpu_estimator import TPUEstimator
 
 __all__ = [
-    "Ensemble",
-    "MixtureWeightType",
-    "WeightedSubnetwork",
     "Estimator",
     "Evaluator",
     "ReportMaterializer",

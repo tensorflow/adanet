@@ -50,6 +50,10 @@ class Summary(object):
       family: Optional; if provided, used as the prefix of the summary tag name,
         which controls the tab name used for display on Tensorboard.
 
+    Returns:
+      A scalar `Tensor` of type `string`. Which contains a `tf.Summary`
+      protobuf.
+
     Raises:
       ValueError: If tensor has the wrong shape or type.
     """
@@ -93,6 +97,10 @@ class Summary(object):
       max_outputs: Max number of batch elements to generate images for.
       family: Optional; if provided, used as the prefix of the summary tag name,
         which controls the tab name used for display on Tensorboard.
+
+    Returns:
+      A scalar `Tensor` of type `string`. The serialized `tf.Summary` protocol
+      buffer.
     """
 
   @abc.abstractmethod
@@ -117,6 +125,10 @@ class Summary(object):
         histogram.
       family: Optional; if provided, used as the prefix of the summary tag name,
         which controls the tab name used for display on Tensorboard.
+
+    Returns:
+      A scalar `Tensor` of type `string`. The serialized `tf.Summary` protocol
+      buffer.
     """
 
   @abc.abstractmethod
@@ -147,6 +159,10 @@ class Summary(object):
       max_outputs: Max number of batch elements to generate audio for.
       family: Optional; if provided, used as the prefix of the summary tag name,
         which controls the tab name used for display on Tensorboard.
+
+    Returns:
+      A scalar `Tensor` of type `string`. The serialized `tf.Summary` protocol
+      buffer.
     """
 
 
@@ -170,13 +186,174 @@ class _ScopedSummary(Summary):
   same name in the same charts.
   """
 
+  def __init__(self, scope=None, skip_summary=False, namespace=None):
+    """Initializes a `_ScopedSummary`.
+
+    Args:
+      scope: String scope name.
+      skip_summary: Whether to record summary ops.
+      namespace: Optional string namespace for the summary.
+
+    Returns:
+      A `_ScopedSummary` instance.
+    """
+
+    if tpu_function.get_tpu_context().number_of_shards:
+      tf.logging.log_first_n(
+          tf.logging.WARN,
+          "Scoped summaries will be skipped since they do not support TPU", 1)
+      skip_summary = True
+
+    self._scope = scope
+    self._namespace = namespace
+    self._additional_scope = None
+    self._skip_summary = skip_summary
+    self._summary_ops = []
+    self._actual_summary_scalar_fn = tf.summary.scalar
+    self._actual_summary_image_fn = tf.summary.image
+    self._actual_summary_histogram_fn = tf.summary.histogram
+    self._actual_summary_audio_fn = tf.summary.audio
+
+  @property
+  def scope(self):
+    """Returns scope string."""
+
+    return self._scope
+
+  @property
+  def namespace(self):
+    """Returns namespace string."""
+
+    return self._namespace
+
+  @contextlib.contextmanager
+  def current_scope(self):
+    """Registers the current context's scope to strip it from summary tags."""
+
+    self._additional_scope = tf.get_default_graph().get_name_scope()
+    yield
+    self._additional_scope = None
+
+  @contextlib.contextmanager
+  def _strip_tag_scope(self):
+    """Monkey patches `summary_op_util.summary_scope` to strip tag scopes."""
+
+    original_summary_scope = summary_op_util.summary_scope
+
+    @contextlib.contextmanager
+    def strip_tag_scope_fn(name, family=None, default_name=None, values=None):
+      tag, scope = (None, None)
+      with original_summary_scope(name, family, default_name, values) as (t, s):
+        tag = _strip_scope(t, self.scope, self._additional_scope)
+        scope = s
+      yield tag, scope
+
+    summary_op_util.summary_scope = strip_tag_scope_fn
+    yield
+    summary_op_util.summary_scope = original_summary_scope
+
+  def _prefix_scope(self, name):
+    """Prefixes summary name with scope."""
+
+    if self._scope:
+      if name[0] == "/":
+        name = name[1:]
+      return "{scope}/{name}".format(scope=self._scope, name=name)
+    return name
+
+  def scalar(self, name, tensor, family=None):
+    """See `Summary`."""
+
+    if self._skip_summary:
+      return tf.constant("")
+
+    with self._strip_tag_scope():
+      summary = self._actual_summary_scalar_fn(
+          name=self._prefix_scope(name),
+          tensor=tensor,
+          family=family,
+          collections=[])
+    self._summary_ops.append(summary)
+    return summary
+
+  def image(self, name, tensor, max_outputs=3, family=None):
+    """See `Summary`."""
+
+    if self._skip_summary:
+      return tf.constant("")
+
+    with self._strip_tag_scope():
+      summary = self._actual_summary_image_fn(
+          name=self._prefix_scope(name),
+          tensor=tensor,
+          max_outputs=max_outputs,
+          family=family,
+          collections=[])
+    self._summary_ops.append(summary)
+    return summary
+
+  def histogram(self, name, values, family=None):
+    """See `Summary`."""
+
+    if self._skip_summary:
+      return tf.constant("")
+
+    with self._strip_tag_scope():
+      summary = self._actual_summary_histogram_fn(
+          name=self._prefix_scope(name),
+          values=values,
+          family=family,
+          collections=[])
+    self._summary_ops.append(summary)
+    return summary
+
+  def audio(self, name, tensor, sample_rate, max_outputs=3, family=None):
+    """See `Summary`."""
+
+    if self._skip_summary:
+      return tf.constant("")
+
+    with self._strip_tag_scope():
+      summary = self._actual_summary_audio_fn(
+          name=self._prefix_scope(name),
+          tensor=tensor,
+          sample_rate=sample_rate,
+          max_outputs=max_outputs,
+          family=family,
+          collections=[])
+    self._summary_ops.append(summary)
+    return summary
+
+  def merge_all(self):
+    """Returns the list of this graph's scoped summary ops.
+
+    Note: this is an abuse of the tf.summary.merge_all API since it is expected
+    to return a summary op with all summaries merged. However, ScopedSummary is
+    only used in the internal implementation, so this should be OK.
+    """
+
+    current_graph = tf.get_default_graph()
+    return [op for op in self._summary_ops if op.graph == current_graph]
+
+
+class _TPUScopedSummary(Summary):
+  """Records summaries in a given scope.
+
+  Only for TPUEstimator.
+
+  Each scope gets assigned a different collection where summary ops gets added.
+
+  This allows Tensorboard to display summaries with different scopes but the
+  same name in the same charts.
+  """
+
   def __init__(self,
                logdir,
                namespace=None,
                scope=None,
                skip_summary=False,
                global_step=None):
-    """Initializes a `_ScopedSummary`.
+    """Initializes a `_TPUScopedSummary`.
 
     Args:
       logdir: String directory path for logging summaries.

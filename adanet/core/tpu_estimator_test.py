@@ -19,6 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import contextlib
 import os
 
 from absl.testing import parameterized
@@ -30,6 +31,8 @@ from adanet.core.subnetwork import Subnetwork
 from adanet.core.tpu_estimator import TPUEstimator
 from distutils.version import LooseVersion
 import tensorflow as tf
+
+from tensorflow.contrib.tpu.python.tpu import tpu_function
 
 
 class _DNNBuilder(Builder):
@@ -130,30 +133,40 @@ class _DNNBuilder(Builder):
         })
 
 
-def _check_eventfile_for_keyword(keyword, dir_):
-  """Checks event files for the keyword."""
+@contextlib.contextmanager
+def fake_run_on_tpu():
+  """Fakes TPU existence when running TPU tests on CPU/GPU."""
+
+  original_number_of_shards_fn = tpu_function.TpuContext.number_of_shards
+  tpu_function.TpuContext.number_of_shards = 1
+  try:
+    yield
+  finally:
+    tpu_function.TpuContext.number_of_shards = original_number_of_shards_fn
+
+
+# TODO: merge this function with _check_eventfile_for_keyword and place
+# in test_utils.
+def _get_summary_value(keyword, dir_):
+  """Returns the latest summary value for the given keyword in TF events."""
 
   tf.summary.FileWriterCache.clear()
 
-  # Get last `Event` written.
   filenames = os.path.join(dir_, "events*")
   event_paths = tf.gfile.Glob(filenames)
   if not event_paths:
-    raise ValueError("Path '{}' not found.".format(filenames))
-
-  # There can be multiple events files for summaries.
-  for event_path in event_paths:
-    for last_event in tf.train.summary_iterator(event_path):
-      if last_event.summary is not None:
-        for value in last_event.summary.value:
-          if keyword == value.tag:
-            if value.HasField("simple_value"):
-              return value.simple_value
-            if value.HasField("image"):
-              return (value.image.height, value.image.width,
-                      value.image.colorspace)
-            if value.HasField("tensor"):
-              return value.tensor.string_val
+    raise ValueError("Path '{!r}' not found.".format(filenames))
+  for last_event in tf.train.summary_iterator(event_paths[-1]):
+    if last_event.summary is not None:
+      for value in last_event.summary.value:
+        if keyword == value.tag:
+          if value.HasField("simple_value"):
+            return value.simple_value
+          if value.HasField("image"):
+            return (value.image.height, value.image.width,
+                    value.image.colorspace)
+          if value.HasField("tensor"):
+            return value.tensor.string_val
 
   raise ValueError("Keyword '{}' not found in path '{}'.".format(
       keyword, filenames))
@@ -199,6 +212,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     # Evaluate.
     eval_results = estimator.evaluate(
         input_fn=train_input_fn, steps=10, hooks=None)
+    tf.logging.info("%s", eval_results)
 
     # Predict.
     # TODO: skip predictions on TF versions 1.11 and 1.12 since
@@ -226,7 +240,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
         export_dir_base=estimator.model_dir,
         serving_input_receiver_fn=serving_input_fn)
 
-    self.assertAlmostEqual(0.32416, eval_results["loss"], places=3)
+    self.assertAlmostEqual(0.36, eval_results["loss"], places=2)
     self.assertEqual(max_steps, eval_results["global_step"])
     for prediction in predictions:
       self.assertIsNotNone(prediction["predictions"])
@@ -257,50 +271,69 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     estimator.train(input_fn=train_input_fn, max_steps=3)
     estimator.evaluate(input_fn=train_input_fn, steps=3)
 
+    subnetwork_subdir = os.path.join(self.test_subdirectory,
+                                     "subnetwork/t0_dnn")
+
     ensemble_loss = .5
+    ensemble_subdir = os.path.join(self.test_subdirectory,
+                                   "ensemble/t0_dnn_complexity_regularized")
+
     self.assertAlmostEqual(
         ensemble_loss,
-        _check_eventfile_for_keyword("loss", self.test_subdirectory),
-        places=1)
-    self.assertIsNotNone(
-        _check_eventfile_for_keyword("global_step/sec", self.test_subdirectory))
-    eval_subdir = os.path.join(self.test_subdirectory, "eval")
-    self.assertAlmostEqual(
-        ensemble_loss,
-        _check_eventfile_for_keyword("loss", eval_subdir),
+        _get_summary_value("loss", self.test_subdirectory),
         places=1)
     self.assertEqual(
         0.,
-        _check_eventfile_for_keyword("iteration/adanet/iteration",
-                                     self.test_subdirectory))
-
-    candidate_subdir = os.path.join(self.test_subdirectory, "candidate/t0_dnn")
+        _get_summary_value("iteration/adanet/iteration",
+                           self.test_subdirectory))
     self.assertAlmostEqual(
-        3., _check_eventfile_for_keyword("scalar", candidate_subdir), places=3)
+        3., _get_summary_value("scalar", subnetwork_subdir), places=3)
     self.assertEqual((3, 3, 1),
-                     _check_eventfile_for_keyword("image/image/0",
-                                                  candidate_subdir))
+                     _get_summary_value("image/image/0", subnetwork_subdir))
     self.assertAlmostEqual(
-        5.,
-        _check_eventfile_for_keyword("nested/scalar", candidate_subdir),
-        places=1)
+        5., _get_summary_value("nested/scalar", subnetwork_subdir), places=3)
     self.assertAlmostEqual(
         ensemble_loss,
-        _check_eventfile_for_keyword(
-            "adanet_loss/adanet/adanet_weighted_ensemble", candidate_subdir),
+        _get_summary_value("adanet_loss/adanet/adanet_weighted_ensemble",
+                           ensemble_subdir),
         places=1)
     self.assertAlmostEqual(
         0.,
-        _check_eventfile_for_keyword(
+        _get_summary_value(
             "complexity_regularization/adanet/adanet_weighted_ensemble",
-            candidate_subdir),
+            ensemble_subdir),
         places=1)
     self.assertAlmostEqual(
         1.,
-        _check_eventfile_for_keyword(
+        _get_summary_value(
             "mixture_weight_norms/adanet/"
-            "adanet_weighted_ensemble/subnetwork_0", candidate_subdir),
+            "adanet_weighted_ensemble/subnetwork_0", ensemble_subdir),
         places=1)
+
+    # Eval metric summaries are always written out during eval.
+    subnetwork_eval_subdir = os.path.join(subnetwork_subdir, "eval")
+    if use_tpu:
+      # TODO: Why is subnetwork eval loss 0.0 when use_tpu=False?
+      self.assertAlmostEqual(
+          ensemble_loss,
+          _get_summary_value("loss", subnetwork_eval_subdir),
+          places=1)
+    self.assertAlmostEqual(
+        ensemble_loss,
+        _get_summary_value("average_loss", subnetwork_eval_subdir),
+        places=1)
+
+    eval_subdir = os.path.join(self.test_subdirectory, "eval")
+    ensemble_eval_subdir = os.path.join(ensemble_subdir, "eval")
+    for subdir in [ensemble_eval_subdir, eval_subdir]:
+      self.assertEqual([b"| dnn |"],
+                       _get_summary_value("architecture/adanet/ensembles/0",
+                                          subdir))
+      if subdir == eval_subdir:
+        self.assertAlmostEqual(
+            ensemble_loss, _get_summary_value("loss", subdir), places=1)
+      self.assertAlmostEqual(
+          ensemble_loss, _get_summary_value("average_loss", subdir), places=1)
 
 
 if __name__ == "__main__":

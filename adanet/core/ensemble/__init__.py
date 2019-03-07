@@ -29,6 +29,7 @@ from adanet.core.ensemble.ensembler import Ensembler
 from adanet.core.ensemble.strategy import AllStrategy
 from adanet.core.ensemble.strategy import Candidate
 from adanet.core.ensemble.strategy import GrowStrategy
+from adanet.core.ensemble.strategy import SoloStrategy
 from adanet.core.ensemble.strategy import Strategy
 from adanet.core.ensemble.weighted import ComplexityRegularized
 from adanet.core.ensemble.weighted import ComplexityRegularizedEnsembler
@@ -38,10 +39,11 @@ from adanet.core.ensemble.weighted import WeightedSubnetwork
 __all__ = [
     "Ensemble",
     "Ensembler",
-    "Candidate",
-    "Strategy",
-    "GrowStrategy",
     "AllStrategy",
+    "Candidate",
+    "GrowStrategy",
+    "SoloStrategy",
+    "Strategy",
     "ComplexityRegularized",
     "ComplexityRegularizedEnsembler",
     "MixtureWeightType",

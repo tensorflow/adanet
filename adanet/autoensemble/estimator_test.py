@@ -42,8 +42,14 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
   def tearDown(self):
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
 
-  def test_auto_ensemble_estimator_lifecycle(self):
-
+  @parameterized.named_parameters({
+      "testcase_name": "dict_candidate_pool",
+      "list_candidate_pool": False,
+  }, {
+      "testcase_name": "list_candidate_pool",
+      "list_candidate_pool": True,
+  })
+  def test_auto_ensemble_estimator_lifecycle(self, list_candidate_pool):
     features = {"input_1": [[1., 0.]]}
     labels = [[1.]]
 
@@ -76,18 +82,24 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     else:
       dnn_estimator_fn = tf.contrib.estimator.DNNEstimator
 
-    estimator = AutoEnsembleEstimator(
-        head=head,
-        candidate_pool=[
+    candidate_pool = {
+        "linear":
             linear_estimator_fn(
                 head=head, feature_columns=feature_columns,
                 optimizer=optimizer),
+        "dnn":
             dnn_estimator_fn(
                 head=head,
                 feature_columns=feature_columns,
                 optimizer=optimizer,
-                hidden_units=[3]),
-        ],
+                hidden_units=[3])
+    }
+    if list_candidate_pool:
+      candidate_pool = [candidate_pool[k] for k in sorted(candidate_pool)]
+
+    estimator = AutoEnsembleEstimator(
+        head=head,
+        candidate_pool=candidate_pool,
         max_iteration_steps=4,
         force_grow=True,
         model_dir=self.test_subdirectory,
@@ -142,7 +154,8 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
         head=head,
         candidate_pool=[
             tf.estimator.LinearClassifier(
-                n_classes=2, feature_columns=feature_columns,
+                n_classes=2,
+                feature_columns=feature_columns,
                 optimizer=optimizer),
             tf.estimator.DNNClassifier(
                 n_classes=2,
@@ -166,6 +179,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
       return input_features, input_labels
 
     estimator.train(input_fn=train_input_fn, max_steps=6, hooks=hooks)
+
 
 if __name__ == "__main__":
   tf.test.main()

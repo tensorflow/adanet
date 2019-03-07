@@ -22,18 +22,21 @@ from __future__ import print_function
 import collections
 
 from adanet.core import dict_utils
+from adanet.core import distributed
+from adanet.core import ensemble_builder as ensemble_builder_lib
 from adanet.core import subnetwork
-from adanet.core.summary import _ScopedSummary
 
 import numpy as np
 import six
 import tensorflow as tf
 
 
+# TODO: Include estimator_specs instead of candidates.
 class _Iteration(
     collections.namedtuple("_Iteration", [
-        "number", "candidates", "estimator_spec", "best_candidate_index",
-        "summaries", "is_over_fn", "subnetwork_reports", "step"
+        "number", "candidates", "subnetwork_specs", "estimator_spec",
+        "best_candidate_index", "summaries", "is_over_fn", "subnetwork_reports",
+        "step"
     ])):
   """An AdaNet iteration.
 
@@ -44,8 +47,9 @@ class _Iteration(
   There must be maximum one _Iteration per graph.
   """
 
-  def __new__(cls, number, candidates, estimator_spec, best_candidate_index,
-              summaries, is_over_fn, subnetwork_reports, step):
+  def __new__(cls, number, candidates, subnetwork_specs, estimator_spec,
+              best_candidate_index, summaries, is_over_fn, subnetwork_reports,
+              step):
     """Creates a validated `_Iteration` instance.
 
     Args:
@@ -56,9 +60,10 @@ class _Iteration(
     Args:
       number: The iteration number.
       candidates: List of `_Candidate` instances to track.
+      subnetwork_specs: List of `_SubnetworkSpec` instances.
       estimator_spec: `EstimatorSpec` instance.
       best_candidate_index: Int `Tensor` indicating the best candidate's index.
-      summaries: List of `_ScopedSummary` instances for each candidate.
+      summaries: List of `adanet.Summary` instances for each candidate.
       is_over_fn: A fn()->Boolean `Variable` indicating if iteration is over.
       subnetwork_reports: Dict mapping string names to `subnetwork.Report`s, one
         per candidate.
@@ -87,6 +92,7 @@ class _Iteration(
         cls,
         number=number,
         candidates=candidates,
+        subnetwork_specs=subnetwork_specs,
         estimator_spec=estimator_spec,
         best_candidate_index=best_candidate_index,
         summaries=summaries,
@@ -105,35 +111,99 @@ def _is_over_var():
   return var
 
 
+def _is_numeric(tensor):
+  """Determines if given tensor is a float numeric."""
+
+  if not isinstance(tensor, tf.Tensor):
+    return False
+  return tensor.dtype in [tf.bfloat16, tf.float16, tf.float32, tf.float64]
+
+
 class _IterationBuilder(object):
   """Builds AdaNet iterations."""
 
   def __init__(self,
-               model_dir,
                candidate_builder,
+               subnetwork_manager,
                ensemble_builder,
-               replicate_ensemble_in_training=False):
+               ensemblers,
+               summary_maker,
+               placement_strategy=distributed.ReplicationStrategy(),
+               replicate_ensemble_in_training=False,
+               use_tpu=False,
+               debug=False):
     """Creates an `_IterationBuilder` instance.
 
     Args:
-      model_dir: String model directory path.
       candidate_builder: A `_CandidateBuilder` instance.
+      subnetwork_manager: A `_SubnetworkManager` instance.
       ensemble_builder: An `_EnsembleBuilder` instance.
+      ensemblers: An iterable of :class:`adanet.ensemble.Ensembler` objects that
+        define how to ensemble a group of subnetworks.
+      summary_maker: A function that constructs an `adanet.Summary` instance
+        from (namespace, scope, and skip_summary).
+      placement_strategy: A `PlacementStrategy` for assigning subnetworks and
+        ensembles to specific workers.
       replicate_ensemble_in_training: Whether to build the frozen subnetworks in
         `training` mode during training.
+      use_tpu: Whether AdaNet is running on TPU.
+      debug: Boolean to enable debug mode which will check features and labels
+        for Infs and NaNs.
 
     Returns:
       An `_IterationBuilder` object.
     """
 
-    self._model_dir = model_dir
     self._candidate_builder = candidate_builder
+    self._subnetwork_manager = subnetwork_manager
     self._ensemble_builder = ensemble_builder
+    self._ensemblers = ensemblers
+    self._summary_maker = summary_maker
+    self._placement_strategy = placement_strategy
     self._replicate_ensemble_in_training = replicate_ensemble_in_training
+    self._use_tpu = use_tpu
+    self._debug = debug
     super(_IterationBuilder, self).__init__()
+
+  def _check_numerics(self, features, labels):
+    """Checks for NaNs and Infs in input features and labels.
+
+    Args:
+      features: Dictionary of `Tensor` objects keyed by feature name.
+      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
+        (for multi-head). Can be `None`.
+
+    Returns:
+      A features and labels tuple with same types and respective inputs, but
+      with numeric check ops wrapping them.
+    """
+
+    if not self._debug:
+      return features, labels
+
+    checked_features, checked_labels = {}, {}
+    tf.logging.info("DEBUG: Checking numerics of float features.")
+    for name in sorted(features):
+      if not _is_numeric(features[name]):
+        continue
+      tf.logging.info("DEBUG: Checking numerics of float feature '%s'.", name)
+      checked_features[name] = tf.debugging.check_numerics(
+          features[name], "features '{}'".format(name))
+    if isinstance(labels, dict):
+      for name in sorted(labels):
+        if not _is_numeric(labels[name]):
+          continue
+        tf.logging.info("DEBUG: Checking numerics of float label '%s'.", name)
+        checked_labels[name] = tf.debugging.check_numerics(
+            labels[name], "labels '{}'".format(name))
+    elif labels is not None and _is_numeric(labels):
+      tf.logging.info("DEBUG: Checking numerics of labels.")
+      checked_labels = tf.debugging.check_numerics(labels, "'labels'")
+    return checked_features, checked_labels
 
   def build_iteration(self,
                       iteration_number,
+                      ensemble_candidates,
                       subnetwork_builders,
                       features,
                       mode,
@@ -152,13 +222,14 @@ class _IterationBuilder(object):
 
     Args:
       iteration_number: Integer iteration number.
+      ensemble_candidates: Iterable of `adanet.ensemble.Candidate` instances.
       subnetwork_builders: A list of `Builders` for adding ` Subnetworks` to the
         graph. Each subnetwork is then wrapped in a `_Candidate` to train.
       features: Dictionary of `Tensor` objects keyed by feature name.
       mode: Defines whether this is training, evaluation or prediction. See
         `ModeKeys`.
       labels: `Tensor` of labels. Can be `None`.
-      previous_ensemble_summary: The `_ScopedSummary` for the previous ensemble.
+      previous_ensemble_summary: The `adanet.Summary` for the previous ensemble.
       previous_ensemble_spec: Optional `_EnsembleSpec` for iteration t-1.
       rebuilding: Boolean whether the iteration is being rebuilt only to restore
         the previous best subnetworks and ensembles.
@@ -169,7 +240,8 @@ class _IterationBuilder(object):
 
     Raises:
       ValueError: If subnetwork_builders is empty.
-      ValueError: If two `Builder` instances share the same name.
+      ValueError: If two subnetworks share the same name.
+      ValueError: If two ensembles share the same name.
     """
 
     tf.logging.info("%s iteration %s",
@@ -179,19 +251,21 @@ class _IterationBuilder(object):
     if not subnetwork_builders:
       raise ValueError("Each iteration must have at least one Builder.")
 
-    # TODO: Consider moving ensemble mode logic to ensemble.py.
-    ensemble_mode = mode
+    # TODO: Consider moving builder mode logic to ensemble_builder.py.
+    builder_mode = mode
     if rebuilding:
-      # Create the frozen ensemble in EVAL mode by default. This way their
-      # outputs aren't affected by dropout etc.
-      ensemble_mode = tf.estimator.ModeKeys.EVAL
+      # Build the subnetworks and ensembles in EVAL mode by default. This way
+      # their outputs aren't affected by dropout etc.
+      builder_mode = tf.estimator.ModeKeys.EVAL
       if mode == tf.estimator.ModeKeys.PREDICT:
-        ensemble_mode = mode
+        builder_mode = mode
 
       # Only replicate in training mode when the user requests it.
       if self._replicate_ensemble_in_training and (
           mode == tf.estimator.ModeKeys.TRAIN):
-        ensemble_mode = mode
+        builder_mode = mode
+
+    features, labels = self._check_numerics(features, labels)
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
@@ -211,10 +285,10 @@ class _IterationBuilder(object):
       candidates = []
       summaries = []
       subnetwork_reports = {}
+      previous_ensemble = None
 
-      # TODO: Consolidate building subnetwork into
-      # candidate_builder.
       if previous_ensemble_spec:
+        previous_ensemble = previous_ensemble_spec.ensemble
         # Include previous best subnetwork as a candidate so that its
         # predictions are returned until a new candidate outperforms.
         seen_builder_names = {previous_ensemble_spec.name: True}
@@ -244,50 +318,125 @@ class _IterationBuilder(object):
 
       for subnetwork_builder in subnetwork_builders:
         if subnetwork_builder.name in seen_builder_names:
-          raise ValueError("Two ensembles have the same name '{}'".format(
+          raise ValueError("Two subnetworks have the same name '{}'".format(
               subnetwork_builder.name))
         seen_builder_names[subnetwork_builder.name] = True
-        ensemble_name = "t{}_{}".format(iteration_number,
-                                        subnetwork_builder.name)
-        subnetwork_summary = _ScopedSummary(
-            self._model_dir,
-            namespace="candidate",
-            scope=ensemble_name,
+      subnetwork_specs = []
+      num_subnetworks = len(subnetwork_builders)
+      for i, subnetwork_builder in enumerate(subnetwork_builders):
+        if not self._placement_strategy.should_build_subnetwork(
+            num_subnetworks, i) and not rebuilding:
+          continue
+        subnetwork_name = "t{}_{}".format(iteration_number,
+                                          subnetwork_builder.name)
+        subnetwork_summary = self._summary_maker(
+            namespace="subnetwork",
+            scope=subnetwork_name,
             skip_summary=skip_summaries or rebuilding)
         summaries.append(subnetwork_summary)
-        ensemble_spec = self._ensemble_builder.append_new_subnetwork(
-            ensemble_name=ensemble_name,
-            ensemble_spec=previous_ensemble_spec,
-            iteration_number=iteration_number,
+        tf.logging.info("%s subnetwork '%s'",
+                        "Rebuilding" if rebuilding else "Building",
+                        subnetwork_builder.name)
+        subnetwork_spec = self._subnetwork_manager.build_subnetwork_spec(
+            name=subnetwork_name,
             subnetwork_builder=subnetwork_builder,
+            iteration_step=iteration_step_tensor,
             summary=subnetwork_summary,
             features=features,
-            mode=ensemble_mode,
-            iteration_step=iteration_step_tensor,
+            mode=builder_mode,
             labels=labels,
+            previous_ensemble=previous_ensemble,
             params=params)
-        candidate = self._candidate_builder.build_candidate(
-            ensemble_spec=ensemble_spec,
-            training=training,
-            iteration_step=iteration_step_tensor,
-            summary=subnetwork_summary)
-        candidates.append(candidate)
-
+        subnetwork_specs.append(subnetwork_spec)
+        if not self._placement_strategy.should_build_ensemble(
+            num_subnetworks) and not rebuilding:
+          # Workers that don't build ensembles need a dummy candidate in order
+          # to train the subnetwork.
+          # Because only ensembles can be considered candidates, we need to
+          # convert the subnetwork into a dummy ensemble and subsequently a
+          # dummy candidate. However, this dummy candidate is never considered a
+          # true candidate during candidate evaluation and selection.
+          # TODO: Eliminate need for candidates.
+          dummy_candidate = self._candidate_builder.build_candidate(
+              # pylint: disable=protected-access
+              ensemble_spec=ensemble_builder_lib._EnsembleSpec(
+                  name=subnetwork_name,
+                  ensemble=None,
+                  architecture=None,
+                  subnetwork_builders=subnetwork_builders,
+                  predictions=subnetwork_spec.predictions,
+                  loss=subnetwork_spec.loss,
+                  adanet_loss=0.),
+              # pylint: enable=protected-access
+              training=training,
+              iteration_step=iteration_step_tensor,
+              summary=subnetwork_summary,
+              track_moving_average=False)
+          candidates.append(dummy_candidate)
         # Generate subnetwork reports.
         if mode != tf.estimator.ModeKeys.PREDICT:
           subnetwork_report = subnetwork_builder.build_subnetwork_report()
           if not subnetwork_report:
             subnetwork_report = subnetwork.Report(
                 hparams={}, attributes={}, metrics={})
-          if ensemble_spec.eval_metrics is not None:
-            metrics_fn, kwargs = ensemble_spec.eval_metrics
+          if subnetwork_spec.eval_metrics is not None:
+            metrics_fn, kwargs = subnetwork_spec.eval_metrics
             metrics = metrics_fn(**kwargs)
             for metric_name in sorted(metrics):
               metric = metrics[metric_name]
               subnetwork_report.metrics[metric_name] = metric
-          subnetwork_report.metrics["adanet_loss"] = tf.metrics.mean(
-              ensemble_spec.adanet_loss)
           subnetwork_reports[subnetwork_builder.name] = subnetwork_report
+
+      # Create (ensembler_candidate*ensembler) ensembles.
+      seen_ensemble_names = {}
+      for ensembler in self._ensemblers:
+        for ensemble_candidate in ensemble_candidates:
+          if not self._placement_strategy.should_build_ensemble(
+              num_subnetworks) and not rebuilding:
+            continue
+          ensemble_name = "t{}_{}_{}".format(
+              iteration_number, ensemble_candidate.name, ensembler.name)
+          if ensemble_name in seen_ensemble_names:
+            raise ValueError(
+                "Two ensembles have the same name '{}'".format(ensemble_name))
+          seen_ensemble_names[ensemble_name] = True
+          summary = self._summary_maker(
+              namespace="ensemble",
+              scope=ensemble_name,
+              skip_summary=skip_summaries or rebuilding)
+          summaries.append(summary)
+          ensemble_spec = self._ensemble_builder.build_ensemble_spec(
+              name=ensemble_name,
+              candidate=ensemble_candidate,
+              ensembler=ensembler,
+              subnetwork_specs=subnetwork_specs,
+              summary=summary,
+              features=features,
+              mode=builder_mode,
+              iteration_step=iteration_step_tensor,
+              iteration_number=iteration_number,
+              labels=labels,
+              previous_ensemble_spec=previous_ensemble_spec,
+              params=params)
+          candidate = self._candidate_builder.build_candidate(
+              ensemble_spec=ensemble_spec,
+              training=training,
+              iteration_step=iteration_step_tensor,
+              summary=summary)
+          candidates.append(candidate)
+          # TODO: Move adanet_loss from subnetwork report to a new
+          # ensemble report, since the adanet_loss is associated with an
+          # ensemble, and only when using a ComplexityRegularizedEnsemblers.
+          # Keep adanet_loss in subnetwork report for backwards compatibility.
+          if len(ensemble_candidates) != len(subnetwork_builders):
+            continue
+          if len(ensemble_candidate.subnetwork_builders) > 1:
+            continue
+          if mode == tf.estimator.ModeKeys.PREDICT:
+            continue
+          builder_name = ensemble_candidate.subnetwork_builders[0].name
+          subnetwork_reports[builder_name].metrics[
+              "adanet_loss"] = tf.metrics.mean(ensemble_spec.adanet_loss)
 
       # Dynamically select the outputs of best candidate.
       best_candidate_index = self._best_candidate_index(candidates)
@@ -295,54 +444,74 @@ class _IterationBuilder(object):
                                                 best_candidate_index)
       best_loss = self._best_loss(candidates, best_candidate_index, mode)
       best_eval_metrics = self._create_best_eval_metrics_tuple(
-          candidates, best_candidate_index, mode, params)
+          candidates, subnetwork_specs, best_candidate_index, mode, params)
       best_export_outputs = self._best_export_outputs(
           candidates, best_candidate_index, mode, best_predictions)
       # Hooks on TPU cannot depend on any graph `Tensors`. Instead the value of
       # `is_over` is stored in a `Variable` that can later be retrieved from
       # inside a training hook.
-      is_over_var_template = tf.make_template("is_over_var_fn", _is_over_var)
+      is_over_var_template = tf.make_template("is_over_var_template",
+                                              _is_over_var)
 
       training_chief_hooks, training_hooks = (), ()
+      for subnetwork_spec in subnetwork_specs:
+        if not self._placement_strategy.should_train_subnetworks(
+            num_subnetworks) and not rebuilding:
+          continue
+        if not subnetwork_spec.train_op:
+          continue
+        training_chief_hooks += subnetwork_spec.train_op.chief_hooks or ()
+        training_hooks += subnetwork_spec.train_op.hooks or ()
       for candidate in candidates:
         spec = candidate.ensemble_spec
-        if not spec.subnetwork_train_op:
+        if not spec.train_op:
           continue
-        training_chief_hooks += spec.subnetwork_train_op.chief_hooks or ()
-        training_chief_hooks += spec.ensemble_train_op.chief_hooks or ()
-        training_hooks += spec.subnetwork_train_op.hooks or ()
-        training_hooks += spec.ensemble_train_op.hooks or ()
-      summary = _ScopedSummary(
-          self._model_dir,
-          namespace=None,
-          scope=None,
-          skip_summary=skip_summaries or rebuilding)
+        training_chief_hooks += spec.train_op.chief_hooks or ()
+        training_hooks += spec.train_op.hooks or ()
+      summary = self._summary_maker(
+          namespace=None, scope=None, skip_summary=skip_summaries or rebuilding)
+      summaries.append(summary)
       with summary.current_scope():
         summary.scalar("iteration/adanet/iteration", iteration_number)
         summary.scalar("iteration_step/adanet/iteration_step",
                        iteration_step_tensor)
         if best_loss is not None:
           summary.scalar("loss", best_loss)
-          summary.scalar("loss/adanet/adanet_weighted_ensemble", best_loss)
-      summaries.append(summary)
       eval_metric_ops = None
       if best_eval_metrics is not None:
         metric_fn, kwargs = best_eval_metrics
         eval_metric_ops = metric_fn(**kwargs)
-      estimator_spec = tf.estimator.EstimatorSpec(
-          mode=mode,
-          predictions=best_predictions,
-          loss=best_loss,
-          train_op=self._create_train_op(candidates, mode, iteration_step,
-                                         is_over_var_template),
-          eval_metric_ops=eval_metric_ops,
-          export_outputs=best_export_outputs,
-          training_chief_hooks=training_chief_hooks,
-          training_hooks=training_hooks)
+      train_op = self._create_train_op(subnetwork_specs, candidates, mode,
+                                       iteration_step, is_over_var_template,
+                                       num_subnetworks)
+      if self._use_tpu:
+        estimator_spec = tf.contrib.tpu.TPUEstimatorSpec(
+            mode=mode,
+            predictions=best_predictions,
+            loss=best_loss,
+            train_op=train_op,
+            eval_metrics=best_eval_metrics,
+            export_outputs=best_export_outputs,
+            training_hooks=training_hooks)
+      else:
+        eval_metric_ops = None
+        if best_eval_metrics is not None:
+          metric_fn, kwargs = best_eval_metrics
+          eval_metric_ops = metric_fn(**kwargs)
+        estimator_spec = tf.estimator.EstimatorSpec(
+            mode=mode,
+            predictions=best_predictions,
+            loss=best_loss,
+            train_op=train_op,
+            eval_metric_ops=eval_metric_ops,
+            export_outputs=best_export_outputs,
+            training_chief_hooks=training_chief_hooks,
+            training_hooks=training_hooks)
 
       return _Iteration(
           number=iteration_number,
           candidates=candidates,
+          subnetwork_specs=subnetwork_specs,
           estimator_spec=estimator_spec,
           best_candidate_index=best_candidate_index,
           summaries=summaries,
@@ -377,7 +546,8 @@ class _IterationBuilder(object):
           is_over, lambda: tf.assign(is_over_var, True, name="assign_is_over"),
           lambda: tf.no_op("noassign_is_over"))
 
-  def _create_train_op(self, candidates, mode, step, is_over_var_template):
+  def _create_train_op(self, subnetwork_specs, candidates, mode, step,
+                       is_over_var_template, num_subnetworks):
     """Returns the train op for this set of candidates.
 
     This train op combines the train ops from all the candidates into a single
@@ -386,12 +556,15 @@ class _IterationBuilder(object):
     The train op is only non-None during the `TRAIN` mode.
 
     Args:
+      subnetwork_specs: List of `_SubnetworkSpec` instances for this iteration.
       candidates: List of `_Candidate` instances to train.
       mode: Defines whether this is training, evaluation or inference. The train
         op is only non-None during `TRAIN`. See `ModeKeys`.
       step: Integer `Variable` for the current step of the iteration, as opposed
         to the global step.
       is_over_var_template: A fn()->tf.Variable which returns the is_over_var.
+      num_subnetworks: Integer number of subnetwork builders generated for the
+        current iteration.
 
     Returns:
       A `Tensor` train op.
@@ -401,11 +574,14 @@ class _IterationBuilder(object):
       return tf.no_op()
     with tf.variable_scope("train_op"):
       train_ops = []
+      if self._placement_strategy.should_train_subnetworks(num_subnetworks):
+        for subnetwork_spec in subnetwork_specs:
+          if subnetwork_spec.train_op is not None:
+            train_ops.append(subnetwork_spec.train_op.train_op)
       for candidate in candidates:
-        if candidate.ensemble_spec.subnetwork_train_op is not None:
+        if candidate.ensemble_spec.train_op is not None:
           # The train op of a previous ensemble is None even during `TRAIN`.
-          train_ops.append(candidate.ensemble_spec.subnetwork_train_op.train_op)
-          train_ops.append(candidate.ensemble_spec.ensemble_train_op.train_op)
+          train_ops.append(candidate.ensemble_spec.train_op.train_op)
       train_ops.append(self._assign_is_over(candidates, is_over_var_template))
       with tf.control_dependencies(train_ops):
         # AdaNet is responsible for incrementing the global step, not the
@@ -416,9 +592,9 @@ class _IterationBuilder(object):
             tf.assign_add(step, 1),
         )
 
-  def _create_best_eval_metrics_tuple(self, candidates, best_candidate_index,
-                                      mode, params):
-    """Returns (metric_fn, tensors) which computes best candidate metrics.
+  def _create_best_eval_metrics_tuple(self, candidates, subnetwork_specs,
+                                      best_candidate_index, mode, params):
+    """Returns (metric_fn, tensors) which computes the best ensemble's metrics.
 
     Specifically, when metric_fn(tensors) is called, it separates the metric ops
     by metric name. All candidates are not required to have the same metrics.
@@ -427,6 +603,7 @@ class _IterationBuilder(object):
 
     Args:
       candidates: List of `_Candidate` instances to choose from.
+      subnetwork_specs: List of `_SubnetworkSpec` instances for this iteration.
       best_candidate_index: `Tensor` index of the best candidate in the list.
       mode: Defines whether this is training, evaluation or inference. Eval
         metrics are only defined during evaluation. See `ModeKeys`.
@@ -440,7 +617,8 @@ class _IterationBuilder(object):
     if mode != tf.estimator.ModeKeys.EVAL:
       return None
 
-    metric_fns, tensors = self._collate_metric_fns_and_tensors(candidates)
+    metric_fns, tensors = self._collate_metric_fns_and_tensors(
+        candidates, subnetwork_specs)
     # All tensors outfed from the TPU must be batch-major.
     batch_size = params.get("batch_size", 1) if params else 1
     tensors["best_candidate_index"] = tf.tile([best_candidate_index],
@@ -451,63 +629,79 @@ class _IterationBuilder(object):
       """Returns the best eval metrics."""
 
       with tf.variable_scope("best_eval_metrics"):
-        tensors = dict_utils.unflatten_dict(kwargs, metric_fns.keys())
-        grouped_metrics = self._group_metric_ops(metric_fns, tensors)
+        subnetwork_metric_fns = {
+            k: metric_fns[k] for k in metric_fns if k.startswith("subnetwork_")
+        }
+        subnetwork_tensors = dict_utils.unflatten_dict(
+            kwargs, subnetwork_metric_fns.keys())
+        subnetwork_metric_ops = self._group_metric_ops(subnetwork_metric_fns,
+                                                       subnetwork_tensors)
+        ensemble_metric_fns = {
+            k: metric_fns[k] for k in metric_fns if k.startswith("ensemble_")
+        }
+        ensemble_tensors = dict_utils.unflatten_dict(kwargs,
+                                                     ensemble_metric_fns.keys())
+        grouped_metrics = self._group_metric_ops(ensemble_metric_fns,
+                                                 ensemble_tensors)
 
         eval_metric_ops = {}
         for metric_name in sorted(grouped_metrics):
           metric_ops = grouped_metrics[metric_name]
           if len(metric_ops) != len(candidates):
             continue
+          if metric_name == "loss":
+            continue
 
-          best_candidate_index = tensors["best_candidate_index"]
+          best_candidate_index = kwargs["best_candidate_index"]
           values, ops = list(six.moves.zip(*metric_ops))
           idx, idx_update_op = tf.metrics.mean(best_candidate_index)
           best_value = tf.stack(values)[tf.cast(idx, tf.int32)]
           # All tensors in this function have been outfed from the TPU, so we
           # must update them manually, otherwise the TPU will hang indefinetly
-          # for the value of idx to wait.
+          # for the value of idx to update.
           ops = list(ops)
           ops.append(idx_update_op)
-          best_op = tf.group(ops)
-          best_candidate_metric = (best_value, best_op)
-          eval_metric_ops[metric_name] = best_candidate_metric
+          # Bundle subnetwork eval metric ops and ensemble "loss"" ops (which
+          # is a restricted Estimator keyword) into other metric ops so that
+          # they are computed.
+          ensemble_loss_ops = grouped_metrics.get("loss", tf.no_op())
+          all_ops = tf.group(ops, ensemble_loss_ops, subnetwork_metric_ops)
+          eval_metric_ops[metric_name] = (best_value, all_ops)
 
-          # Include any evaluation metric shared among all the candidates in
-          # the top level metrics in TensorBoard. These "root" metrics track
-          # AdaNet's overall performance, making it easier to compare with other
-          # estimators that report the same metrics.
-          suffix = "/adanet/adanet_weighted_ensemble"
-          if not metric_name.endswith(suffix):
-            continue
-          root_metric_name = metric_name[:-len(suffix)]
-          if root_metric_name == "loss":
-            continue
-          eval_metric_ops[root_metric_name] = best_candidate_metric
-
+        # tf.estimator.Estimator does not allow a "loss" key to be present in
+        # its eval_metrics.
+        assert "loss" not in eval_metric_ops
         return eval_metric_ops
 
     return _best_eval_metrics_fn, tensors
 
-  def _collate_metric_fns_and_tensors(self, candidates):
+  def _collate_metric_fns_and_tensors(self, candidates, subnetwork_specs):
     """Collates all candidates' metric_fns and tensors from their eval_metrics.
 
     The fns and tensors are keyed by the index of the candidate in the list.
 
     Args:
       candidates: List of `_Candidate` instances.
+      subnetwork_specs: List of `_SubnetworkSpec` instances for this iteration.
 
     Returns:
       The dicts of functions and tensors keyed by candidate index.
     """
     fns = {}
     tensors = {}
+    for i, subnetwork_spec in enumerate(subnetwork_specs):
+      if not subnetwork_spec.eval_metrics:
+        continue
+      metric_fn, metric_tensors = subnetwork_spec.eval_metrics
+      key = "subnetwork_{}".format(i)
+      fns[key] = metric_fn
+      tensors[key] = metric_tensors
     for i, candidate in enumerate(candidates):
       ensemble_spec = candidate.ensemble_spec
       if not ensemble_spec.eval_metrics:
         continue
       metric_fn, metric_tensors = ensemble_spec.eval_metrics
-      key = "candidate_{}".format(i)
+      key = "ensemble_{}".format(i)
       fns[key] = metric_fn
       tensors[key] = metric_tensors
     return fns, tensors
@@ -525,6 +719,7 @@ class _IterationBuilder(object):
     Returns:
       The metric ops grouped by name.
     """
+
     grouped_metrics = {}
     for key in sorted(metric_fns):
       fn = metric_fns[key]

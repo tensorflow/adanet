@@ -42,15 +42,18 @@ def _default_logits(estimator_spec):
 class _BuilderFromEstimator(Builder):
   """An `adanet.Builder` from a :class:`tf.estimator.Estimator`."""
 
-  def __init__(self, estimator, index, logits_fn):
+  def __init__(self, name, estimator, logits_fn):
+    if not isinstance(estimator, tf.estimator.Estimator):
+      raise ValueError("Values in candidate_pool must have type "
+                       "tf.estimator.Estimator but got {}".format(
+                           estimator.__class__))
+    self._name = name
     self._estimator = estimator
-    self._index = index
     self._logits_fn = logits_fn
 
   @property
   def name(self):
-    return "{class_name}{index}".format(
-        class_name=self._estimator.__class__.__name__, index=self._index)
+    return self._name
 
   def build_subnetwork(self, features, labels, logits_dimension, training,
                        iteration_step, summary, previous_ensemble):
@@ -84,27 +87,31 @@ class _BuilderFromEstimator(Builder):
                                 iteration_step, summary, previous_ensemble):
     return self._subnetwork_train_op
 
-  def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
-                                     iteration_step, summary):
-    return tf.no_op()
-
 
 class _GeneratorFromCandidatePool(Generator):
   """An `adanet.Generator` from a pool of `Estimator` and `Model` instances."""
 
   def __init__(self, candidate_pool, logits_fn):
     self._candidate_pool = candidate_pool
+    if logits_fn is None:
+      logits_fn = _default_logits
     self._logits_fn = logits_fn
 
   def generate_candidates(self, previous_ensemble, iteration_number,
                           previous_ensemble_reports, all_reports):
     builders = []
-    for i, candidate in enumerate(self._candidate_pool):
-      if isinstance(candidate, tf.estimator.Estimator):
+    if isinstance(self._candidate_pool, dict):
+      for name in sorted(self._candidate_pool):
         builders.append(
             _BuilderFromEstimator(
-                candidate, index=i, logits_fn=self._logits_fn))
-        continue
+                name, self._candidate_pool[name], logits_fn=self._logits_fn))
+      return builders
+
+    for i, estimator in enumerate(self._candidate_pool):
+      name = "{class_name}{index}".format(
+          class_name=estimator.__class__.__name__, index=i)
+      builders.append(
+          _BuilderFromEstimator(name, estimator, logits_fn=self._logits_fn))
     return builders
 
 
@@ -130,16 +137,18 @@ class AutoEnsembleEstimator(Estimator):
       # Learn to ensemble linear and DNN models.
       estimator = adanet.AutoEnsembleEstimator(
           head=head,
-          candidate_pool=[
-              tf.estimator.LinearEstimator(
-                  head=head,
-                  feature_columns=feature_columns,
-                  optimizer=tf.train.FtrlOptimizer(...)),
-              tf.estimator.DNNEstimator(
-                  head=head,
-                  feature_columns=feature_columns,
-                  optimizer=tf.train.ProximalAdagradOptimizer(...),
-                  hidden_units=[1000, 500, 100])],
+          candidate_pool={
+              "linear":
+                  tf.estimator.LinearEstimator(
+                      head=head,
+                      feature_columns=feature_columns,
+                      optimizer=tf.train.FtrlOptimizer(...)),
+              "dnn":
+                  tf.estimator.DNNEstimator(
+                      head=head,
+                      feature_columns=feature_columns,
+                      optimizer=tf.train.ProximalAdagradOptimizer(...),
+                      hidden_units=[1000, 500, 100])},
           max_iteration_steps=50)
 
       # Input builders
@@ -161,9 +170,12 @@ class AutoEnsembleEstimator(Estimator):
   Args:
     head: A :class:`tf.contrib.estimator.Head` instance for computing loss and
       evaluation metrics for every candidate.
-    candidate_pool: List of :class:`tf.estimator.Estimator` objects that are
-      candidates to ensemble at each iteration. The order does not directly
-      affect which candidates will be included in the final ensemble.
+    candidate_pool: List of :class:`tf.estimator.Estimator` objects or dict of
+      string name to :class:`tf.estimator.Estimator` objects that are candidates
+      to ensemble at each iteration. The order does not directly affect which
+      candidates will be included in the final ensemble, but will affect the
+      name of the candidate. When using a dict, the string key will be used as
+      the name of the candidate.
     max_iteration_steps: Total number of steps for which to train candidates per
       iteration. If `OutOfRange` or `StopIteration` occurs in the middle,
       training stops before `max_iteration_steps` steps.
@@ -178,7 +190,8 @@ class AutoEnsembleEstimator(Estimator):
           default to returning `estimator_spec.predictions` when they are a
           :class:`tf.Tensor` or the :class:`tf.Tensor` for the key 'logits' when
           they are a dict of string to :class:`tf.Tensor`.
-    adanet_lambda: See :class:`adanet.Estimator`.
+    ensemblers: See :class:`adanet.Estimator`.
+    ensemble_strategies: See :class:`adanet.Estimator`.
     evaluator:  See :class:`adanet.Estimator`.
     metric_fn:  See :class:`adanet.Estimator`.
     force_grow:  See :class:`adanet.Estimator`.
@@ -186,6 +199,7 @@ class AutoEnsembleEstimator(Estimator):
     worker_wait_timeout_secs: See :class:`adanet.Estimator`.
     model_dir: See :class:`adanet.Estimator`.
     config: See :class:`adanet.Estimator`.
+    debug: See :class:`adanet.Estimator`.
 
   Returns:
     An :class:`adanet.AutoEnsembleEstimator` instance.
@@ -200,34 +214,30 @@ class AutoEnsembleEstimator(Estimator):
                head,
                candidate_pool,
                max_iteration_steps,
+               ensemblers=None,
+               ensemble_strategies=None,
                logits_fn=None,
-               adanet_lambda=0.,
                evaluator=None,
                metric_fn=None,
                force_grow=False,
                adanet_loss_decay=.9,
                worker_wait_timeout_secs=7200,
                model_dir=None,
-               config=None):
-    for candidate in candidate_pool:
-      if isinstance(candidate, tf.estimator.Estimator):
-        continue
-      raise ValueError("Elements in candidate_pool must have type "
-                       "tf.estimator.Estimator but got {}".format(
-                           candidate.__class__))
-    if logits_fn is None:
-      logits_fn = _default_logits
+               config=None,
+               **kwargs):
     subnetwork_generator = _GeneratorFromCandidatePool(candidate_pool,
                                                        logits_fn)
     super(AutoEnsembleEstimator, self).__init__(
         head=head,
         subnetwork_generator=subnetwork_generator,
         max_iteration_steps=max_iteration_steps,
-        adanet_lambda=adanet_lambda,
+        ensemblers=ensemblers,
+        ensemble_strategies=ensemble_strategies,
         evaluator=evaluator,
         metric_fn=metric_fn,
         force_grow=force_grow,
         adanet_loss_decay=adanet_loss_decay,
         worker_wait_timeout_secs=worker_wait_timeout_secs,
         model_dir=model_dir,
-        config=config)
+        config=config,
+        **kwargs)

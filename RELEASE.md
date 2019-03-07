@@ -15,8 +15,11 @@ limitations under the License.
 
 # Current version (0.6.0-dev)
  * Under development.
+ * Support dictionary candidate pools in `adanet.AutoEnsembleEstimator` constructor to specify human-readable candidate names.
+ * Introduce `adanet.ensemble` which contains interfaces and examples of ways to learn ensembles using AdaNet. Users can now extend AdaNet to use custom ensemble-learning methods.
+ * Add support for evaluation on TPU using `adanet.TPUEstimator`.
  * Support recording TensorBoard `scalar`, `image`, `histogram`, and `audio` summaries on TPU during training.
- * Support `scalar`, `image`, `histogram`, and `audio` functions in the `tf.contrib.summary` package.
+ * Add debug mode to help detect NaNs and Infs during training.
 
 # Release 0.5.0
  * Support training on TPU using `adanet.TPUEstimator`.

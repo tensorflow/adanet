@@ -102,7 +102,8 @@ class _CandidateBuilder(object):
                       training,
                       iteration_step,
                       summary,
-                      is_previous_best=False):
+                      is_previous_best=False,
+                      track_moving_average=True):
     """Builds and returns an AdaNet candidate.
 
     Args:
@@ -115,6 +116,8 @@ class _CandidateBuilder(object):
       is_previous_best: Bool identifying whether this ensemble came from a
         previous iteration. If `True`, `is_training` will be `False` since its
         weights are frozen.
+      track_moving_average: Bool whether to track the moving average of the
+        ensemble's adanet loss.
 
     Returns:
       A _Candidate instance.
@@ -123,8 +126,10 @@ class _CandidateBuilder(object):
     candidate_scope = "candidate_{}".format(ensemble_spec.name)
 
     with tf.variable_scope(candidate_scope):
-      adanet_loss = tf.get_variable(
-          "adanet_loss", initializer=0., trainable=False)
+      adanet_loss = ensemble_spec.adanet_loss
+      if track_moving_average:
+        adanet_loss = tf.get_variable(
+            "adanet_loss", initializer=0., trainable=False)
 
       if is_previous_best:
         # This candidate is frozen, so it is already done training.
@@ -138,7 +143,7 @@ class _CandidateBuilder(object):
             self._max_steps,
             name="is_training")
 
-      if training:
+      if training and track_moving_average:
         update_adanet_loss_op = moving_averages.assign_moving_average(
             adanet_loss,
             ensemble_spec.adanet_loss,
@@ -146,9 +151,9 @@ class _CandidateBuilder(object):
         with tf.control_dependencies([update_adanet_loss_op]):
           adanet_loss = adanet_loss.read_value()
 
-      with summary.current_scope():
-        summary.scalar("adanet_loss/adanet/adanet_weighted_ensemble",
-                       adanet_loss)
+        with summary.current_scope():
+          summary.scalar("adanet_loss/adanet/adanet_weighted_ensemble",
+                         adanet_loss)
       return _Candidate(
           ensemble_spec=ensemble_spec,
           adanet_loss=adanet_loss,

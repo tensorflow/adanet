@@ -34,6 +34,8 @@ py_library(
         ":report_accessor",
         ":summary",
         ":timer",
+        "//adanet/core/distributed",
+        "//adanet/core/ensemble",
         "@six_archive//:six",
     ],
 )
@@ -52,6 +54,37 @@ py_test(
         ":testing_utils",
         "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+py_test(
+    name = "estimator_distributed_test",
+    size = "large",
+    srcs = ["estimator_distributed_test.py"],
+    data = [
+        ":estimator_distributed_test_runner",
+    ],
+    flaky = 1,
+    shard_count = 10,
+    srcs_version = "PY2AND3",
+    deps = [
+        ":estimator",
+        ":timer",
+        "//adanet/core/subnetwork",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+# Subprocess binary for estimator_distributed_test.
+py_binary(
+    name = "estimator_distributed_test_runner",
+    testonly = 1,
+    srcs = ["estimator_distributed_test_runner.py"],
+    deps = [
+        ":estimator",
+        "//adanet/autoensemble",
+        "//adanet/core/distributed",
+        "//adanet/core/subnetwork",
     ],
 )
 
@@ -100,7 +133,8 @@ py_library(
     srcs = ["iteration.py"],
     deps = [
         ":dict_utils",
-        ":summary",
+        ":ensemble_builder",
+        "//adanet/core/distributed",
         "//adanet/core/subnetwork",
         "@six_archive//:six",
     ],
@@ -114,6 +148,7 @@ py_test(
         ":candidate",
         ":ensemble_builder",
         ":iteration",
+        ":summary",
         ":testing_utils",
         "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
@@ -157,6 +192,7 @@ py_test(
         ":ensemble_builder",
         ":summary",
         ":testing_utils",
+        "//adanet/core/ensemble",
         "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
@@ -202,6 +238,7 @@ py_library(
     deps = [
         ":architecture",
         ":ensemble_builder",
+        "//adanet/core/ensemble",
         "//adanet/core/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
@@ -286,9 +323,6 @@ py_test(
 py_library(
     name = "architecture",
     srcs = ["architecture.py"],
-    deps = [
-        ":architecture_pb2",
-    ],
 )
 
 py_test(
@@ -299,16 +333,4 @@ py_test(
         ":architecture",
         "@absl_py//absl/testing:parameterized",
     ],
-)
-
-proto_library(
-    name = "architecture_proto",
-    srcs = ["architecture.proto"],
-)
-
-py_proto_library(
-    name = "architecture_pb2",
-    srcs = ["architecture.proto"],
-    default_runtime = "@com_google_protobuf//:protobuf_python",
-    protoc = "@com_google_protobuf//:protoc",
 )
