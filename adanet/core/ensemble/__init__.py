@@ -12,13 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The `adanet.ensemble` package.
+"""Defines built-in ensemble methods and interfaces for custom ensembles."""
 
-This package defines built-in ensemble methods and interfaces for building
-ensembles of subnetworks.
-
-TODO: Add more details documentation.
-"""
+# TODO: Add more details documentation.
 
 from __future__ import absolute_import
 from __future__ import division
@@ -26,6 +22,7 @@ from __future__ import print_function
 
 from adanet.core.ensemble.ensembler import Ensemble
 from adanet.core.ensemble.ensembler import Ensembler
+from adanet.core.ensemble.ensembler import TrainOpSpec
 from adanet.core.ensemble.strategy import AllStrategy
 from adanet.core.ensemble.strategy import Candidate
 from adanet.core.ensemble.strategy import GrowStrategy
@@ -39,6 +36,7 @@ from adanet.core.ensemble.weighted import WeightedSubnetwork
 __all__ = [
     "Ensemble",
     "Ensembler",
+    "TrainOpSpec",
     "AllStrategy",
     "Candidate",
     "GrowStrategy",

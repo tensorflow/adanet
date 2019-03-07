@@ -54,6 +54,12 @@ Ensemble learning definitions.
 .. autoclass:: ComplexityRegularizedEnsembler
     :members:
 
+:hidden:`TrainOpSpec`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: TrainOpSpec
+    :members:
+
 Strategies
 ---------------
 

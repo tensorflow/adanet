@@ -8,7 +8,7 @@
 AdaNet documentation
 ==================================
 
-AdaNet: Fast and flexible AutoML with learning guarantees.
+AdaNet is a TensorFlow framework for fast and flexible AutoML with learning guarantees.
 
 .. raw:: html
 
@@ -47,6 +47,7 @@ This is not an official Google product.
   adanet
   adanet.ensemble
   adanet.subnetwork
+  adanet.distributed
 
 Indices and tables
 ==================

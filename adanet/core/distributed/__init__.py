@@ -15,9 +15,9 @@
 
 This package methods for distributing computation using the TensorFlow
 computation graph.
-
-TODO: Add more details documentation.
 """
+
+# TODO: Add more details documentation.
 
 from __future__ import absolute_import
 from __future__ import division
