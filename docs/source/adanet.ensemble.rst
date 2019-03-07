@@ -64,32 +64,27 @@ Ensemble strategies for grouping subnetworks.
 
 .. autoclass:: Strategy
     :members:
-    :show-inheritance:
 
 :hidden:`SoloStrategy`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: SoloStrategy
     :members:
-    :show-inheritance:
 
 :hidden:`GrowStrategy`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: GrowStrategy
     :members:
-    :show-inheritance:
 
 :hidden:`AllStrategy`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: AllStrategy
     :members:
-    :show-inheritance:
 
 :hidden:`Candidate`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: Candidate
     :members:
-    :show-inheritance:
