@@ -24,7 +24,7 @@ import collections
 class TrainOpSpec(
     collections.namedtuple("TrainOpSpec",
                            ["train_op", "chief_hooks", "hooks"])):
-  """A data structure for specifying training operations.
+  """A data structure for specifying ensembler training operations.
 
   Args:
     train_op: Op for the training step.
@@ -51,11 +51,11 @@ class Ensemble(object):
 
   @abc.abstractproperty
   def logits(self):
-    """Ensemble logits :class:`Tensor`."""
+    """Ensemble logits :class:`tf.Tensor`."""
 
   @abc.abstractproperty
   def subnetworks(self):
-    """Returns an ordered Iterable of the ensemble's component subnetworks."""
+    """Returns an ordered :class:`Iterable` of the ensemble's subnetworks."""
 
 
 class Ensembler(object):
@@ -85,9 +85,9 @@ class Ensembler(object):
         :class:`adanet.subnetwork.Subnetwork` instances present in previous
         ensemble to be used. The subnetworks from previous_ensemble not
         included in this list should be pruned. Can be set to None or empty.
-      features: Input `dict` of :class:`tf.Tensor` objects.
+      features: Input :code:`dict` of :class:`tf.Tensor` objects.
       labels: Labels :class:`tf.Tensor` or a dictionary of string label name to
-        :class:`tf.Tensor` (for multi-head). Can be `None`.
+        :class:`tf.Tensor` (for multi-head). Can be :code:`None`.
       logits_dimension: Size of the last dimension of the logits
         :class:`tf.Tensor`. Typically, logits have for shape `[batch_size,
         logits_dimension]`.
@@ -98,9 +98,9 @@ class Ensembler(object):
       summary: An :class:`adanet.Summary` for scoping summaries to individual
         ensembles in Tensorboard. Using :meth:`tf.summary` within this scope
         will use this :class:`adanet.Summary` under the hood.
-      previous_ensemble: The best :class:`adanet.Ensemble` from iteration t-1.
+      previous_ensemble: The best :class:`adanet.Ensemble` from iteration *t-1*.
         The created subnetwork will extend the previous ensemble to form the
-        :class:`adanet.Ensemble` at iteration t.
+        :class:`adanet.Ensemble` at iteration *t*.
 
     Returns:
       An :class:`adanet.ensemble.Ensemble` subclass instance.
@@ -113,8 +113,8 @@ class Ensembler(object):
     # pyformat: disable
     """Returns an op for training an ensemble.
 
-    Accessing the global step via :meth:`tf.train.get_or_create_global_step()`
-    or :meth:`tf.train.get_global_step()` within this scope will return an
+    Accessing the global step via :meth:`tf.train.get_or_create_global_step`
+    or :meth:`tf.train.get_global_step` within this scope will return an
     incrementable iteration step since the beginning of the iteration.
 
     Args:
@@ -128,8 +128,8 @@ class Ensembler(object):
       iteration_step: Integer :class:`tf.Tensor` representing the step since the
         beginning of the current iteration, as opposed to the global step.
       summary: An :class:`adanet.Summary` for scoping summaries to individual
-        ensembles in Tensorboard. Using `tf.summary` within this scope will
-        use this :class:`adanet.Summary` under the hood.
+        ensembles in Tensorboard. Using :code:`tf.summary` within this scope
+        will use this :class:`adanet.Summary` under the hood.
       previous_ensemble: The best :class:`adanet.ensemble.Ensemble` from the
         previous iteration.
     Returns:

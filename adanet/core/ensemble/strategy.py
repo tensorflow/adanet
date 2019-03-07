@@ -29,9 +29,9 @@ class Candidate(
 
   Args:
     name: String name of this ensemble candidate.
-    subnetwork_builders: Candidate class:`adanet.subnetwork.Builder` instances
+    subnetwork_builders: Candidate :class:`adanet.subnetwork.Builder` instances
       to include in the ensemble.
-    previous_ensemble_subnetwork_builders: class:`adanet.subnetwork.Builder`
+    previous_ensemble_subnetwork_builders: :class:`adanet.subnetwork.Builder`
       instances to include from the previous ensemble.
   """
 
@@ -55,27 +55,28 @@ class Strategy(object):
                                    previous_ensemble_subnetwork_builders):
     """Generates ensemble candidates to search over this iteration.
 
-    TODO: Pruning the previous subnetwork may require more metadata such
-    as `subnetwork.Reports` and `ensemble.Reports` to make smart decisions.
-
     Args:
-      subnetwork_builders: Candidate class:`adanet.subnetwork.Builder` instances
-        for this iteration.
-      previous_ensemble_subnetwork_builders: class:`adanet.subnetwork.Builder`
+      subnetwork_builders: Candidate :class:`adanet.subnetwork.Builder`
+        instances for this iteration.
+      previous_ensemble_subnetwork_builders: :class:`adanet.subnetwork.Builder`
         instances from the previous ensemble. Including only a subset of these
-        in a returned `adanet.ensemble.Candidate` is equivalent to pruning the
-        previous ensemble.
+        in a returned :class:`adanet.ensemble.Candidate` is equivalent to
+        pruning the previous ensemble.
 
     Returns:
-      An iterable of `adanet.ensemble.Candidate` instances to train and consider
-      this iteration.
+      An iterable of :class:`adanet.ensemble.Candidate` instances to train and
+      consider this iteration.
     """
+
+    # TODO: Pruning the previous subnetwork may require more metadata
+    # such as `subnetwork.Reports` and `ensemble.Reports` to make smart
+    # decisions.
 
 
 class SoloStrategy(Strategy):
   """Produces a model composed of a single subnetwork.
 
-  "An ensemble of one."
+  *An ensemble of one.*
 
   This is effectively the same as pruning all previous ensemble subnetworks,
   and only adding one subnetwork candidate to the ensemble.

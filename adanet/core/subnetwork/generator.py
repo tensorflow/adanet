@@ -67,7 +67,7 @@ class Subnetwork(
   """An AdaNet subnetwork.
 
   In the AdaNet paper, an :class:`adanet.subnetwork.Subnetwork` is are called a
-  'subnetwork', and indicated by 'h'. A collection of weighted subnetworks form
+  *subnetwork*, and indicated by *h*. A collection of weighted subnetworks form
   an AdaNet ensemble.
 
   Args:
@@ -77,7 +77,7 @@ class Subnetwork(
       type is :class:`MATRIX`, the AdaNet algorithm takes care of computing
       ensemble mixture weights matrices (one per subnetwork) that multiply the
       various last layers of the ensemble's subnetworks, and regularize them
-      using their subnetwork's complexity. This field is represented by 'h' in
+      using their subnetwork's complexity. This field is represented by *h* in
       the AdaNet paper.
     logits: :class:`tf.Tensor` logits or dict of string to :class:`tf.Tensor`
       logits (for multi-head) for training the subnetwork. These logits are not
@@ -165,11 +165,11 @@ class Builder(object):
   def name(self):
     r"""Returns the unique name of this subnetwork within an iteration.
 
-    TODO: Validate name matches ^[A-Za-z0-9_.\\-/]*$
-
     Returns:
       String name of this subnetwork.
     """
+
+    # TODO: Validate name matches ^[A-Za-z0-9_.\\-/]*$
 
   @abc.abstractmethod
   def build_subnetwork(self,

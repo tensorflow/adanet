@@ -38,14 +38,14 @@ class Report(
     attributes: A dict mapping strings to rank 0 Tensors of dtype string, int32,
       or float32. It is meant to contain properties that may or may not change
       over the course of training the :class:`adanet.subnetwork.Subnetwork`,
-      such as the number of parameters, the Lipschitz constant, the L_2 norm
-      of the weights, or learning rate at materialization time.
+      such as the number of parameters, the Lipschitz constant, the :math:`L2`
+      norm of the weights, or learning rate at materialization time.
     metrics: Dict of metric results keyed by name. The values of the dict are
       the results of calling a metric function, namely a `(metric_tensor,
       update_op)` tuple. `metric_tensor` should be evaluated without any impact
       on state (typically is a pure computation results based on variables.).
-      For example, it should not trigger the `update_op` or requires any input
-      fetching. This is meant to contain metrics of interest, such as the
+      For example, it should not trigger the :code:`update_op` or requires any
+      input fetching. This is meant to contain metrics of interest, such as the
       training loss, complexity regularized loss, or standard deviation of the
       last layer outputs.
 
@@ -157,7 +157,7 @@ class MaterializedReport(
       to construct this :class:`adanet.subnetwork.Subnetwork`. It is meant to
       contain properties that may or may not change over the course of
       training the :class:`adanet.subnetwork.Subnetwork`, such as the number of
-      parameters, the Lipschitz constant, or the L_2 norm of the weights.
+      parameters, the Lipschitz constant, or the :math:`L2` norm of the weights.
     metrics: A dict mapping strings to python strings, ints, or floats. These
       are python primitives that come from metrics that were evaluated on the
       trained :class:`adanet.subnetwork.Subnetwork` over some dataset; these

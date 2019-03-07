@@ -34,28 +34,31 @@ class WeightedSubnetwork(
     collections.namedtuple(
         "WeightedSubnetwork",
         ["name", "iteration_number", "weight", "logits", "subnetwork"])):
+  # pyformat: disable
   """An AdaNet weighted subnetwork.
 
   A weighted subnetwork is a weight applied to a subnetwork's last layer
   or logits (depending on the mixture weights type).
 
   Args:
-    name: String name of `subnetwork` as defined by its
+    name: String name of :code:`subnetwork` as defined by its
       :class:`adanet.subnetwork.Builder`.
     iteration_number: Integer iteration when the subnetwork was created.
     weight: The weight :class:`tf.Tensor` or dict of string to weight
       :class:`tf.Tensor` (for multi-head) to apply to this subnetwork. The
-      AdaNet paper refers to this weight as 'w' in Equations (4), (5), and (6).
+      AdaNet paper refers to this weight as :math:`w` in Equations (4), (5),
+      and (6).
     logits: The output :class:`tf.Tensor` or dict of string to weight
       :class:`tf.Tensor` (for multi-head) after the matrix multiplication of
-      `weight` and the subnetwork's :meth:`last_layer`. The output's shape is
-        [batch_size, logits_dimension]. It is equivalent to a linear logits
-        layer in a neural network.
+      :code:`weight` and the subnetwork's :code:`last_layer`. The output's shape
+      is [batch_size, logits_dimension]. It is equivalent to a linear logits
+      layer in a neural network.
     subnetwork: The :class:`adanet.subnetwork.Subnetwork` to weight.
 
   Returns:
     An :class:`adanet.ensemble.WeightedSubnetwork` object.
   """
+  # pyformat: enable
 
   def __new__(cls,
               name="",
@@ -87,12 +90,12 @@ class ComplexityRegularized(
       F(x) = \sum_{i=1}^{N}w_ih_i(x) + b
 
   Args:
-    weighted_subnetworks: List of :class:`adanet.WeightedSubnetwork` instances
-      that form this ensemble. Ordered from first to most recent.
+    weighted_subnetworks: List of :class:`adanet.ensemble.WeightedSubnetwork`
+      instances that form this ensemble. Ordered from first to most recent.
     bias: Bias term :class:`tf.Tensor` or dict of string to bias term
       :class:`tf.Tensor` (for multi-head) for the ensemble's logits.
     logits: Logits :class:`tf.Tensor` or dict of string to logits
-      :class:`tf.Tensor` (for multi-head). The result of the function 'f' as
+      :class:`tf.Tensor` (for multi-head). The result of the function *f* as
       defined in Section 5.1 which is the sum of the logits of all
       :class:`adanet.WeightedSubnetwork` instances in ensemble.
     subnetworks: List of :class:`adanet.subnetwork.Subnetwork` instances that
@@ -135,9 +138,10 @@ class MixtureWeightType(object):
 
 
 class ComplexityRegularizedEnsembler(Ensembler):
+  # pyformat: disable
   r"""The AdaNet algorithm implemented as an :class:`adanet.ensemble.Ensembler`.
 
-  The AdaNet algorithm was introduced in the Cortes et al. ICML 2017 paper:
+  The AdaNet algorithm was introduced in the [Cortes et al. ICML 2017] paper:
   https://arxiv.org/abs/1607.01097.
 
   The AdaNet algorithm uses a weak learning algorithm to iteratively generate a
@@ -151,8 +155,8 @@ class ComplexityRegularizedEnsembler(Ensembler):
   continues onto the next iteration.
 
   AdaNet attempts to minimize the following loss function to learn the mixture
-  weights 'w' of each subnetwork 'h' in the ensemble with differentiable
-  convex non-increasing surrogate loss function Phi:
+  weights :math:`w` of each subnetwork :math:`h` in the ensemble with
+  differentiable convex non-increasing surrogate loss function :math:`\Phi`:
 
   Equation (4):
 
@@ -164,38 +168,44 @@ class ComplexityRegularizedEnsembler(Ensembler):
   with :math:`\lambda >= 0` and :math:`\beta >= 0`.
 
   Args:
-    optimizer: A `tf.train.Optimizer` instance to be used for building the train
-      op. If left as None,  tf.no_op() is returned as train op.
-    mixture_weight_type: The `adanet.MixtureWeightType` defining which mixture
-      weight type to learn.
+    optimizer: A :class:`tf.train.Optimizer` instance to be used for building
+      the train op. If left as None, :meth:`tf.no_op` is returned as train op.
+    mixture_weight_type: The :class:`adanet.ensemble.MixtureWeightType` defining
+      which mixture weight type to learn on top of the subnetworks' logits.
     mixture_weight_initializer: The initializer for mixture_weights. When
-      `None`, the default is different according to `mixture_weight_type`.
-      `SCALAR` initializes to 1/N where N is the number of subnetworks in the
-      ensemble giving a uniform average. `VECTOR` initializes each entry to 1/N
-      where N is the number of subnetworks in the ensemble giving a uniform
-      average. `MATRIX` uses `tf.zeros_initializer`.
+      :code:`None`, the default is different according to
+      :code:`mixture_weight_type`:
+
+        - :code:`SCALAR` initializes to :math:`1/N` where :math:`N` is the
+          number of subnetworks in the ensemble giving a uniform average.
+        - :code:`VECTOR` initializes each entry to :math:`1/N` where :math:`N`
+          is the number of subnetworks in the ensemble giving a uniform average.
+        - :code:`MATRIX` uses :meth:`tf.zeros_initializer`.
     warm_start_mixture_weights: Whether, at the beginning of an iteration, to
       initialize the mixture weights of the subnetworks from the previous
       ensemble to their learned value at the previous iteration, as opposed to
       retraining them from scratch. Takes precedence over the value for
-      `mixture_weight_initializer` for subnetworks from previous iterations.
-    model_dir: The model_dir to use for warm-starting mixture weights and bias
-      at the logit layer. Ignored if warm_start_mixture_weights is False.
-    adanet_lambda: Float multiplier 'lambda' for applying L1 regularization to
-      subnetworks' mixture weights 'w' in the ensemble proportional to their
-      complexity. See Equation (4) in the AdaNet paper.
-    adanet_beta: Float L1 regularization multiplier 'beta' to apply equally to
-      all subnetworks' weights 'w' in the ensemble regardless of their
-      complexity. See Equation (4) in the AdaNet paper.
+      :code:`mixture_weight_initializer` for subnetworks from previous
+      iterations.
+    model_dir: The model dir to use for warm-starting mixture weights and bias
+      at the logit layer. Ignored if :code:`warm_start_mixture_weights` is
+      :code:`False`.
+    adanet_lambda: Float multiplier :math:`\lambda` for applying :math:`L1`
+      regularization to subnetworks' mixture weights :math:`w` in the ensemble
+      proportional to their complexity. See Equation (4) in the AdaNet paper.
+    adanet_beta: Float :math:`L1` regularization multiplier :math:`\beta` to apply
+      equally to all subnetworks' weights :math:`w` in the ensemble regardless of
+      their complexity. See Equation (4) in the AdaNet paper.
     use_bias: Whether to add a bias term to the ensemble's logits.
 
   Returns:
     An `adanet.ensemble.ComplexityRegularizedEnsembler` instance.
 
   Raises:
-    ValueError: if warm_start_mixture_weights is True but model_dir is
-    None.
+    ValueError: if :code:`warm_start_mixture_weights` is :code:`True` but
+    :code:`model_dir` is :code:`None`.
   """
+  # pyformat: enable
 
   def __init__(self,
                optimizer=None,
