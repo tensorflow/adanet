@@ -469,17 +469,27 @@ class _IterationBuilder(object):
                                        iteration_step, is_over_var_template,
                                        num_subnetworks)
       iteration_metrics = _IterationMetrics(candidates, subnetwork_specs)
-      estimator_spec = tf.contrib.tpu.TPUEstimatorSpec(
-          mode=mode,
-          predictions=best_predictions,
-          loss=best_loss,
-          train_op=train_op,
-          eval_metrics=iteration_metrics.best_eval_metrics_tuple(
-              best_candidate_index, mode),
-          export_outputs=best_export_outputs,
-          training_hooks=training_hooks)
-      if not self._use_tpu:
-        estimator_spec = estimator_spec.as_estimator_spec()
+      if self._use_tpu:
+        estimator_spec = tf.contrib.tpu.TPUEstimatorSpec(
+            mode=mode,
+            predictions=best_predictions,
+            loss=best_loss,
+            train_op=train_op,
+            eval_metrics=iteration_metrics.best_eval_metrics_tuple(
+                best_candidate_index, mode),
+            export_outputs=best_export_outputs,
+            training_hooks=training_hooks)
+      else:
+        estimator_spec = tf.estimator.EstimatorSpec(
+            mode=mode,
+            predictions=best_predictions,
+            loss=best_loss,
+            train_op=train_op,
+            eval_metric_ops=iteration_metrics.best_eval_metric_ops(
+                best_candidate_index, mode),
+            export_outputs=best_export_outputs,
+            training_chief_hooks=training_chief_hooks,
+            training_hooks=training_hooks)
 
       return _Iteration(
           number=iteration_number,

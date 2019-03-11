@@ -223,6 +223,41 @@ def head():
       loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
 
+class ModifierSessionRunHook(tf.train.SessionRunHook):
+  """Modifies the graph by adding a variable."""
+
+  def __init__(self, var_name="hook_created_variable"):
+    self._var_name = var_name
+    self._begun = False
+
+  def begin(self):
+    """Adds a variable to the graph.
+
+    Raises:
+      ValueError: If we've already begun a run.
+    """
+
+    if self._begun:
+      raise ValueError("begin called twice without end.")
+    self._begun = True
+    _ = tf.get_variable(name=self._var_name, initializer="")
+
+  def end(self, session):
+    """Adds a variable to the graph.
+
+    Args:
+      session: A `tf.Session` object that can be used to run ops.
+
+    Raises:
+      ValueError: If we've not begun a run.
+    """
+
+    _ = session
+    if not self._begun:
+      raise ValueError("end called without begin.")
+    self._begun = False
+
+
 class AdanetTestCase(parameterized.TestCase, tf.test.TestCase):
   """A parameterized `TestCase` that manages a test subdirectory."""
 

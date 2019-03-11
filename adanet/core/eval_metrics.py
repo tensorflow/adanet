@@ -311,6 +311,11 @@ class _IterationMetrics(object):
     self._candidates = candidates
     self._subnetwork_specs = subnetwork_specs
 
+  def best_eval_metric_ops(self, best_candidate_index, mode):
+    """Returns best ensemble's metrics."""
+    return call_eval_metrics(
+        self.best_eval_metrics_tuple(best_candidate_index, mode))
+
   def best_eval_metrics_tuple(self, best_candidate_index, mode):
     """Returns (metric_fn, tensors) which computes the best ensemble's metrics.
 

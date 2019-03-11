@@ -322,41 +322,6 @@ class _WidthLimitingDNNBuilder(_DNNBuilder):
     return indices[-self._width_limit + 1:]  # pylint: disable=invalid-unary-operand-type
 
 
-class _ModifierSessionRunHook(tf.train.SessionRunHook):
-  """Modifies the graph by adding a variable."""
-
-  def __init__(self, var_name="hook_created_variable"):
-    self._var_name = var_name
-    self._begun = False
-
-  def begin(self):
-    """Adds a variable to the graph.
-
-    Raises:
-      ValueError: If we've already begun a run.
-    """
-
-    if self._begun:
-      raise ValueError("begin called twice without end.")
-    self._begun = True
-    _ = tf.get_variable(name=self._var_name, initializer="")
-
-  def end(self, session):
-    """Adds a variable to the graph.
-
-    Args:
-      session: A `tf.Session` object that can be used to run ops.
-
-    Raises:
-      ValueError: If we've not begun a run.
-    """
-
-    _ = session
-    if not self._begun:
-      raise ValueError("end called without begin.")
-    self._begun = False
-
-
 class EstimatorTest(tu.AdanetTestCase):
 
   @parameterized.named_parameters(
@@ -398,9 +363,9 @@ class EstimatorTest(tu.AdanetTestCase):
                   _DNNBuilder(
                       "dnn",
                       subnetwork_chief_hooks=[
-                          _ModifierSessionRunHook("chief_hook_var")
+                          tu.ModifierSessionRunHook("chief_hook_var")
                       ],
-                      subnetwork_hooks=[_ModifierSessionRunHook("hook_var")])
+                      subnetwork_hooks=[tu.ModifierSessionRunHook("hook_var")])
               ]),
           "max_iteration_steps":
               200,
@@ -417,10 +382,10 @@ class EstimatorTest(tu.AdanetTestCase):
                   _DNNBuilder(
                       "dnn",
                       mixture_weight_chief_hooks=[
-                          _ModifierSessionRunHook("chief_hook_var")
+                          tu.ModifierSessionRunHook("chief_hook_var")
                       ],
                       mixture_weight_hooks=[
-                          _ModifierSessionRunHook("hook_var")
+                          tu.ModifierSessionRunHook("hook_var")
                       ])
               ]),
           "max_iteration_steps":
@@ -468,7 +433,7 @@ class EstimatorTest(tu.AdanetTestCase):
           "testcase_name": "single_builder_with_hook",
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": 200,
-          "hooks": [_ModifierSessionRunHook()],
+          "hooks": [tu.ModifierSessionRunHook()],
           "want_loss": 0.32420248,
       },
       {

@@ -142,13 +142,23 @@ class MetricsTest(tu.AdanetTestCase):
     self.assertIn(expected_arch_string, serialized_arch_proto)
 
   @parameterized.named_parameters({
-      "testcase_name": "eval",
+      "testcase_name": "use_tpu_evaluating",
+      "use_tpu": True,
       "mode": tf.estimator.ModeKeys.EVAL,
   }, {
-      "testcase_name": "not_eval",
+      "testcase_name": "use_tpu_not_evaluating",
+      "use_tpu": True,
+      "mode": tf.estimator.ModeKeys.TRAIN,
+  }, {
+      "testcase_name": "not_use_tpu_evaluating",
+      "use_tpu": False,
+      "mode": tf.estimator.ModeKeys.EVAL,
+  }, {
+      "testcase_name": "not_use_tpu_not_evaluating",
+      "use_tpu": False,
       "mode": tf.estimator.ModeKeys.TRAIN,
   })
-  def test_iteration_metrics(self, mode):
+  def test_iteration_metrics(self, use_tpu, mode):
     best_candidate_index = 3
     candidates = []
     for i in range(10):
@@ -171,10 +181,12 @@ class MetricsTest(tu.AdanetTestCase):
     metrics = _IterationMetrics(candidates, subnetwork_specs=[])
 
     with self.test_session() as sess:
+      metrics_fn = (
+          metrics.best_eval_metrics_tuple
+          if use_tpu else metrics.best_eval_metric_ops)
       actual = _run_metrics(
           sess,
-          metrics.best_eval_metrics_tuple(
-              tf.constant(best_candidate_index), mode) or {})
+          metrics_fn(tf.constant(best_candidate_index), mode) or {})
 
     if mode == tf.estimator.ModeKeys.EVAL:
       expected = {"ensemble_metric": best_candidate_index}
