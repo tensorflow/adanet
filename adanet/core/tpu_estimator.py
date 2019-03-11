@@ -135,7 +135,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                eval_batch_size=None,
                **kwargs):
     self._use_tpu = use_tpu
-    if self._use_tpu:
+    if not self._use_tpu:
       tf.logging.warning(
           "This adanet.TPUEstimator is meant to be used for running on TPU. "
           "If you want to run on CPU/GPU, use adanet.Estimator instead.")
@@ -192,7 +192,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         checkpoint_path=checkpoint_path,
         yield_single_examples=yield_single_examples)
 
-  def _call_adanet_model_fn(self, input_fn, mode, params):
+  def _call_adanet_model_fn(self, input_fn, mode):
     """See the `Estimator` base class for details."""
 
     # Fakes TPU shard context before calling through to the parent to supress
@@ -203,8 +203,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
     with tpu_function.tpu_shard_context(0):
       # Bind params to input_fn since the parent's input_fn is not expected to
       # have any arguments.
-      input_fn = functools.partial(input_fn, params)
-      super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode, params)
+      input_fn = functools.partial(input_fn, self.params)  # A deep copy.
+      super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode)
 
   def _create_estimator_spec(self, current_iteration, mode):
     """See the `Estimator` base class for details."""
@@ -215,23 +215,36 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     iteration_estimator_spec = current_iteration.estimator_spec
-    training_hooks = [
-        hook for hook in self._training_hooks(current_iteration, training)
-        if not isinstance(hook, tf.train.SummarySaverHook)
-    ]
     return tf.contrib.tpu.TPUEstimatorSpec(
         mode=mode,
         predictions=iteration_estimator_spec.predictions,
         loss=iteration_estimator_spec.loss,
         train_op=iteration_estimator_spec.train_op,
-        evaluation_hooks=self._evaluation_hooks(current_iteration, training),
         host_call=self._create_host_call(current_iteration, training),
         eval_metrics=iteration_estimator_spec.eval_metrics,
-        training_hooks=training_hooks,
+        export_outputs=iteration_estimator_spec.export_outputs,
         # Return a constant summary_op, otherwise `Estimator` creates summary
         # ops that do not work on TPU.
         scaffold_fn=lambda: tf.train.Scaffold(summary_op=tf.constant("")),
-        export_outputs=iteration_estimator_spec.export_outputs)
+        training_hooks=self._training_hooks(current_iteration, training),
+        evaluation_hooks=self._evaluation_hooks(current_iteration, training))
+
+  def _training_hooks(self, current_iteration, training):
+    """See the `Estimator` base class for details."""
+
+    training_hooks = super(TPUEstimator, self)._training_hooks(
+        current_iteration, training)
+    if self._use_tpu:
+      # Remove summary hooks on TPU since summaries are saved via host_call.
+      training_hooks = [
+          hook for hook in training_hooks
+          if not isinstance(hook, tf.train.SummarySaverHook)
+      ]
+      training_hooks.append(
+          _StepCounterHook(
+              every_n_steps=self._log_step_count_steps,
+              output_dir=self.model_dir))
+    return training_hooks
 
   def _create_host_call(self, current_iteration, training):
     """Construct a host_call writing scalar summaries.

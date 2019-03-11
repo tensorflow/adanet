@@ -327,6 +327,7 @@ class Estimator(tf.estimator.Estimator):
       raise ValueError(
           "For distributed training, a model_dir must be specified.")
 
+    self._prepare_next_iteration_state = None
     self._subnetwork_generator = subnetwork_generator
     self._adanet_loss_decay = adanet_loss_decay
 
@@ -594,7 +595,7 @@ class Estimator(tf.estimator.Estimator):
     self._evaluation_checkpoint_path = None
     return result
 
-  def _call_adanet_model_fn(self, input_fn, mode, params):
+  def _call_adanet_model_fn(self, input_fn, mode):
     """Calls model_fn with the given mode and parameters."""
 
     with tf.Graph().as_default():
@@ -607,7 +608,7 @@ class Estimator(tf.estimator.Estimator):
         features, labels = inputs.make_one_shot_iterator().get_next()
       else:
         features, labels = inputs
-      self._adanet_model_fn(features, labels, mode, params)
+      self.model_fn(features, labels, mode, self.config)
 
   def _prepare_next_iteration(self, train_input_fn):
     """Prepares the next iteration.
@@ -624,30 +625,26 @@ class Estimator(tf.estimator.Estimator):
     """
 
     # First, evaluate and choose the best ensemble for this iteration.
-    params = self.params.copy()
-    params[self._Keys.EVALUATE_ENSEMBLES] = True
+    self._prepare_next_iteration_state = self._Keys.EVALUATE_ENSEMBLES
     if self._evaluator:
       evaluator_input_fn = self._evaluator.input_fn
     else:
       evaluator_input_fn = train_input_fn
-    self._call_adanet_model_fn(evaluator_input_fn, tf.estimator.ModeKeys.EVAL,
-                               params)
+    self._call_adanet_model_fn(evaluator_input_fn, tf.estimator.ModeKeys.EVAL)
 
     # Then materialize and store the subnetwork reports.
     if self._report_materializer:
-      params = self.params.copy()
-      params[self._Keys.MATERIALIZE_REPORT] = True
+      self._prepare_next_iteration_state = self._Keys.MATERIALIZE_REPORT
       self._call_adanet_model_fn(self._report_materializer.input_fn,
-                                 tf.estimator.ModeKeys.EVAL, params)
+                                 tf.estimator.ModeKeys.EVAL)
 
     self._best_ensemble_index = None
 
     # Finally, create the graph for the next iteration and overwrite the model
     # directory checkpoint with the expanded graph.
-    params = self.params.copy()
-    params[self._Keys.INCREMENT_ITERATION] = True
-    self._call_adanet_model_fn(train_input_fn, tf.estimator.ModeKeys.TRAIN,
-                               params)
+    self._prepare_next_iteration_state = self._Keys.INCREMENT_ITERATION
+    self._call_adanet_model_fn(train_input_fn, tf.estimator.ModeKeys.TRAIN)
+    self._prepare_next_iteration_state = None
 
   def _architecture_filename(self, iteration_number):
     """Returns the filename of the given iteration's frozen graph."""
@@ -1179,7 +1176,7 @@ class Estimator(tf.estimator.Estimator):
       iteration_number = tf.contrib.framework.load_variable(
           self._evaluation_checkpoint_path, self._Keys.CURRENT_ITERATION)
 
-    if self._Keys.INCREMENT_ITERATION in params:
+    if self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
       iteration_number += 1
 
     architecture_filename = self._architecture_filename(iteration_number - 1)
@@ -1211,7 +1208,7 @@ class Estimator(tf.estimator.Estimator):
         previous_ensemble_subnetwork_builders = (
             previous_ensemble_spec.subnetwork_builders)
       restore_saver = None
-      if self._Keys.INCREMENT_ITERATION in params:
+      if self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
         # Create Saver now so that it only restores the current variables in the
         # graph from the checkpoint. After this line, any variables created will
         # not have a matching one in the checkpoint until it gets overwritten.
@@ -1249,7 +1246,7 @@ class Estimator(tf.estimator.Estimator):
 
     estimator_spec = self._create_estimator_spec(current_iteration, mode)
 
-    if self._Keys.EVALUATE_ENSEMBLES in params:
+    if self._prepare_next_iteration_state == self._Keys.EVALUATE_ENSEMBLES:
       assert self.config.is_chief
       self._best_ensemble_index = self._get_best_ensemble_index(
           current_iteration)
@@ -1257,11 +1254,11 @@ class Estimator(tf.estimator.Estimator):
           self._best_ensemble_index].ensemble_spec.architecture
       new_architecture_filename = self._architecture_filename(iteration_number)
       self._save_architecture(new_architecture_filename, architecture)
-    elif self._Keys.MATERIALIZE_REPORT in params:
+    elif self._prepare_next_iteration_state == self._Keys.MATERIALIZE_REPORT:
       assert self.config.is_chief
       assert self._best_ensemble_index is not None
       self._materialize_report(current_iteration)
-    elif self._Keys.INCREMENT_ITERATION in params:
+    elif self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
       assert self.config.is_chief
       latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
       tf.logging.info(
