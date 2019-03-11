@@ -29,6 +29,7 @@ from adanet.core.ensemble import ComplexityRegularizedEnsembler
 from adanet.core.ensemble import MixtureWeightType
 from adanet.core.ensemble_builder import _EnsembleBuilder
 from adanet.core.ensemble_builder import _SubnetworkManager
+from adanet.core.eval_metrics import call_eval_metrics
 from adanet.core.subnetwork import Builder
 from adanet.core.subnetwork import Subnetwork
 from adanet.core.summary import Summary
@@ -486,10 +487,8 @@ def _make_metrics(sess,
       iteration_step=1,
       labels=labels,
       mode=mode)
-  fn, kwargs = subnetwork_spec.eval_metrics
-  subnetwork_metric_ops = fn(**kwargs)
-  fn, kwargs = ensemble_spec.eval_metrics
-  ensemble_metric_ops = fn(**kwargs)
+  subnetwork_metric_ops = call_eval_metrics(subnetwork_spec.eval_metrics)
+  ensemble_metric_ops = call_eval_metrics(ensemble_spec.eval_metrics)
   sess.run((tf.global_variables_initializer(),
             tf.local_variables_initializer()))
   sess.run((subnetwork_metric_ops, ensemble_metric_ops))

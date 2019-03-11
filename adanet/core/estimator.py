@@ -977,8 +977,7 @@ class Estimator(tf.estimator.Estimator):
         "Are you sure the `adanet.ensemble.Strategy` is deterministic?")
 
   # TODO: Refactor architecture building logic to its own module.
-  def _architecture_ensemble_spec(self, architecture, features, mode, labels,
-                                  params):
+  def _architecture_ensemble_spec(self, architecture, features, mode, labels):
     """Returns an `_EnsembleSpec` with the given architecture.
 
     Creates the ensemble architecture by calling `generate_subnetworks` on
@@ -993,7 +992,6 @@ class Estimator(tf.estimator.Estimator):
         `ModeKeys`.
       labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
         (for multi-head). Can be `None`.
-      params: The params passed to model_fn.
 
     Returns:
       An `EnsembleSpec` instance for the given architecture.
@@ -1053,8 +1051,7 @@ class Estimator(tf.estimator.Estimator):
           mode=mode,
           previous_ensemble_summary=previous_ensemble_summary,
           previous_ensemble_spec=previous_ensemble_spec,
-          rebuilding=True,
-          params=params)
+          rebuilding=True)
       max_candidates = 2 if previous_ensemble_spec else 1
       assert len(current_iteration.candidates) == max_candidates
       previous_ensemble_spec = current_iteration.candidates[-1].ensemble_spec
@@ -1205,7 +1202,7 @@ class Estimator(tf.estimator.Estimator):
       previous_ensemble_subnetwork_builders = None
       if architecture:
         previous_ensemble_spec = self._architecture_ensemble_spec(
-            architecture, features, mode, labels, params)
+            architecture, features, mode, labels)
         previous_ensemble = previous_ensemble_spec.ensemble
         previous_ensemble_summary = self._summary_maker(
             namespace="ensemble",
@@ -1240,8 +1237,7 @@ class Estimator(tf.estimator.Estimator):
           labels=labels,
           mode=mode,
           previous_ensemble_summary=previous_ensemble_summary,
-          previous_ensemble_spec=previous_ensemble_spec,
-          params=params)
+          previous_ensemble_spec=previous_ensemble_spec)
 
     # Variable which allows us to read the current iteration from a checkpoint.
     iteration_number_tensor = tf.get_variable(

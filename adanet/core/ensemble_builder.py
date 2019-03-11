@@ -24,27 +24,19 @@ import contextlib
 import functools
 import inspect
 
-from adanet.core import dict_utils
 from adanet.core.architecture import _Architecture
 from adanet.core.ensemble import ComplexityRegularized
+from adanet.core.eval_metrics import _EnsembleMetrics
+from adanet.core.eval_metrics import _SubnetworkMetrics
 from adanet.core.subnetwork import TrainOpSpec
 from adanet.core.summary import monkey_patched_summaries
-import six
 import tensorflow as tf
 
 from tensorflow.python.training import training_util  # pylint: disable=g-direct-tensorflow-import
 
 _VALID_METRIC_FN_ARGS = {"features", "labels", "predictions"}
 
-_LABELS_KEY = "__labels__"
-_FEATURES_KEY = "__features__"
-_PREDICTIONS_KEY = "__predictions__"
-_KWARGS_KEY = "__kwargs__"
-_PREFIXES = (_LABELS_KEY, _FEATURES_KEY, _PREDICTIONS_KEY, _KWARGS_KEY)
 
-
-# TODO: create an eval metrics object to encapulate the metric
-# tuples.
 class _EnsembleSpec(
     collections.namedtuple("_EnsembleSpec", [
         "name",
@@ -113,38 +105,6 @@ class _EnsembleSpec(
         export_outputs=export_outputs)
 
 
-def _architecture_as_metric(architecture):
-  """Returns a representation of the ensemble's architecture as a tf.metric."""
-
-  def _architecture_metric_fn(**kwargs):
-    """Manually creates the tf.metric with a serialized tf.Summary proto."""
-
-    del kwargs  # Unused.
-
-    # TODO: Should architecture.subnetworks be sorted by iteration
-    # number first? Or perhaps, to make this more general, to have one line for
-    # each iteration, with "|" as a delimiter if there are multiple subnetworks
-    # in one iteration? Something like:
-    # 0 linear
-    # 1 dnn_width_32_depth_1 | dnn_width_64_depth_1
-    # 2
-    # 3 dnn_with_32_depth_2
-    architecture_ = " | ".join([name for _, name in architecture.subnetworks])
-    architecture_ = "| {} |".format(architecture_)
-    summary_metadata = tf.SummaryMetadata(
-        plugin_data=tf.SummaryMetadata.PluginData(plugin_name="text"))
-    summary_proto = tf.summary.Summary()
-    summary_proto.value.add(
-        metadata=summary_metadata,
-        tag="architecture/adanet",
-        tensor=tf.make_tensor_proto(architecture_, dtype=tf.string))
-    architecture_summary = tf.convert_to_tensor(
-        summary_proto.SerializeToString(), name="architecture")
-    return {"architecture/adanet/ensembles": (architecture_summary, tf.no_op())}
-
-  return _architecture_metric_fn
-
-
 def _verify_metric_fn_args(metric_fn):
   if not metric_fn:
     return
@@ -153,156 +113,6 @@ def _verify_metric_fn_args(metric_fn):
   if invalid_args:
     raise ValueError("metric_fn (%s) has following not expected args: %s" %
                      (metric_fn, invalid_args))
-
-
-def _reflective_call(fn, **kwargs):
-  """Extracts fn's required args from **kwargs and calls fn with them."""
-
-  argspec = inspect.getargspec(fn)
-  args = {k: v for k, v in six.iteritems(kwargs) if k in argspec.args}
-  if argspec.keywords:
-    args.update(kwargs[_KWARGS_KEY])
-  return fn(**args)
-
-
-def _reconstruct_tuple_keys(tensors):
-  """Reconstructs tuple keys from flat strings if tensors is a dict."""
-
-  if not isinstance(tensors, dict):
-    return tensors
-
-  result = {}
-  for key, value in six.iteritems(tensors):
-    parts = key.split("|")
-    if len(parts) > 1:
-      result[tuple(parts)] = value
-    else:
-      result[key] = value
-  return result
-
-
-def _create_metric_fn(metric_fn):
-  """Wraps the metric_fn to scope its returned metrics by group_name."""
-
-  def _wrapped_metric_fn(**kwargs):
-    """The wrapping function to be returned."""
-
-    if not metric_fn:
-      return {}
-
-    kwargs = dict_utils.unflatten_dict(kwargs, prefixes=_PREFIXES)
-    kwargs = {k: _reconstruct_tuple_keys(v) for k, v in six.iteritems(kwargs)}
-    kwargs_ = {}
-    for key, value in six.iteritems(kwargs):
-      if key in _PREFIXES and key != _KWARGS_KEY:
-        kwargs_[key.replace("_", "")] = value
-      else:
-        kwargs_[key] = value
-    kwargs = kwargs_
-
-    metrics = _reflective_call(metric_fn, **kwargs)
-    wrapped_metrics = {}
-    # Hooks on TPU cannot depend on any graph Tensors. Instead the metric values
-    # are stored in Variables that are later read from the evaluation hooks.
-    for i, key in enumerate(sorted(metrics)):
-      tensor, op = metrics[key]
-      # `key` cannot be in the var name since it can contain illegal characters.
-      var = tf.get_variable(
-          "metric_{}".format(i),
-          shape=tensor.shape,
-          dtype=tensor.dtype,
-          trainable=False,
-          initializer=tf.zeros_initializer(),
-          collections=[tf.GraphKeys.LOCAL_VARIABLES])
-      if isinstance(op, tf.Operation):
-        with tf.control_dependencies([op]):
-          op = tf.assign(var, tensor)
-      metric = (var, tf.assign(var, op))
-      wrapped_metrics[key] = metric
-    return wrapped_metrics
-
-  return tf.make_template("metric_fn_template", _wrapped_metric_fn)
-
-
-def _prefix(tensors, flat_key, default_key):
-  """Prefixes tensors by either flat_key or default_key.
-
-  If tensors is a dict each tensor is rekeyed as group_name/flat_key/key. If
-  tensors is a single Tensor, it is keyed by group_name/default_key.
-
-  Args:
-    tensors: A Tensor or dictionary of Tensors.
-    flat_key: The key to use in the prefix if tensors is a dictionary.
-    default_key: The default key to use if tensors is a single Tensor.
-
-  Returns:
-    A dictionary of tensors prefixed by group_name and key. If tensors is a
-    single Tensor, the returned dictionary will only have one element.
-  """
-  prefix = default_key
-  if isinstance(tensors, dict):
-    prefix = flat_key
-    tensors_ = {}
-    for key in six.iterkeys(tensors):
-      # multi_head uses tuples of strings as the key.
-      if isinstance(key, tuple):
-        tensors_["|".join(key)] = tensors[key]
-      else:
-        tensors_[key] = tensors[key]
-    tensors = tensors_
-
-  tensors = {prefix: tensors}
-  tensors = dict_utils.flatten_dict(tensors)
-  return tensors
-
-
-def _create_metrics(features, labels, estimator_spec, metric_fn, params):
-  """Creates eval metric functions and tensors for the given group."""
-
-  metric_fns = []
-  tensors = {}
-
-  # If estimator_spec is not a TPUEstimatorSpec we create dummy eval_metric_fn
-  # and tensors.
-  if isinstance(estimator_spec, tf.estimator.EstimatorSpec):
-    spec_metric_fn = lambda: estimator_spec.eval_metric_ops
-    spec_tensors = {}
-  else:
-    spec_metric_fn, spec_tensors = estimator_spec.eval_metrics
-  metric_fns.append(_create_metric_fn(spec_metric_fn))
-  for key, value in six.iteritems(spec_tensors):
-    tensors["{}/{}".format(_KWARGS_KEY, key)] = value
-
-  loss_fn = lambda loss: {"loss": tf.metrics.mean(loss)}
-  metric_fns.append(_create_metric_fn(loss_fn))
-  # All tensors outfed from the TPU must be batch-major.
-  batch_size = params.get("batch_size", 1) if params else 1
-  tensors["loss"] = tf.ones((batch_size, 1)) * estimator_spec.loss
-
-  # TODO: (Optimization): features and labels are shared between all
-  # group metrics so they should only be outfed once. However, this makes the
-  # kwarg parsing harder.
-  tensors.update(_prefix(features, _FEATURES_KEY, "features"))
-  tensors.update(_prefix(labels, _LABELS_KEY, "labels"))
-  tensors.update(
-      _prefix(estimator_spec.predictions, _PREDICTIONS_KEY, "predictions"))
-
-  # NOTE: the user supplied metrics_fn must be added last. This is because we
-  # want user metrics to override AdaNet's metrics.
-  metric_fns.append(_create_metric_fn(metric_fn))
-
-  return metric_fns, tensors
-
-
-def _create_eval_metrics_tuple(metric_fns, metric_tensors):
-
-  def _eval_metrics_fn(**kwargs):
-    eval_metric_ops = {}
-    for metric_fn in metric_fns:
-      eval_metric_ops.update(metric_fn(**kwargs))
-    return eval_metric_ops
-
-  return _eval_metrics_fn, metric_tensors
 
 
 def _get_value(target, key):
@@ -413,8 +223,7 @@ class _EnsembleBuilder(object):
                           iteration_step,
                           iteration_number,
                           labels=None,
-                          previous_ensemble_spec=None,
-                          params=None):
+                          previous_ensemble_spec=None):
     """Builds an `_EnsembleSpec` with the given `adanet.ensemble.Candidate`.
 
     Args:
@@ -434,7 +243,6 @@ class _EnsembleBuilder(object):
         (for multi-head).
       previous_ensemble_spec: Link the rest of the `_EnsembleSpec` from
         iteration t-1. Used for creating the subnetwork train_op.
-      params: The params passed to model_fn.
 
     Returns:
       An `_EnsembleSpec` instance.
@@ -505,18 +313,14 @@ class _EnsembleBuilder(object):
               "Only ComplexityRegularized ensembles are supported.")
         adanet_loss = estimator_spec.loss + ensemble.complexity_regularization
 
-      metric_fns = []
-      metric_tensors = {}
+      ensemble_metrics = _EnsembleMetrics()
       if mode == tf.estimator.ModeKeys.EVAL:
-        fns, tensors = _create_metrics(
+        ensemble_metrics.create_eval_metrics(
             features=features,
             labels=labels,
             estimator_spec=estimator_spec,
             metric_fn=self._metric_fn,
-            params=params)
-        metric_fns.extend(fns)
-        metric_tensors.update(tensors)
-        metric_fns.append(_architecture_as_metric(architecture))
+            architecture=architecture)
 
       if mode == tf.estimator.ModeKeys.TRAIN:
         with summary.current_scope():
@@ -569,7 +373,7 @@ class _EnsembleBuilder(object):
         loss=ensemble_loss,
         adanet_loss=adanet_loss,
         train_op=train_op,
-        eval_metrics=_create_eval_metrics_tuple(metric_fns, metric_tensors),
+        eval_metrics=ensemble_metrics.eval_metrics_tuple(),
         export_outputs=estimator_spec.export_outputs)
 
 
@@ -680,8 +484,7 @@ class _SubnetworkManager(object):
                             features,
                             mode,
                             labels=None,
-                            previous_ensemble=None,
-                            params=None):
+                            previous_ensemble=None):
     """Builds a `_SubnetworkSpec` from the given `adanet.subnetwork.Builder`.
 
     Args:
@@ -697,7 +500,6 @@ class _SubnetworkManager(object):
         (for multi-head). Can be `None`.
       previous_ensemble: The previous `Ensemble` from iteration t-1. Used for
         creating the subnetwork train_op.
-      params: The params passed to model_fn.
 
     Returns:
       An new `EnsembleSpec` instance with the `Subnetwork` appended.
@@ -730,17 +532,13 @@ class _SubnetworkManager(object):
       estimator_spec = _create_estimator_spec(
           self._head, features, labels, mode, subnetwork.logits, self._use_tpu)
 
-      metric_fns = []
-      metric_tensors = {}
+      subnetwork_metrics = _SubnetworkMetrics()
       if mode == tf.estimator.ModeKeys.EVAL:
-        fns, tensors = _create_metrics(
+        subnetwork_metrics.create_eval_metrics(
             features=features,
             labels=labels,
             estimator_spec=estimator_spec,
-            metric_fn=self._metric_fn,
-            params=params)
-        metric_fns.extend(fns)
-        metric_tensors.update(tensors)
+            metric_fn=self._metric_fn)
 
       if mode == tf.estimator.ModeKeys.TRAIN:
         with summary.current_scope():
@@ -769,4 +567,4 @@ class _SubnetworkManager(object):
         predictions=estimator_spec.predictions,
         loss=estimator_spec.loss,
         train_op=train_op,
-        eval_metrics=_create_eval_metrics_tuple(metric_fns, metric_tensors))
+        eval_metrics=subnetwork_metrics.eval_metrics_tuple())
