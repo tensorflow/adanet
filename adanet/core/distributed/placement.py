@@ -233,7 +233,7 @@ class RoundRobinStrategy(PlacementStrategy):
       tf.logging.log_first_n(
           tf.logging.WARN,
           "With drop_remainer=True, %s workers and %s subnetworks, the last %s "
-          "subnetworks will be dropped and will not be trained",
+          "subnetworks will be dropped and will not be trained", 1,
           self._num_workers, num_subnetworks,
           num_subnetworks - self._num_workers - 1)
     # The first worker will always build the ensemble so we add 1.
