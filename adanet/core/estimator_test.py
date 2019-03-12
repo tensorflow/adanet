@@ -24,6 +24,7 @@ import os
 from absl.testing import parameterized
 from adanet.core import testing_utils as tu
 from adanet.core.ensemble import AllStrategy
+from adanet.core.ensemble import GrowStrategy
 from adanet.core.ensemble import MixtureWeightType
 from adanet.core.ensemble import SoloStrategy
 from adanet.core.estimator import Estimator
@@ -594,6 +595,35 @@ class EstimatorTest(tu.AdanetTestCase):
               200,
           "want_loss":
               0.35249719,
+      },
+      {
+          "testcase_name":
+              "solo_strategy_three_iterations",
+          "subnetwork_generator":
+              SimpleGenerator([
+                  _DNNBuilder("dnn"),
+                  _DNNBuilder("dnn2", layer_size=3)
+              ]),
+          "ensemble_strategies": [SoloStrategy()],
+          "max_iteration_steps":
+              100,
+          "want_loss":
+              0.36163166
+      },
+      {
+          "testcase_name":
+              "multi_ensemble_strategy",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "ensemble_strategies":
+              [AllStrategy(), GrowStrategy(),
+               SoloStrategy()],
+          "max_iteration_steps":
+              100,
+          "want_loss":
+              0.24838975,
       },
       {
           "testcase_name":
@@ -1268,8 +1298,8 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
         _check_eventfile_for_keyword("nested/scalar", subnetwork_subdir),
         places=3)
 
-    ensemble_subdir = os.path.join(self.test_subdirectory,
-                                   "ensemble/t0_dnn_complexity_regularized")
+    ensemble_subdir = os.path.join(
+        self.test_subdirectory, "ensemble/t0_dnn_grow_complexity_regularized")
     self.assertAlmostEqual(
         ensemble_loss,
         _check_eventfile_for_keyword(
@@ -1331,7 +1361,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
           "subnetwork_subdir":
               "subnetwork/t0_linear/eval_continuous",
           "ensemble_subdir":
-              "ensemble/t0_linear_complexity_regularized/eval_continuous",
+              "ensemble/t0_linear_grow_complexity_regularized/eval_continuous",
       },
       {
           "testcase_name":
@@ -1386,7 +1416,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
       metric_fn=None,
       global_subdir="eval",
       subnetwork_subdir="subnetwork/t0_linear/eval",
-      ensemble_subdir="ensemble/t0_linear_complexity_regularized/eval"):
+      ensemble_subdir="ensemble/t0_linear_grow_complexity_regularized/eval"):
     """Test that AdaNet evaluation metrics get persisted correctly."""
 
     seed = 42

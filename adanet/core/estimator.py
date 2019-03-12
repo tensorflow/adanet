@@ -194,8 +194,8 @@ class Estimator(tf.estimator.Estimator):
       objects that define the candidate ensembles of subnetworks to explore at
       each iteration.
     evaluator: An :class:`adanet.Evaluator` for candidate selection after all
-      subnetworks are done training. When `None`, candidate selection uses a
-      moving average of their :class:`adanet.Ensemble` AdaNet loss during
+      subnetworks are done training. When :code:`None`, candidate selection uses
+      a moving average of their :class:`adanet.Ensemble` AdaNet loss during
       training instead. In order to use the *AdaNet algorithm* as described in
       [Cortes et al., '17], the given :class:`adanet.Evaluator` must be created
       with the same dataset partition used during training. Otherwise, this
@@ -211,18 +211,20 @@ class Estimator(tf.estimator.Estimator):
       obey the following signature:
         - `Args`:
           Can only have the following three arguments in any order:
-          - `predictions`: Predictions `Tensor` or dict of `Tensor` created by
-            given `head`.
-          - `features`: Input `dict` of `Tensor` objects created by `input_fn`
-            which is given to `estimator.evaluate` as an argument.
-          - `labels`:  Labels `Tensor` or dict of `Tensor` (for multi-head)
-            created by `input_fn` which is given to `estimator.evaluate` as an
+          - :code:`predictions`: Predictions `Tensor` or dict of `Tensor`
+            created by given :code:`head`.
+          - :code:`features`: Input `dict` of `Tensor` objects created by
+            :code:`input_fn` which is given to :meth:`estimator.evaluate` as an
             argument.
+          - :code:`labels`: Labels `Tensor` or dict of `Tensor` (for multi-head)
+            created by :code:`input_fn` which is given to
+            :meth:`estimator.evaluate` as an argument.
         - `Returns`: Dict of metric results keyed by name. Final metrics are a
-          union of this and `head's` existing metrics. If there is a name
-          conflict between this and `head`s existing metrics, this will override
-          the existing one. The values of the dict are the results of calling a
-          metric function, namely a `(metric_tensor, update_op)` tuple.
+          union of this and :code:`head`'s existing metrics. If there is a name
+          conflict between this and :code:`head`s existing metrics, this will
+          override the existing one. The values of the dict are the results of
+          calling a metric function, namely a :code:`(metric_tensor, update_op)`
+          tuple.
     force_grow: Boolean override that forces the ensemble to grow by one
       subnetwork at the end of each iteration. Normally at the end of each
       iteration, AdaNet selects the best candidate ensemble according to its
@@ -263,22 +265,24 @@ class Estimator(tf.estimator.Estimator):
     model_dir: Directory to save model parameters, graph and etc. This can also
       be used to load checkpoints from the directory into a estimator to
       continue training a previously saved model.
-    report_dir: Directory where the `adanet.subnetwork.MaterializedReport`s
-      materialized by `report_materializer` would be saved. If
-      `report_materializer` is None, this will not save anything. If `None` or
-      empty string, defaults to "<model_dir>/report".
-    config: `RunConfig` object to configure the runtime settings.
+    report_dir: Directory where the
+      :class:`adanet.subnetwork.MaterializedReport`s materialized by
+      :code:`report_materializer` would be saved. If :code:`report_materializer`
+      is :code:`None`, this will not save anything. If :code:`None` or
+      empty string, defaults to :code:`<model_dir>/report`.
+    config: :class:`RunConfig` object to configure the runtime settings.
     debug: Boolean to enable debug mode which will check features and labels
       for Infs and NaNs.
     **kwargs: Extra keyword args passed to the parent.
 
   Returns:
-    An `Estimator` instance.
+    An :class:`adanet.Estimator` instance.
 
   Raises:
-    ValueError: If `subnetwork_generator` is `None`.
-    ValueError: If `max_iteration_steps` is <= 0.
-    ValueError: If a `model_dir` is not specified during distributed training.
+    :code:`ValueError`: If :code:`ensemblers` is size > 1.
+    :code:`ValueError`: If :code:`subnetwork_generator` is :code:`None`.
+    :code:`ValueError`: If :code:`max_iteration_steps` is <= 0.
+    :code:`ValueError`: If :code:`model_dir` is not specified during distributed training.
   """
   # pyformat: enable
 
@@ -312,9 +316,6 @@ class Estimator(tf.estimator.Estimator):
                **kwargs):
     if ensemblers and len(ensemblers) > 1:
       raise ValueError("More than a single Ensembler is not yet supported.")
-    if ensemble_strategies and len(ensemble_strategies) > 1:
-      raise ValueError(
-          "More than a single ensemble Strategy is not yet supported.")
     if subnetwork_generator is None:
       raise ValueError("subnetwork_generator can't be None.")
     if max_iteration_steps <= 0.:
@@ -623,28 +624,37 @@ class Estimator(tf.estimator.Estimator):
     Args:
       train_input_fn: The input_fn used during training.
     """
+    tf.logging.info("Preparing next iteration:")
 
     # First, evaluate and choose the best ensemble for this iteration.
+    tf.logging.info("Evaluating candidates...")
     self._prepare_next_iteration_state = self._Keys.EVALUATE_ENSEMBLES
     if self._evaluator:
       evaluator_input_fn = self._evaluator.input_fn
     else:
       evaluator_input_fn = train_input_fn
     self._call_adanet_model_fn(evaluator_input_fn, tf.estimator.ModeKeys.EVAL)
+    tf.logging.info("Done evaluating candidates.")
 
     # Then materialize and store the subnetwork reports.
     if self._report_materializer:
+      tf.logging.info("Materializing reports...")
       self._prepare_next_iteration_state = self._Keys.MATERIALIZE_REPORT
       self._call_adanet_model_fn(self._report_materializer.input_fn,
                                  tf.estimator.ModeKeys.EVAL)
+      tf.logging.info("Done materializing reports.")
 
     self._best_ensemble_index = None
 
     # Finally, create the graph for the next iteration and overwrite the model
     # directory checkpoint with the expanded graph.
+    tf.logging.info("Adapting graph and incrementing iteration number...")
     self._prepare_next_iteration_state = self._Keys.INCREMENT_ITERATION
     self._call_adanet_model_fn(train_input_fn, tf.estimator.ModeKeys.TRAIN)
     self._prepare_next_iteration_state = None
+    tf.logging.info("Done adapting graph and incrementing iteration number.")
+
+    tf.logging.info("Finished preparing next iteration.")
 
   def _architecture_filename(self, iteration_number):
     """Returns the filename of the given iteration's frozen graph."""
@@ -955,26 +965,22 @@ class Estimator(tf.estimator.Estimator):
     with tf.gfile.GFile(filename, "rb") as gfile:
       return _Architecture.deserialize(gfile.read())
 
-  def _find_ensemble_candidate(self, ensemble_candidates, subnetwork_builders,
-                               previous_ensemble_subnetwork_builders):
-    """Returns the ensemble candidate with the given subnetwork builders."""
+  def _find_ensemble_candidate(self, ensemble_candidate_name,
+                               ensemble_candidates):
+    """Returns the ensemble candidate with the given name."""
 
-    subnetwork_builders = set(subnetwork_builders)
-    previous_ensemble_subnetwork_builders = set(
-        previous_ensemble_subnetwork_builders or [])
-    for candidate in ensemble_candidates:
-      if set(candidate.subnetwork_builders) != subnetwork_builders:
-        continue
-      if set(candidate.previous_ensemble_subnetwork_builders or
-             []) != previous_ensemble_subnetwork_builders:
-        continue
-      return candidate
+    for ensemble_candidate in ensemble_candidates:
+      if ensemble_candidate.name == ensemble_candidate_name:
+        return ensemble_candidate
     raise ValueError(
-        "Could not find a matching ensemble candidate. "
-        "Are you sure the `adanet.ensemble.Strategy` is deterministic?")
+        "Could not find a matching ensemble candidate with name '{}'. "
+        "Are you sure the `adanet.ensemble.Strategy` is deterministic?".format(
+            ensemble_candidate_name))
 
   # TODO: Refactor architecture building logic to its own module.
-  def _architecture_ensemble_spec(self, architecture, features, mode, labels):
+  def _architecture_ensemble_spec(self, architecture, iteration_number,
+                                  features, mode, labels,
+                                  previous_ensemble_spec):
     """Returns an `_EnsembleSpec` with the given architecture.
 
     Creates the ensemble architecture by calling `generate_subnetworks` on
@@ -984,11 +990,14 @@ class Estimator(tf.estimator.Estimator):
 
     Args:
       architecture: An `_Architecture` instance.
+      iteration_number: Integer current iteration number.
       features: Dictionary of `Tensor` objects keyed by feature name.
       mode: Defines whether this is training, evaluation or prediction. See
         `ModeKeys`.
       labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
         (for multi-head). Can be `None`.
+      previous_ensemble_spec: The `_EnsembleSpec` for the previous iteration.
+        Will be `None` for the first iteration.
 
     Returns:
       An `EnsembleSpec` instance for the given architecture.
@@ -998,9 +1007,13 @@ class Estimator(tf.estimator.Estimator):
         generated candidate `Builders` of the specified iteration.
     """
 
-    previous_ensemble_spec = None
     previous_ensemble = None
-    for iteration_number, names in architecture.subnetworks_grouped_by_iteration:
+    if previous_ensemble_spec:
+      previous_ensemble = previous_ensemble_spec.ensemble
+    current_iteration = None
+    for t, names in architecture.subnetworks_grouped_by_iteration:
+      if t != iteration_number:
+        continue
       previous_ensemble_reports, all_reports = [], []
       if self._report_materializer:
         previous_ensemble_reports, all_reports = (
@@ -1037,8 +1050,7 @@ class Estimator(tf.estimator.Estimator):
         ensemble_candidates += ensemble_strategy.generate_ensemble_candidates(
             rebuild_subnetwork_builders, previous_ensemble_subnetwork_builders)
       ensemble_candidate = self._find_ensemble_candidate(
-          ensemble_candidates, rebuild_subnetwork_builders,
-          previous_ensemble_subnetwork_builders)
+          architecture.ensemble_candidate_name, ensemble_candidates)
       current_iteration = self._iteration_builder.build_iteration(
           iteration_number=iteration_number,
           ensemble_candidates=[ensemble_candidate],
@@ -1179,27 +1191,27 @@ class Estimator(tf.estimator.Estimator):
     if self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
       iteration_number += 1
 
-    architecture_filename = self._architecture_filename(iteration_number - 1)
-    architecture = []
-    if tf.gfile.Exists(architecture_filename):
-      architecture = self._read_architecture(architecture_filename)
-      tf.logging.info(
-          "Importing architecture from %s: [%s].", architecture_filename,
-          ", ".join(
-              sorted([
-                  "'{}:{}'".format(t, n)
-                  for t, n in architecture.subnetworks_grouped_by_iteration
-              ])))
-
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
     with tf.variable_scope("adanet"):
       previous_ensemble_spec = None
       previous_ensemble = None
       previous_ensemble_summary = None
       previous_ensemble_subnetwork_builders = None
-      if architecture:
+      architecture = None
+      for i in range(iteration_number):
+        architecture_filename = self._architecture_filename(i)
+        if not tf.gfile.Exists(architecture_filename):
+          continue
+        architecture = self._read_architecture(architecture_filename)
+        tf.logging.info(
+            "Importing architecture from %s: [%s].", architecture_filename,
+            ", ".join(
+                sorted([
+                    "'{}:{}'".format(t, n)
+                    for t, n in architecture.subnetworks_grouped_by_iteration
+                ])))
         previous_ensemble_spec = self._architecture_ensemble_spec(
-            architecture, features, mode, labels)
+            architecture, i, features, mode, labels, previous_ensemble_spec)
         previous_ensemble = previous_ensemble_spec.ensemble
         previous_ensemble_summary = self._summary_maker(
             namespace="ensemble",

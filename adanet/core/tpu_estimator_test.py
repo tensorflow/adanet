@@ -275,8 +275,8 @@ class TPUEstimatorTest(tu.AdanetTestCase):
                                      "subnetwork/t0_dnn")
 
     ensemble_loss = .5
-    ensemble_subdir = os.path.join(self.test_subdirectory,
-                                   "ensemble/t0_dnn_complexity_regularized")
+    ensemble_subdir = os.path.join(
+        self.test_subdirectory, "ensemble/t0_dnn_grow_complexity_regularized")
 
     self.assertAlmostEqual(
         ensemble_loss,

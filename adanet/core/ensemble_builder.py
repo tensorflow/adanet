@@ -249,7 +249,7 @@ class _EnsembleBuilder(object):
     """
 
     with tf.variable_scope("ensemble_{}".format(name)):
-      architecture = _Architecture()
+      architecture = _Architecture(candidate.name)
       previous_subnetworks = []
       subnetwork_builders = []
       previous_ensemble = None

@@ -85,7 +85,8 @@ class SoloStrategy(Strategy):
   def generate_ensemble_candidates(self, subnetwork_builders,
                                    previous_ensemble_subnetwork_builders):
     return [
-        Candidate(subnetwork_builder.name, [subnetwork_builder], None)
+        Candidate("{}_solo".format(subnetwork_builder.name),
+                  [subnetwork_builder], None)
         for subnetwork_builder in subnetwork_builders
     ]
 
@@ -96,8 +97,8 @@ class GrowStrategy(Strategy):
   def generate_ensemble_candidates(self, subnetwork_builders,
                                    previous_ensemble_subnetwork_builders):
     return [
-        Candidate(subnetwork_builder.name, [subnetwork_builder],
-                  previous_ensemble_subnetwork_builders)
+        Candidate("{}_grow".format(subnetwork_builder.name),
+                  [subnetwork_builder], previous_ensemble_subnetwork_builders)
         for subnetwork_builder in subnetwork_builders
     ]
 
