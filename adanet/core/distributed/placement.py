@@ -232,7 +232,7 @@ class RoundRobinStrategy(PlacementStrategy):
                                                            self._num_workers):
       tf.logging.log_first_n(
           tf.logging.WARN,
-          "With drop_remainer=True, {} workers and {} subnetworks, the last {} "
+          "With drop_remainer=True, %s workers and %s subnetworks, the last %s "
           "subnetworks will be dropped and will not be trained",
           self._num_workers, num_subnetworks,
           num_subnetworks - self._num_workers - 1)
