@@ -31,6 +31,7 @@ from adanet.core.iteration import _IterationBuilder
 from adanet.core.subnetwork import Builder as SubnetworkBuilder
 from adanet.core.subnetwork import Report as SubnetworkReport
 from adanet.core.subnetwork import Subnetwork
+from adanet.core.subnetwork import TrainOpSpec
 from adanet.core.summary import _ScopedSummary
 from adanet.core.summary import _TPUScopedSummary
 import adanet.core.testing_utils as tu
@@ -202,9 +203,10 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
 
 class _FakeBuilder(SubnetworkBuilder):
 
-  def __init__(self, name, random_seed=11):
+  def __init__(self, name, random_seed=11, chief_hook=None):
     self._name = name
     self._random_seed = random_seed
+    self._chief_hook = chief_hook
 
   @property
   def name(self):
@@ -229,76 +231,14 @@ class _FakeBuilder(SubnetworkBuilder):
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
+    if self._chief_hook:
+      return TrainOpSpec(
+          train_op=tf.no_op(), chief_hooks=[self._chief_hook], hooks=None)
     return None
 
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
                                      iteration_step, summary):
     return None
-
-
-class _DNNBuilder(SubnetworkBuilder):
-  """A simple DNN subnetwork builder."""
-
-  def __init__(self, name, train_op_fn, layer_size=1, num_layers=1, seed=42):
-    self._name = name
-    self._layer_size = layer_size
-    self._num_layers = num_layers
-    self._seed = seed
-    self._train_op_fn = train_op_fn
-
-  @property
-  def seed(self):
-    return self._seed
-
-  @property
-  def name(self):
-    return self._name
-
-  def build_subnetwork(self,
-                       features,
-                       logits_dimension,
-                       training,
-                       iteration_step,
-                       summary,
-                       previous_ensemble=None):
-    seed = self._seed
-    with tf.variable_scope("dnn"):
-      persisted_tensors = {}
-      prev_layer_size = 2
-      prev_layer = features["x"]
-      for i in range(self._num_layers):
-        with tf.variable_scope("hidden_layer_{}".format(i)):
-          w = tf.get_variable(
-              shape=[prev_layer_size, self._layer_size],
-              initializer=tf.glorot_uniform_initializer(seed=seed),
-              name="weight")
-          hidden_layer = tf.matmul(prev_layer, w)
-          persisted_tensors["hidden_layer_{}".format(i)] = hidden_layer
-
-        hidden_layer = tf.nn.relu(hidden_layer)
-        prev_layer = hidden_layer
-        prev_layer_size = self._layer_size
-
-      with tf.variable_scope("logits"):
-        logits = tf.layers.dense(
-            prev_layer,
-            units=logits_dimension,
-            kernel_initializer=tf.glorot_uniform_initializer(seed=seed))
-
-    return Subnetwork(
-        last_layer=prev_layer,
-        logits=logits,
-        complexity=3,
-        persisted_tensors=persisted_tensors,
-    )
-
-  def train_subnetwork(self, loss, var_list, logits, labels, iteration_step,
-                       summary):
-    return self._train_op_fn(loss, var_list)
-
-  def train_mixture_weights(self, loss, var_list, logits, labels,
-                            iteration_step, summary):
-    return self._train_op_fn(loss, var_list)
 
 
 class _FakeEnsembleBuilder(object):
@@ -377,7 +317,8 @@ class _FakeSubnetworkManager(object):
         builder=subnetwork_builder,
         predictions=None,
         loss=None,
-        train_op=None,
+        train_op=subnetwork_builder.build_subnetwork_train_op(
+            *[None for _ in range(7)]),
         eval_metrics=None)
 
 
@@ -750,6 +691,17 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               "logits": 2.129
           },
       },
+  }, {
+      "testcase_name": "chief_session_run_hook",
+      "ensemble_builder": _FakeEnsembleBuilder(),
+      "subnetwork_builders":
+          [_FakeBuilder("training", chief_hook=tu.ModifierSessionRunHook())],
+      "features": lambda: [[1., -1., 0.]],
+      "labels": lambda: [1],
+      "want_loss": 1.403943,
+      "want_predictions": 2.129,
+      "want_best_candidate_index": 0,
+      "want_chief_hooks": True,
   })
   def test_build_iteration(self,
                            ensemble_builder,
@@ -764,7 +716,8 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                            want_loss=None,
                            want_export_outputs=None,
                            mode=tf.estimator.ModeKeys.TRAIN,
-                           summary_maker=_ScopedSummary):
+                           summary_maker=_ScopedSummary,
+                           want_chief_hooks=False):
     global_step = tf.train.create_global_step()
     builder = _IterationBuilder(
         _FakeCandidateBuilder(),
@@ -787,6 +740,8 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                       tf.local_variables_initializer())
       sess.run(init)
       estimator_spec = iteration.estimator_spec
+      if want_chief_hooks:
+        self.assertNotEmpty(iteration.estimator_spec.training_chief_hooks)
       self.assertAllClose(
           want_predictions, sess.run(estimator_spec.predictions), atol=1e-3)
       self.assertEqual(

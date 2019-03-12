@@ -28,8 +28,12 @@ class AdaNetTest(tf.test.TestCase):
 
   def test_public(self):
     self.assertIsNotNone(adanet.AutoEnsembleEstimator)
+    self.assertIsNotNone(adanet.distributed.PlacementStrategy)
+    self.assertIsNotNone(adanet.distributed.ReplicationStrategy)
+    self.assertIsNotNone(adanet.distributed.RoundRobinStrategy)
     self.assertIsNotNone(adanet.ensemble.Ensemble)
     self.assertIsNotNone(adanet.ensemble.Ensembler)
+    self.assertIsNotNone(adanet.ensemble.TrainOpSpec)
     self.assertIsNotNone(adanet.ensemble.AllStrategy)
     self.assertIsNotNone(adanet.ensemble.Candidate)
     self.assertIsNotNone(adanet.ensemble.GrowStrategy)

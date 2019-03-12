@@ -50,6 +50,9 @@ except ImportError:
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
+XOR_FEATURES = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
+XOR_LABELS = [[1.], [0.], [1.], [0.]]
+
 
 class _DNNBuilder(Builder):
   """A simple DNN subnetwork builder."""
@@ -319,284 +322,295 @@ class _WidthLimitingDNNBuilder(_DNNBuilder):
     return indices[-self._width_limit + 1:]  # pylint: disable=invalid-unary-operand-type
 
 
-class _ModifierSessionRunHook(tf.train.SessionRunHook):
-  """Modifies the graph by adding a variable."""
-
-  def __init__(self, var_name="hook_created_variable"):
-    self._var_name = var_name
-    self._begun = False
-
-  def begin(self):
-    """Adds a variable to the graph.
-
-    Raises:
-      ValueError: If we've already begun a run.
-    """
-
-    if self._begun:
-      raise ValueError("begin called twice without end.")
-    self._begun = True
-    _ = tf.get_variable(name=self._var_name, initializer="")
-
-  def end(self, session):
-    """Adds a variable to the graph.
-
-    Args:
-      session: A `tf.Session` object that can be used to run ops.
-
-    Raises:
-      ValueError: If we've not begun a run.
-    """
-
-    _ = session
-    if not self._begun:
-      raise ValueError("end called without begin.")
-    self._begun = False
-
-
 class EstimatorTest(tu.AdanetTestCase):
 
-  @parameterized.named_parameters({
-      "testcase_name": "one_step",
-      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
-      "max_iteration_steps": 1,
-      "steps": 1,
-      "max_steps": None,
-      "want_loss": 0.49899703,
-  }, {
-      "testcase_name": "single_builder_max_steps",
-      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
-      "max_iteration_steps": 200,
-      "max_steps": 300,
-      "want_loss": 0.32420248,
-  }, {
-      "testcase_name": "single_builder_steps",
-      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
-      "max_iteration_steps": 200,
-      "steps": 300,
-      "max_steps": None,
-      "want_loss": 0.32420248,
-  }, {
-      "testcase_name": "single_builder_no_bias",
-      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
-      "max_iteration_steps": 200,
-      "use_bias": False,
-      "want_loss": 0.496736,
-  }, {
-      "testcase_name":
-          "single_builder_subnetwork_hooks",
-      "subnetwork_generator":
-          SimpleGenerator([
-              _DNNBuilder(
-                  "dnn",
-                  subnetwork_chief_hooks=[
-                      _ModifierSessionRunHook("chief_hook_var")
-                  ],
-                  subnetwork_hooks=[_ModifierSessionRunHook("hook_var")])
-          ]),
-      "max_iteration_steps":
-          200,
-      "use_bias":
-          False,
-      "want_loss":
-          0.496736,
-  }, {
-      "testcase_name":
-          "single_builder_mixture_weight_hooks",
-      "subnetwork_generator":
-          SimpleGenerator([
-              _DNNBuilder(
-                  "dnn",
-                  mixture_weight_chief_hooks=[
-                      _ModifierSessionRunHook("chief_hook_var")
-                  ],
-                  mixture_weight_hooks=[_ModifierSessionRunHook("hook_var")])
-          ]),
-      "max_iteration_steps":
-          200,
-      "use_bias":
-          False,
-      "want_loss":
-          0.496736,
-  }, {
-      "testcase_name":
-          "single_builder_scalar_mixture_weight",
-      "subnetwork_generator":
-          SimpleGenerator([_DNNBuilder("dnn", return_penultimate_layer=False)]),
-      "max_iteration_steps":
-          200,
-      "mixture_weight_type":
-          MixtureWeightType.SCALAR,
-      "want_loss":
-          0.32317898,
-  }, {
-      "testcase_name":
-          "single_builder_vector_mixture_weight",
-      "subnetwork_generator":
-          SimpleGenerator([_DNNBuilder("dnn", return_penultimate_layer=False)]),
-      "max_iteration_steps":
-          200,
-      "mixture_weight_type":
-          MixtureWeightType.VECTOR,
-      "want_loss":
-          0.32317898,
-  }, {
-      "testcase_name": "single_builder_replicate_ensemble_in_training",
-      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
-      "replicate_ensemble_in_training": True,
-      "max_iteration_steps": 200,
-      "max_steps": 300,
-      "want_loss": 0.32420215,
-  }, {
-      "testcase_name": "single_builder_with_hook",
-      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
-      "max_iteration_steps": 200,
-      "hooks": [_ModifierSessionRunHook()],
-      "want_loss": 0.32420248,
-  }, {
-      "testcase_name": "high_max_iteration_steps",
-      "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
-      "max_iteration_steps": 500,
-      "want_loss": 0.32487726,
-  }, {
-      "testcase_name":
-          "two_builders",
-      "subnetwork_generator":
-          SimpleGenerator([_DNNBuilder("dnn"),
-                           _DNNBuilder("dnn2", seed=99)]),
-      "max_iteration_steps":
-          200,
-      "want_loss":
-          0.27713922,
-  }, {
-      "testcase_name":
-          "two_builders_different_layer_sizes",
-      "subnetwork_generator":
-          SimpleGenerator(
-              [_DNNBuilder("dnn"),
-               _DNNBuilder("dnn2", layer_size=3)]),
-      "max_iteration_steps":
-          200,
-      "want_loss":
-          0.29696745,
-  }, {
-      "testcase_name":
-          "two_builders_different_layer_sizes_three_iterations",
-      "subnetwork_generator":
-          SimpleGenerator(
-              [_DNNBuilder("dnn"),
-               _DNNBuilder("dnn2", layer_size=3)]),
-      "max_iteration_steps":
-          100,
-      "want_loss":
-          0.26433355,
-  }, {
-      "testcase_name":
-          "width_limiting_builder_no_pruning",
-      "subnetwork_generator":
-          SimpleGenerator([_WidthLimitingDNNBuilder("no_pruning")]),
-      "max_iteration_steps":
-          75,
-      "want_loss":
-          0.32001898,
-  }, {
-      "testcase_name":
-          "width_limiting_builder_some_pruning",
-      "subnetwork_generator":
-          SimpleGenerator(
-              [_WidthLimitingDNNBuilder("some_pruning", width_limit=2)]),
-      "max_iteration_steps":
-          75,
-      "want_loss":
-          0.38592532,
-  }, {
-      "testcase_name":
-          "width_limiting_builder_prune_all",
-      "subnetwork_generator":
-          SimpleGenerator(
-              [_WidthLimitingDNNBuilder("prune_all", width_limit=1)]),
-      "max_iteration_steps":
-          75,
-      "want_loss":
-          0.43492866,
-  }, {
-      "testcase_name":
-          "width_limiting_builder_mixed",
-      "subnetwork_generator":
-          SimpleGenerator([
-              _WidthLimitingDNNBuilder("no_pruning"),
-              _WidthLimitingDNNBuilder("some_pruning", width_limit=2),
-              _WidthLimitingDNNBuilder("prune_all", width_limit=1)
-          ]),
-      "max_iteration_steps":
-          75,
-      "want_loss":
-          0.32001898,
-  }, {
-      "testcase_name":
-          "evaluator_good_input",
-      "subnetwork_generator":
-          SimpleGenerator(
-              [_DNNBuilder("dnn"),
-               _DNNBuilder("dnn2", layer_size=3)]),
-      "evaluator":
-          Evaluator(input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=3),
-      "max_iteration_steps":
-          200,
-      "want_loss":
-          0.31241742,
-  }, {
-      "testcase_name":
-          "evaluator_bad_input",
-      "subnetwork_generator":
-          SimpleGenerator(
-              [_DNNBuilder("dnn"),
-               _DNNBuilder("dnn2", layer_size=3)]),
-      "evaluator":
-          Evaluator(input_fn=tu.dummy_input_fn([[1., 1.]], [[1.]]), steps=3),
-      "max_iteration_steps":
-          200,
-      "want_loss":
-          0.29696745,
-  }, {
-      "testcase_name":
-          "report_materializer",
-      "subnetwork_generator":
-          SimpleGenerator(
-              [_DNNBuilder("dnn"),
-               _DNNBuilder("dnn2", layer_size=3)]),
-      "report_materializer":
-          ReportMaterializer(
-              input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1),
-      "max_iteration_steps":
-          200,
-      "want_loss":
-          0.29696745,
-  }, {
-      "testcase_name":
-          "all_strategy",
-      "subnetwork_generator":
-          SimpleGenerator(
-              [_DNNBuilder("dnn"),
-               _DNNBuilder("dnn2", layer_size=3)]),
-      "ensemble_strategies": [AllStrategy()],
-      "max_iteration_steps":
-          200,
-      "want_loss":
-          0.29196805,
-  }, {
-      "testcase_name":
-          "solo_strategy",
-      "subnetwork_generator":
-          SimpleGenerator(
-              [_DNNBuilder("dnn"),
-               _DNNBuilder("dnn2", layer_size=3)]),
-      "ensemble_strategies": [SoloStrategy()],
-      "max_iteration_steps":
-          200,
-      "want_loss":
-          0.35249719,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "one_step",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 1,
+          "steps": 1,
+          "max_steps": None,
+          "want_loss": 0.49899703,
+      },
+      {
+          "testcase_name": "single_builder_max_steps",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 200,
+          "max_steps": 300,
+          "want_loss": 0.32420248,
+      },
+      {
+          "testcase_name": "single_builder_steps",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 200,
+          "steps": 300,
+          "max_steps": None,
+          "want_loss": 0.32420248,
+      },
+      {
+          "testcase_name": "single_builder_no_bias",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 200,
+          "use_bias": False,
+          "want_loss": 0.496736,
+      },
+      {
+          "testcase_name":
+              "single_builder_subnetwork_hooks",
+          "subnetwork_generator":
+              SimpleGenerator([
+                  _DNNBuilder(
+                      "dnn",
+                      subnetwork_chief_hooks=[
+                          tu.ModifierSessionRunHook("chief_hook_var")
+                      ],
+                      subnetwork_hooks=[tu.ModifierSessionRunHook("hook_var")])
+              ]),
+          "max_iteration_steps":
+              200,
+          "use_bias":
+              False,
+          "want_loss":
+              0.496736,
+      },
+      {
+          "testcase_name":
+              "single_builder_mixture_weight_hooks",
+          "subnetwork_generator":
+              SimpleGenerator([
+                  _DNNBuilder(
+                      "dnn",
+                      mixture_weight_chief_hooks=[
+                          tu.ModifierSessionRunHook("chief_hook_var")
+                      ],
+                      mixture_weight_hooks=[
+                          tu.ModifierSessionRunHook("hook_var")
+                      ])
+              ]),
+          "max_iteration_steps":
+              200,
+          "use_bias":
+              False,
+          "want_loss":
+              0.496736,
+      },
+      {
+          "testcase_name":
+              "single_builder_scalar_mixture_weight",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn", return_penultimate_layer=False)]),
+          "max_iteration_steps":
+              200,
+          "mixture_weight_type":
+              MixtureWeightType.SCALAR,
+          "want_loss":
+              0.32317898,
+      },
+      {
+          "testcase_name":
+              "single_builder_vector_mixture_weight",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn", return_penultimate_layer=False)]),
+          "max_iteration_steps":
+              200,
+          "mixture_weight_type":
+              MixtureWeightType.VECTOR,
+          "want_loss":
+              0.32317898,
+      },
+      {
+          "testcase_name": "single_builder_replicate_ensemble_in_training",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "replicate_ensemble_in_training": True,
+          "max_iteration_steps": 200,
+          "max_steps": 300,
+          "want_loss": 0.32420215,
+      },
+      {
+          "testcase_name": "single_builder_with_hook",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 200,
+          "hooks": [tu.ModifierSessionRunHook()],
+          "want_loss": 0.32420248,
+      },
+      {
+          "testcase_name": "high_max_iteration_steps",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 500,
+          "want_loss": 0.32487726,
+      },
+      {
+          "testcase_name":
+              "two_builders",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", seed=99)]),
+          "max_iteration_steps":
+              200,
+          "want_loss":
+              0.27713922,
+      },
+      {
+          "testcase_name":
+              "two_builders_different_layer_sizes",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "max_iteration_steps":
+              200,
+          "want_loss":
+              0.29696745,
+      },
+      {
+          "testcase_name":
+              "two_builders_different_layer_sizes_three_iterations",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "max_iteration_steps":
+              100,
+          "want_loss":
+              0.26433355,
+      },
+      {
+          "testcase_name":
+              "width_limiting_builder_no_pruning",
+          "subnetwork_generator":
+              SimpleGenerator([_WidthLimitingDNNBuilder("no_pruning")]),
+          "max_iteration_steps":
+              75,
+          "want_loss":
+              0.32001898,
+      },
+      {
+          "testcase_name":
+              "width_limiting_builder_some_pruning",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_WidthLimitingDNNBuilder("some_pruning", width_limit=2)]),
+          "max_iteration_steps":
+              75,
+          "want_loss":
+              0.38592532,
+      },
+      {
+          "testcase_name":
+              "width_limiting_builder_prune_all",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_WidthLimitingDNNBuilder("prune_all", width_limit=1)]),
+          "max_iteration_steps":
+              75,
+          "want_loss":
+              0.43492866,
+      },
+      {
+          "testcase_name":
+              "width_limiting_builder_mixed",
+          "subnetwork_generator":
+              SimpleGenerator([
+                  _WidthLimitingDNNBuilder("no_pruning"),
+                  _WidthLimitingDNNBuilder("some_pruning", width_limit=2),
+                  _WidthLimitingDNNBuilder("prune_all", width_limit=1)
+              ]),
+          "max_iteration_steps":
+              75,
+          "want_loss":
+              0.32001898,
+      },
+      {
+          "testcase_name":
+              "evaluator_good_input",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "evaluator":
+              Evaluator(
+                  input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=3),
+          "max_iteration_steps":
+              200,
+          "want_loss":
+              0.31241742,
+      },
+      {
+          "testcase_name":
+              "evaluator_bad_input",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "evaluator":
+              Evaluator(
+                  input_fn=tu.dummy_input_fn([[1., 1.]], [[1.]]), steps=3),
+          "max_iteration_steps":
+              200,
+          "want_loss":
+              0.29696745,
+      },
+      {
+          "testcase_name":
+              "report_materializer",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "report_materializer":
+              ReportMaterializer(
+                  input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1),
+          "max_iteration_steps":
+              200,
+          "want_loss":
+              0.29696745,
+      },
+      {
+          "testcase_name":
+              "all_strategy",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "ensemble_strategies": [AllStrategy()],
+          "max_iteration_steps":
+              200,
+          "want_loss":
+              0.29196805,
+      },
+      {
+          "testcase_name":
+              "solo_strategy",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "ensemble_strategies": [SoloStrategy()],
+          "max_iteration_steps":
+              200,
+          "want_loss":
+              0.35249719,
+      },
+      {
+          "testcase_name":
+              "dataset_train_input_fn",
+          "subnetwork_generator":
+              SimpleGenerator([_DNNBuilder("dnn")]),
+          # pylint: disable=g-long-lambda
+          "train_input_fn":
+              lambda: tf.data.Dataset.from_tensors(({
+                  "x": XOR_FEATURES
+              }, XOR_LABELS)).repeat(),
+          # pylint: enable=g-long-lambda
+          "max_iteration_steps":
+              100,
+          "want_loss":
+              .32219219,
+      })
   def test_lifecycle(self,
                      subnetwork_generator,
                      want_loss,
@@ -609,7 +623,8 @@ class EstimatorTest(tu.AdanetTestCase):
                      ensemble_strategies=None,
                      max_steps=300,
                      steps=None,
-                     report_materializer=None):
+                     report_materializer=None,
+                     train_input_fn=None):
     """Train entire estimator lifecycle using XOR dataset."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
@@ -628,9 +643,8 @@ class EstimatorTest(tu.AdanetTestCase):
         model_dir=self.test_subdirectory,
         config=run_config)
 
-    xor_features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
-    xor_labels = [[1.], [0.], [1.], [0.]]
-    train_input_fn = tu.dummy_input_fn(xor_features, xor_labels)
+    if not train_input_fn:
+      train_input_fn = tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS)
 
     # Train.
     estimator.train(
@@ -2341,9 +2355,7 @@ class EstimatorForceGrowTest(tu.AdanetTestCase):
         model_dir=self.test_subdirectory,
         config=run_config)
 
-    xor_features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
-    xor_labels = [[1.], [0.], [1.], [0.]]
-    train_input_fn = tu.dummy_input_fn(xor_features, xor_labels)
+    train_input_fn = tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS)
 
     # Train for four iterations.
     estimator.train(input_fn=train_input_fn, max_steps=3)

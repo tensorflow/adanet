@@ -28,6 +28,7 @@ from __future__ import print_function
 import contextlib
 
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
+from adanet.core.distributed.placement import RoundRobinStrategy
 from adanet.core.estimator import Estimator
 from adanet.core.subnetwork import Builder
 from adanet.core.subnetwork import SimpleGenerator
@@ -195,7 +196,7 @@ def train_and_evaluate_estimator():
       "config": config
   }
   if FLAGS.placement_strategy == "round_robin":
-    kwargs["experimental_round_robin_placement_strategy"] = True
+    kwargs["experimental_placement_strategy"] = RoundRobinStrategy()
   if FLAGS.estimator_type == "autoensemble":
     feature_columns = [tf.feature_column.numeric_column("x", shape=[2])]
     if hasattr(tf.estimator, "LinearEstimator"):
@@ -251,8 +252,9 @@ def train_and_evaluate_estimator():
   ]
   # Train for three iterations.
   train_spec = tf.estimator.TrainSpec(
-      input_fn=input_fn, max_steps=150, hooks=train_hooks)
-  eval_spec = tf.estimator.EvalSpec(input_fn=input_fn, steps=1)
+      input_fn=input_fn, max_steps=300, hooks=train_hooks)
+  eval_spec = tf.estimator.EvalSpec(
+      input_fn=input_fn, steps=1, start_delay_secs=.5, throttle_secs=.5)
 
   # Calling train_and_evaluate is the official way to perform distributed
   # training with an Estimator. Calling Estimator#train directly results

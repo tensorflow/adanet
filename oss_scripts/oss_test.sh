@@ -26,7 +26,6 @@ set -e  # fail and exit on any command erroring
 # Build with Bazel.
 
 # Copy Bazel generated code for report proto.
-# cp bazel-genfiles/adanet/core/architecture_pb2.py adanet/core
 # cp bazel-genfiles/adanet/core/report_pb2.py adanet/core
 
 # Run test suite and collect coverage (see setup.cfg in root).

@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 from adanet.autoensemble import AutoEnsembleEstimator
+from adanet.core import distributed
 from adanet.core import ensemble
 from adanet.core import Estimator
 from adanet.core import Evaluator
@@ -35,6 +36,7 @@ from adanet.core.subnetwork import Subnetwork
 
 __all__ = [
     "AutoEnsembleEstimator",
+    "distributed",
     "ensemble",
     "Ensemble",
     "Estimator",
