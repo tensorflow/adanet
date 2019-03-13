@@ -43,7 +43,8 @@ script:
   - cat /etc/hosts
   - ping localhost -c 3
   - nosetests
-  - cat /tmp/absl_testing/**/*.txt
+  # Don't error if file does not exist.
+  - cat /tmp/absl_testing/**/*.txt 2>/dev/null
 after_success:
   # Install codecov for tracking coverage over time.
   - pip install codecov
