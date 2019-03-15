@@ -286,6 +286,8 @@ class _EnsembleMetrics(_SubnetworkMetrics):
       # 1 dnn_width_32_depth_1 | dnn_width_64_depth_1
       # 2
       # 3 dnn_with_32_depth_2
+      # Also consider adding ensemble candidate's name, though that is already
+      # included in the ensemble name.
       architecture_ = " | ".join([name for _, name in architecture.subnetworks])
       architecture_ = "| {} |".format(architecture_)
       summary_metadata = tf.SummaryMetadata(

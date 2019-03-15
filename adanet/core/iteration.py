@@ -409,6 +409,9 @@ class _IterationBuilder(object):
               iteration_number=iteration_number,
               labels=labels,
               previous_ensemble_spec=previous_ensemble_spec)
+          # TODO: Eliminate need for candidates.
+          # TODO: Don't track moving average of loss when rebuilding
+          # previous ensemble.
           candidate = self._candidate_builder.build_candidate(
               ensemble_spec=ensemble_spec,
               training=training,

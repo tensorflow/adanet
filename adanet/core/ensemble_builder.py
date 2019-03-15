@@ -32,7 +32,7 @@ from adanet.core.subnetwork import TrainOpSpec
 from adanet.core.summary import monkey_patched_summaries
 import tensorflow as tf
 
-from tensorflow.python.training import training_util  # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.training import training as train  # pylint: disable=g-direct-tensorflow-import
 
 _VALID_METRIC_FN_ARGS = {"features", "labels", "predictions"}
 
@@ -148,8 +148,8 @@ def _monkey_patch_context(iteration_step_scope, scoped_summary, trainable_vars):
   # monkey-patch global attributes.
   tf.train.get_global_step = iteration_step
   tf.train.get_or_create_global_step = iteration_step
-  training_util.get_global_step = iteration_step
-  training_util.get_or_create_global_step = iteration_step
+  setattr(train, "get_global_step", iteration_step)
+  setattr(train, "get_or_create_global_step", iteration_step)
   _set_trainable_variables(trainable_vars)
 
   try:
@@ -159,8 +159,9 @@ def _monkey_patch_context(iteration_step_scope, scoped_summary, trainable_vars):
     # Revert monkey-patches.
     new_trainable_vars = _new_trainable_variables(trainable_vars)
     _set_trainable_variables(old_trainable_vars + new_trainable_vars)
-    training_util.get_or_create_global_step = old_get_or_create_global_step_fn
-    training_util.get_global_step = old_get_global_step_fn
+    setattr(train, "get_or_create_global_step",
+            old_get_or_create_global_step_fn)
+    setattr(train, "get_global_step", old_get_global_step_fn)
     tf.train.get_or_create_global_step = old_get_or_create_global_step_fn
     tf.train.get_global_step = old_get_global_step_fn
 
@@ -249,7 +250,7 @@ class _EnsembleBuilder(object):
     """
 
     with tf.variable_scope("ensemble_{}".format(name)):
-      architecture = _Architecture()
+      architecture = _Architecture(candidate.name)
       previous_subnetworks = []
       subnetwork_builders = []
       previous_ensemble = None

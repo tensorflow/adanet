@@ -36,6 +36,8 @@ from adanet.core.summary import Summary
 import adanet.core.testing_utils as tu
 import tensorflow as tf
 
+from tensorflow.python.training import training as train  # pylint: disable=g-direct-tensorflow-import
+
 
 class _Builder(Builder):
 
@@ -72,8 +74,11 @@ class _Builder(Builder):
     assert not tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
 
     # Subnetworks get iteration steps instead of global steps.
-    global_step = tf.train.get_global_step()
-    assert "subnetwork_test/iteration_step" == global_step.op.name
+    step_name = "subnetwork_test/iteration_step"
+    assert step_name == tf.train.get_global_step().op.name
+    assert step_name == train.get_global_step().op.name
+    assert step_name == tf.train.get_or_create_global_step().op.name
+    assert step_name == train.get_or_create_global_step().op.name
 
     # Subnetworks get scoped summaries.
     assert "fake_scalar" == tf.summary.scalar("scalar", 1.)
@@ -398,6 +403,11 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
         # Get the real global step outside a subnetwork's context.
         self.assertEqual("global_step", tf.train.get_global_step().op.name)
+        self.assertEqual("global_step", train.get_global_step().op.name)
+        self.assertEqual("global_step",
+                         tf.train.get_or_create_global_step().op.name)
+        self.assertEqual("global_step",
+                         train.get_or_create_global_step().op.name)
 
         # Get global tf.summary outside a subnetwork's context.
         self.assertNotEqual("fake_scalar", tf.summary.scalar("scalar", 1.))

@@ -36,8 +36,10 @@ class StrategyTest(tf.test.TestCase):
 
   def test_solo_strategy(self):
     want = [
-        ensemble.Candidate(self.fake_builder_1.name, [self.fake_builder_1], []),
-        ensemble.Candidate(self.fake_builder_2.name, [self.fake_builder_2], [])
+        ensemble.Candidate("{}_solo".format(self.fake_builder_1.name),
+                           [self.fake_builder_1], []),
+        ensemble.Candidate("{}_solo".format(self.fake_builder_2.name),
+                           [self.fake_builder_2], [])
     ]
     got = ensemble.SoloStrategy().generate_ensemble_candidates(
         [self.fake_builder_1, self.fake_builder_2], None)
@@ -46,8 +48,10 @@ class StrategyTest(tf.test.TestCase):
 
   def test_solo_strategy_with_previous_ensemble_subnetwork_builders(self):
     want = [
-        ensemble.Candidate(self.fake_builder_1.name, [self.fake_builder_1], []),
-        ensemble.Candidate(self.fake_builder_2.name, [self.fake_builder_2], [])
+        ensemble.Candidate("{}_solo".format(self.fake_builder_1.name),
+                           [self.fake_builder_1], []),
+        ensemble.Candidate("{}_solo".format(self.fake_builder_2.name),
+                           [self.fake_builder_2], [])
     ]
     got = ensemble.SoloStrategy().generate_ensemble_candidates(
         [self.fake_builder_1, self.fake_builder_2],
@@ -57,8 +61,10 @@ class StrategyTest(tf.test.TestCase):
 
   def test_grow_strategy(self):
     want = [
-        ensemble.Candidate(self.fake_builder_1.name, [self.fake_builder_1], []),
-        ensemble.Candidate(self.fake_builder_2.name, [self.fake_builder_2], [])
+        ensemble.Candidate("{}_grow".format(self.fake_builder_1.name),
+                           [self.fake_builder_1], []),
+        ensemble.Candidate("{}_grow".format(self.fake_builder_2.name),
+                           [self.fake_builder_2], [])
     ]
     got = ensemble.GrowStrategy().generate_ensemble_candidates(
         [self.fake_builder_1, self.fake_builder_2], None)
@@ -66,9 +72,11 @@ class StrategyTest(tf.test.TestCase):
 
   def test_grow_strategy_with_previous_ensemble_subnetwork_builders(self):
     want = [
-        ensemble.Candidate(self.fake_builder_1.name, [self.fake_builder_1],
+        ensemble.Candidate("{}_grow".format(self.fake_builder_1.name),
+                           [self.fake_builder_1],
                            [self.fake_builder_3, self.fake_builder_4]),
-        ensemble.Candidate(self.fake_builder_2.name, [self.fake_builder_2],
+        ensemble.Candidate("{}_grow".format(self.fake_builder_2.name),
+                           [self.fake_builder_2],
                            [self.fake_builder_3, self.fake_builder_4])
     ]
     got = ensemble.GrowStrategy().generate_ensemble_candidates(
