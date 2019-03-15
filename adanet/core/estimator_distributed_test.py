@@ -92,7 +92,7 @@ def _create_task_process(task_type, task_index, estimator_type,
 def _pick_unused_port():
   """Returns a free port on localhost."""
 
-  for family in [socket.AF_INET]:
+  for family in (socket.AF_INET6, socket.AF_INET):
     try:
       sock = socket.socket(family, socket.SOCK_STREAM)
       sock.bind(("", 0))  # Passing port '0' binds to a free port on localhost.
@@ -265,7 +265,6 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
 
     worker_processes = []
     ps_processes = []
-    evaluator_processes = []
 
     model_dir = self.test_subdirectory
 
@@ -283,20 +282,14 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
       ps_processes.append(
           _create_task_process("ps", i, estimator, placement_strategy,
                                tf_config, model_dir))
-    # Evaluator
-    evaluator_processes.append(
-        _create_task_process("evaluator", 0, estimator, placement_strategy,
-                             tf_config, model_dir))
 
     # Run processes.
     try:
       # NOTE: Parameter servers do not shut down on their own.
       self._wait_for_processes(
-          worker_processes + evaluator_processes,
-          kill_processes=ps_processes,
-          timeout_secs=600)
+          worker_processes, kill_processes=ps_processes, timeout_secs=180)
     finally:
-      for process in worker_processes + ps_processes + evaluator_processes:
+      for process in worker_processes + ps_processes:
         try:
           process.popen.kill()
         except OSError:
