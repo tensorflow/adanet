@@ -265,6 +265,7 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
 
     worker_processes = []
     ps_processes = []
+    evaluator_processes = []
 
     model_dir = self.test_subdirectory
 
@@ -282,14 +283,20 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
       ps_processes.append(
           _create_task_process("ps", i, estimator, placement_strategy,
                                tf_config, model_dir))
+    # Evaluator
+    evaluator_processes.append(
+        _create_task_process("evaluator", 0, estimator, placement_strategy,
+                             tf_config, model_dir))
 
     # Run processes.
     try:
       # NOTE: Parameter servers do not shut down on their own.
       self._wait_for_processes(
-          worker_processes, kill_processes=ps_processes, timeout_secs=180)
+          worker_processes + evaluator_processes,
+          kill_processes=ps_processes,
+          timeout_secs=180)
     finally:
-      for process in worker_processes + ps_processes:
+      for process in worker_processes + ps_processes + evaluator_processes:
         try:
           process.popen.kill()
         except OSError:
