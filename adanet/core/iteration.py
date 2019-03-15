@@ -187,18 +187,18 @@ class _IterationBuilder(object):
       if not _is_numeric(features[name]):
         continue
       tf.logging.info("DEBUG: Checking numerics of float feature '%s'.", name)
-      checked_features[name] = tf.debugging.check_numerics(
-          features[name], "features '{}'".format(name))
+      checked_features[name] = tf.check_numerics(features[name],
+                                                 "features '{}'".format(name))
     if isinstance(labels, dict):
       for name in sorted(labels):
         if not _is_numeric(labels[name]):
           continue
         tf.logging.info("DEBUG: Checking numerics of float label '%s'.", name)
-        checked_labels[name] = tf.debugging.check_numerics(
-            labels[name], "labels '{}'".format(name))
+        checked_labels[name] = tf.check_numerics(labels[name],
+                                                 "labels '{}'".format(name))
     elif labels is not None and _is_numeric(labels):
       tf.logging.info("DEBUG: Checking numerics of labels.")
-      checked_labels = tf.debugging.check_numerics(labels, "'labels'")
+      checked_labels = tf.check_numerics(labels, "'labels'")
     return checked_features, checked_labels
 
   def build_iteration(self,

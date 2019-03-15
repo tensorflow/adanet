@@ -28,31 +28,8 @@ else
   pip install -q "tensorflow==$TF_VERSION"
 fi
 
-# Make sure we have the latest version of numpy - avoid problems we were
-# seeing with Python 3
-pip install -q -U numpy
-
-# Install Bazel for tests.
-# Step 1: Install required packages
-sudo apt-get install pkg-config zip g++ zlib1g-dev unzip python
-
-# Step 2: Download Bazel binary installer
-wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
-
-# Step 3: Install Bazel
-chmod +x bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
-./bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh --user
-export PATH="$PATH:$HOME/bin"
-
 # Build adanet pip packaging script
-bazel build //adanet/pip_package:build_pip_package
+bazel build -c opt //... --local_resources 2048,.5,1.0
 
-# Create the adanet pip package
-bazel-bin/adanet/pip_package/build_pip_package /tmp/adanet_pkg
-
-# Install and test the pip package
-pip install /tmp/adanet_pkg/*.whl
-
-# Finally try importing `adanet` in Python outside the cloned directory:
-cd ..
-python -c "import adanet"
+# Copy generated proto files.
+cp bazel-genfiles/adanet/core/report_pb2.py adanet/core
