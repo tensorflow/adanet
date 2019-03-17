@@ -25,12 +25,12 @@ env:
     # - TF_VERSION="tf-nightly" NOSE_IGNORE_FILES=".*adanet/core/estimator_distributed_test.py"
 
     # E2E Tests.
-    - TF_VERSION="1.9.*" NOSE_TESTMATCH=".*adanet/core/estimator_distributed_test.py"
-    - TF_VERSION="1.10.*" NOSE_TESTMATCH=".*adanet/core/estimator_distributed_test.py"
-    - TF_VERSION="1.11.*" NOSE_TESTMATCH=".*adanet/core/estimator_distributed_test.py"
-    - TF_VERSION="1.12.*" NOSE_TESTMATCH=".*adanet/core/estimator_distributed_test.py"
-    - TF_VERSION="1.13.*" NOSE_TESTMATCH=".*adanet/core/estimator_distributed_test.py"
-    - TF_VERSION="tf-nightly" NOSE_TESTMATCH=".*adanet/core/estimator_distributed_test.py"
+    - TF_VERSION="1.9.*" NOSE_TESTMATCH=".*test_distributed_training.*"
+    - TF_VERSION="1.10.*" NOSE_TESTMATCH=".*test_distributed_training.*"
+    - TF_VERSION="1.11.*" NOSE_TESTMATCH=".*test_distributed_training.*"
+    - TF_VERSION="1.12.*" NOSE_TESTMATCH=".*test_distributed_training.*"
+    - TF_VERSION="1.13.*" NOSE_TESTMATCH=".*test_distributed_training.*"
+    - TF_VERSION="tf-nightly" NOSE_TESTMATCH=".*test_distributed_training.*"
 before_install:
   - sudo apt-get -y install pkg-config zip g++ zlib1g-dev unzip
   - wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
