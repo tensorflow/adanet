@@ -16,21 +16,21 @@ env:
     # If updating, also update TF_LATEST above
     # TODO: Enable recent versions on release
 
-    # # Main test suite.
-    # - TF_VERSION="1.9.*" NOSE_IGNORE_FILES=".*adanet/core/estimator_distributed_test.py"
-    # - TF_VERSION="1.10.*" NOSE_IGNORE_FILES=".*adanet/core/estimator_distributed_test.py"
-    # - TF_VERSION="1.11.*" NOSE_IGNORE_FILES=".*adanet/core/estimator_distributed_test.py"
-    # - TF_VERSION="1.12.*" NOSE_IGNORE_FILES=".*adanet/core/estimator_distributed_test.py"
-    # - TF_VERSION="1.13.*" NOSE_IGNORE_FILES=".*adanet/core/estimator_distributed_test.py"
-    # - TF_VERSION="tf-nightly" NOSE_IGNORE_FILES=".*adanet/core/estimator_distributed_test.py"
+    # Main test suite.
+    - TF_VERSION="1.9.*" SUITE="quick"
+    - TF_VERSION="1.10.*" SUITE="quick"
+    - TF_VERSION="1.11.*" SUITE="quick"
+    - TF_VERSION="1.12.*" SUITE="quick"
+    - TF_VERSION="1.13.*" SUITE="quick"
+    - TF_VERSION="tf-nightly" SUITE="quick"
 
     # E2E Tests.
-    - TF_VERSION="1.9.*" NOSE_TESTMATCH=".*test_distributed_training.*"
-    - TF_VERSION="1.10.*" NOSE_TESTMATCH=".*test_distributed_training.*"
-    - TF_VERSION="1.11.*" NOSE_TESTMATCH=".*test_distributed_training.*"
-    - TF_VERSION="1.12.*" NOSE_TESTMATCH=".*test_distributed_training.*"
-    - TF_VERSION="1.13.*" NOSE_TESTMATCH=".*test_distributed_training.*"
-    - TF_VERSION="tf-nightly" NOSE_TESTMATCH=".*test_distributed_training.*"
+    - TF_VERSION="1.9.*" SUITE="e2e"
+    - TF_VERSION="1.10.*" SUITE="e2e"
+    - TF_VERSION="1.11.*" SUITE="e2e"
+    - TF_VERSION="1.12.*" SUITE="e2e"
+    - TF_VERSION="1.13.*" SUITE="e2e"
+    - TF_VERSION="tf-nightly" SUITE="e2e"
 before_install:
   - sudo apt-get -y install pkg-config zip g++ zlib1g-dev unzip
   - wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
@@ -44,7 +44,12 @@ install:
   - pip install numpy --upgrade
   - ./oss_scripts/oss_pip_install.sh
 script:
-  - nosetests
+  - |
+    if [ $SUITE == "e2e" ]; then
+      nosetests adanet/core/estimator_distributed_test.py
+    else
+      NOSE_EXCLUDE='.*nasnet.*.py|.*test_distributed_training.*' nosetests
+    fi
   - cat /tmp/absl_testing/**/*.txt || true  # Don't error if file does not exist.
 after_success:
   # Install codecov for tracking coverage over time.
