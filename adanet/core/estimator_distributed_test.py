@@ -294,7 +294,7 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
       self._wait_for_processes(
           worker_processes + evaluator_processes,
           kill_processes=ps_processes,
-          timeout_secs=180)
+          timeout_secs=300)
     finally:
       for process in worker_processes + ps_processes + evaluator_processes:
         try:
