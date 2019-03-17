@@ -32,6 +32,7 @@ REQUIRED_PACKAGES = [
     'rednose==1.3.*',
     'coverage==4.5.*',
     'protobuf >= 3.6.0',
+    'portpicker >= 1.3.0',
 ]
 
 setup(
