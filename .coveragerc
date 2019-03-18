@@ -2,6 +2,7 @@
 [run]
 branch = True
 source = adanet
+parallel = True
 
 [report]
 # Regexes for lines to exclude from consideration

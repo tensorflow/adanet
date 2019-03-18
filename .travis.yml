@@ -12,18 +12,19 @@ env:
     - CODECOV_TOKEN="0d2c482b-f42c-4d4c-b092-cb628ad20857"
     - BAZEL_VERSION=0.20.0
     - PORTSERVER_ADDRESS=@unittest-portserver
+    - COVERAGE_PROCESS_START=$PWD/.coveragerc
   matrix:
     # We test against recent versions of TensorFlow and tf-nightly.
     # If updating, also update TF_LATEST above
     # TODO: Enable recent versions on release
 
     # Quick test suite.
-    - TF_VERSION="1.9.*" SUITE="quick"
-    - TF_VERSION="1.10.*" SUITE="quick"
-    - TF_VERSION="1.11.*" SUITE="quick"
-    - TF_VERSION="1.12.*" SUITE="quick"
-    - TF_VERSION="1.13.*" SUITE="quick"
-    - TF_VERSION="tf-nightly" SUITE="quick"
+    # - TF_VERSION="1.9.*" SUITE="quick"
+    # - TF_VERSION="1.10.*" SUITE="quick"
+    # - TF_VERSION="1.11.*" SUITE="quick"
+    # - TF_VERSION="1.12.*" SUITE="quick"
+    # - TF_VERSION="1.13.*" SUITE="quick"
+    # - TF_VERSION="tf-nightly" SUITE="quick"
 
     # E2E Tests.
     - TF_VERSION="1.9.*" SUITE="e2e"
@@ -37,16 +38,13 @@ before_install:
   - wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
   - chmod +x bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
   - ./bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh --user
-  - mkdir -p $(python -m site --user-site)
-  - cp .travis/sitecustomize.py $(python -m site --user-site)
-  - mkdir -p $(python3 -m site --user-site)
-  - cp .travis/sitecustomize.py $(python3 -m site --user-site)
 addons:
   apt:
     update: true
 install:
   - pip install -r requirements.txt
   - pip install numpy --upgrade
+  - pip install coverage-enable-subproces
   - ./oss_scripts/oss_pip_install.sh
 script:
   - |
