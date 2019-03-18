@@ -26,10 +26,6 @@ import time
 
 from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _CandidateBuilder
-from adanet.core.distributed import ReplicationStrategy
-from adanet.core.distributed.devices import monkey_patch_default_variable_placement_strategy
-from adanet.core.ensemble import ComplexityRegularizedEnsembler
-from adanet.core.ensemble import GrowStrategy
 from adanet.core.ensemble_builder import _EnsembleBuilder
 from adanet.core.ensemble_builder import _SubnetworkManager
 from adanet.core.iteration import _IterationBuilder
@@ -37,6 +33,10 @@ from adanet.core.report_accessor import _ReportAccessor
 from adanet.core.summary import _ScopedSummary
 from adanet.core.summary import _TPUScopedSummary
 from adanet.core.timer import _CountDownTimer
+from adanet.distributed import ReplicationStrategy
+from adanet.distributed.devices import monkey_patch_default_variable_placement_strategy
+from adanet.ensemble import ComplexityRegularizedEnsembler
+from adanet.ensemble import GrowStrategy
 import numpy as np
 import six
 import tensorflow as tf

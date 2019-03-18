@@ -24,11 +24,11 @@ import os
 
 from absl.testing import parameterized
 from adanet.core import testing_utils as tu
-from adanet.core.subnetwork import Builder
-from adanet.core.subnetwork import Report
-from adanet.core.subnetwork import SimpleGenerator
-from adanet.core.subnetwork import Subnetwork
 from adanet.core.tpu_estimator import TPUEstimator
+from adanet.subnetwork import Builder
+from adanet.subnetwork import Report
+from adanet.subnetwork import SimpleGenerator
+from adanet.subnetwork import Subnetwork
 from distutils.version import LooseVersion
 import tensorflow as tf
 

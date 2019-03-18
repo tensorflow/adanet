@@ -20,8 +20,8 @@ from __future__ import print_function
 import itertools
 
 from absl.testing import parameterized
-from adanet.core.distributed.placement import ReplicationStrategy
-from adanet.core.distributed.placement import RoundRobinStrategy
+from adanet.distributed.placement import ReplicationStrategy
+from adanet.distributed.placement import RoundRobinStrategy
 
 import tensorflow as tf
 

@@ -18,7 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.core.distributed.devices import monkey_patch_default_variable_placement_strategy
+from adanet.distributed.devices import monkey_patch_default_variable_placement_strategy
 
 import tensorflow as tf
 

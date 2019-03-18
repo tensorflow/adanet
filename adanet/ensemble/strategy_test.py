@@ -19,8 +19,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.core import ensemble
-from adanet.core import subnetwork
+from adanet import ensemble
+from adanet import subnetwork
 
 import tensorflow as tf
 mock = tf.test.mock

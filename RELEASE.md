@@ -20,6 +20,7 @@ limitations under the License.
  * Add support for evaluation on TPU using `adanet.TPUEstimator`.
  * Support recording TensorBoard `scalar`, `image`, `histogram`, and `audio` summaries on TPU during training.
  * Add debug mode to help detect NaNs and Infs during training.
+ * BREAKING CHANGE: Doing `from adanet.core import subnetwork` will no longer work, because the `subnetwork` package was moved to `adanet.subnetwork`. Most users should already be using `adanet.subnetwork`, and should not be affected.
 
 # Release 0.5.0
  * Support training on TPU using `adanet.TPUEstimator`.

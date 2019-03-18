@@ -25,11 +25,11 @@ import functools
 import inspect
 
 from adanet.core.architecture import _Architecture
-from adanet.core.ensemble import ComplexityRegularized
 from adanet.core.eval_metrics import _EnsembleMetrics
 from adanet.core.eval_metrics import _SubnetworkMetrics
-from adanet.core.subnetwork import TrainOpSpec
 from adanet.core.summary import monkey_patched_summaries
+from adanet.ensemble import ComplexityRegularized
+from adanet.subnetwork import TrainOpSpec
 import tensorflow as tf
 
 from tensorflow.python.training import training as train  # pylint: disable=g-direct-tensorflow-import

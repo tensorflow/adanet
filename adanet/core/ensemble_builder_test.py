@@ -24,16 +24,16 @@ import os
 import shutil
 
 from absl.testing import parameterized
-from adanet.core.ensemble import Candidate as EnsembleCandidate
-from adanet.core.ensemble import ComplexityRegularizedEnsembler
-from adanet.core.ensemble import MixtureWeightType
 from adanet.core.ensemble_builder import _EnsembleBuilder
 from adanet.core.ensemble_builder import _SubnetworkManager
 from adanet.core.eval_metrics import call_eval_metrics
-from adanet.core.subnetwork import Builder
-from adanet.core.subnetwork import Subnetwork
 from adanet.core.summary import Summary
 import adanet.core.testing_utils as tu
+from adanet.ensemble import Candidate as EnsembleCandidate
+from adanet.ensemble import ComplexityRegularizedEnsembler
+from adanet.ensemble import MixtureWeightType
+from adanet.subnetwork import Builder
+from adanet.subnetwork import Subnetwork
 import tensorflow as tf
 
 from tensorflow.python.training import training as train  # pylint: disable=g-direct-tensorflow-import

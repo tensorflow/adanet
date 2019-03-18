@@ -23,18 +23,18 @@ import functools
 
 from absl.testing import parameterized
 from adanet.core.candidate import _Candidate
-from adanet.core.ensemble import Candidate as EnsembleCandidate
 from adanet.core.ensemble_builder import _EnsembleSpec
 from adanet.core.ensemble_builder import _SubnetworkSpec
 from adanet.core.iteration import _Iteration
 from adanet.core.iteration import _IterationBuilder
-from adanet.core.subnetwork import Builder as SubnetworkBuilder
-from adanet.core.subnetwork import Report as SubnetworkReport
-from adanet.core.subnetwork import Subnetwork
-from adanet.core.subnetwork import TrainOpSpec
 from adanet.core.summary import _ScopedSummary
 from adanet.core.summary import _TPUScopedSummary
 import adanet.core.testing_utils as tu
+from adanet.ensemble import Candidate as EnsembleCandidate
+from adanet.subnetwork import Builder as SubnetworkBuilder
+from adanet.subnetwork import Report as SubnetworkReport
+from adanet.subnetwork import Subnetwork
+from adanet.subnetwork import TrainOpSpec
 import tensorflow as tf
 
 

@@ -21,7 +21,7 @@ from __future__ import print_function
 
 import os
 
-from adanet.core import subnetwork
+from adanet import subnetwork
 import six
 import tensorflow as tf
 

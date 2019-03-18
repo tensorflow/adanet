@@ -20,10 +20,10 @@ from __future__ import division
 from __future__ import print_function
 
 from adanet.core import Estimator
-from adanet.core.subnetwork import Builder
-from adanet.core.subnetwork import Generator
-from adanet.core.subnetwork import Subnetwork
-from adanet.core.subnetwork import TrainOpSpec
+from adanet.subnetwork import Builder
+from adanet.subnetwork import Generator
+from adanet.subnetwork import Subnetwork
+from adanet.subnetwork import TrainOpSpec
 import tensorflow as tf
 
 from tensorflow.python.estimator.canned import prediction_keys

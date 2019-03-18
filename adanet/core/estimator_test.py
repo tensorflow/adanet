@@ -23,20 +23,20 @@ import os
 
 from absl.testing import parameterized
 from adanet.core import testing_utils as tu
-from adanet.core.ensemble import AllStrategy
-from adanet.core.ensemble import GrowStrategy
-from adanet.core.ensemble import MixtureWeightType
-from adanet.core.ensemble import SoloStrategy
 from adanet.core.estimator import Estimator
 from adanet.core.evaluator import Evaluator
 from adanet.core.report_materializer import ReportMaterializer
-from adanet.core.subnetwork import Builder
-from adanet.core.subnetwork import Generator
-from adanet.core.subnetwork import MaterializedReport
-from adanet.core.subnetwork import Report
-from adanet.core.subnetwork import SimpleGenerator
-from adanet.core.subnetwork import Subnetwork
-from adanet.core.subnetwork import TrainOpSpec
+from adanet.ensemble import AllStrategy
+from adanet.ensemble import GrowStrategy
+from adanet.ensemble import MixtureWeightType
+from adanet.ensemble import SoloStrategy
+from adanet.subnetwork import Builder
+from adanet.subnetwork import Generator
+from adanet.subnetwork import MaterializedReport
+from adanet.subnetwork import Report
+from adanet.subnetwork import SimpleGenerator
+from adanet.subnetwork import Subnetwork
+from adanet.subnetwork import TrainOpSpec
 from distutils.version import LooseVersion
 import tensorflow as tf
 

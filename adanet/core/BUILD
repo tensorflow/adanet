@@ -34,8 +34,8 @@ py_library(
         ":report_accessor",
         ":summary",
         ":timer",
-        "//adanet/core/distributed",
-        "//adanet/core/ensemble",
+        "//adanet/distributed",
+        "//adanet/ensemble",
         "@six_archive//:six",
     ],
 )
@@ -52,7 +52,7 @@ py_test(
         ":evaluator",
         ":report_materializer",
         ":testing_utils",
-        "//adanet/core/subnetwork",
+        "//adanet/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -70,7 +70,7 @@ py_test(
     deps = [
         ":estimator",
         ":timer",
-        "//adanet/core/subnetwork",
+        "//adanet/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -83,8 +83,8 @@ py_binary(
     deps = [
         ":estimator",
         "//adanet/autoensemble",
-        "//adanet/core/distributed",
-        "//adanet/core/subnetwork",
+        "//adanet/distributed",
+        "//adanet/subnetwork",
     ],
 )
 
@@ -105,7 +105,7 @@ py_test(
     deps = [
         ":testing_utils",
         ":tpu_estimator",
-        "//adanet/core/subnetwork",
+        "//adanet/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -134,8 +134,8 @@ py_library(
     deps = [
         ":ensemble_builder",
         ":eval_metrics",
-        "//adanet/core/distributed",
-        "//adanet/core/subnetwork",
+        "//adanet/distributed",
+        "//adanet/subnetwork",
         "@six_archive//:six",
     ],
 )
@@ -150,7 +150,7 @@ py_test(
         ":iteration",
         ":summary",
         ":testing_utils",
-        "//adanet/core/subnetwork",
+        "//adanet/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -180,7 +180,7 @@ py_library(
         ":architecture",
         ":eval_metrics",
         ":summary",
-        "//adanet/core/subnetwork",
+        "//adanet/subnetwork",
     ],
 )
 
@@ -192,8 +192,8 @@ py_test(
         ":ensemble_builder",
         ":summary",
         ":testing_utils",
-        "//adanet/core/ensemble",
-        "//adanet/core/subnetwork",
+        "//adanet/ensemble",
+        "//adanet/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -260,8 +260,8 @@ py_library(
     deps = [
         ":architecture",
         ":ensemble_builder",
-        "//adanet/core/ensemble",
-        "//adanet/core/subnetwork",
+        "//adanet/ensemble",
+        "//adanet/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -288,7 +288,7 @@ py_library(
     srcs = ["report_accessor.py"],
     deps = [
         ":report_pb2",
-        "//adanet/core/subnetwork",
+        "//adanet/subnetwork",
         "@six_archive//:six",
     ],
 )
@@ -299,7 +299,7 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":report_accessor",
-        "//adanet/core/subnetwork",
+        "//adanet/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -308,7 +308,7 @@ py_library(
     name = "report_materializer",
     srcs = ["report_materializer.py"],
     deps = [
-        "//adanet/core/subnetwork",
+        "//adanet/subnetwork",
     ],
 )
 
@@ -319,7 +319,7 @@ py_test(
     deps = [
         ":report_materializer",
         ":testing_utils",
-        "//adanet/core/subnetwork",
+        "//adanet/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )

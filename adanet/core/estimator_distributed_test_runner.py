@@ -28,11 +28,11 @@ from __future__ import print_function
 import contextlib
 
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
-from adanet.core.distributed.placement import RoundRobinStrategy
 from adanet.core.estimator import Estimator
-from adanet.core.subnetwork import Builder
-from adanet.core.subnetwork import SimpleGenerator
-from adanet.core.subnetwork import Subnetwork
+from adanet.distributed.placement import RoundRobinStrategy
+from adanet.subnetwork import Builder
+from adanet.subnetwork import SimpleGenerator
+from adanet.subnetwork import Subnetwork
 import tensorflow as tf
 
 # pylint: disable=g-direct-tensorflow-import
