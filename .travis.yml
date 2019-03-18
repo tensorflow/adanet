@@ -37,6 +37,8 @@ before_install:
   - wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
   - chmod +x bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
   - ./bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh --user
+  - cp .travis/sitecustomize.py $(python -m site --user-site)
+  - cp .travis/sitecustomize.py $(python3 -m site --user-site)
 addons:
   apt:
     update: true
