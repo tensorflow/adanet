@@ -652,6 +652,24 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
       self.assertEqual(1., subnetwork_metrics["operation_metric"])
       self.assertEqual(1., ensemble_metrics["operation_metric"])
 
+  def test_eval_metric_different_shape_op(self):
+    def metric_fn():
+      var = tf.get_variable(
+          "metric_var",
+          shape=[2],
+          trainable=False,
+          initializer=tf.zeros_initializer(),
+          collections=[tf.GraphKeys.LOCAL_VARIABLES])
+      # Shape of metric different from shape of op
+      op = tf.assign_add(var, [1, 2])
+      metric = tf.reshape(tf.div_no_nan(var[0], var[1]), [])
+      return {"different_shape_metric": (metric, op)}
+
+    with self.test_session() as sess:
+      subnetwork_metrics, ensemble_metrics = _make_metrics(sess, metric_fn)
+      self.assertEqual(0.5, subnetwork_metrics["different_shape_metric"])
+      self.assertEqual(0.5, ensemble_metrics["different_shape_metric"])
+
 
 if __name__ == "__main__":
   tf.test.main()

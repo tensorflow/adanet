@@ -185,7 +185,7 @@ class _SubnetworkMetrics(object):
             trainable=False,
             initializer=tf.zeros_initializer(),
             collections=[tf.GraphKeys.LOCAL_VARIABLES])
-        if isinstance(op, tf.Operation):
+        if isinstance(op, tf.Operation) or op.shape != tensor.shape:
           with tf.control_dependencies([op]):
             op = tf.assign(var, tensor)
         metric = (var, tf.assign(var, op))
