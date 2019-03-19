@@ -49,7 +49,7 @@ install:
 script:
   - |
     if [ $SUITE == "e2e" ]; then
-      NOSE_EXCLUDE='.*workers_three_ps.*' nosetests adanet/core/estimator_distributed_test.py
+      NOSE_EXCLUDE='.*workers.*' nosetests adanet/core/estimator_distributed_test.py
     else
       NOSE_EXCLUDE='.*nasnet.*.py|.*test_distributed_training.*' nosetests
     fi
