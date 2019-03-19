@@ -44,7 +44,7 @@ addons:
 install:
   - pip install -r requirements.txt
   - pip install numpy --upgrade
-  - pip install coverage-enable-subproces
+  - pip install coverage-enable-subprocess
   - ./oss_scripts/oss_pip_install.sh
 script:
   - |
