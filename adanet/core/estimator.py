@@ -328,7 +328,6 @@ class Estimator(tf.estimator.Estimator):
       raise ValueError(
           "For distributed training, a model_dir must be specified.")
 
-    self._prepare_next_iteration_state = None
     self._subnetwork_generator = subnetwork_generator
     self._adanet_loss_decay = adanet_loss_decay
 
@@ -349,8 +348,6 @@ class Estimator(tf.estimator.Estimator):
     self._worker_wait_timeout_secs = worker_wait_timeout_secs
 
     self._evaluation_name = None
-
-    self._inside_adanet_training_loop = False
 
     # Added for backwards compatibility.
     default_ensembler_args = [
@@ -432,6 +429,10 @@ class Estimator(tf.estimator.Estimator):
     report_dir = report_dir or os.path.join(self._model_dir, "report")
     self._report_accessor = _ReportAccessor(report_dir)
 
+    # Stateful properties.
+    self._prepare_next_iteration_state = None
+    self._inside_adanet_training_loop = False
+
   def _summary_maker(self, scope=None, skip_summary=False, namespace=None):
     """Constructs a `_ScopedSummary`."""
     if self._use_tpu:
@@ -467,8 +468,10 @@ class Estimator(tf.estimator.Estimator):
     """Tracks where the context is within the AdaNet train loop."""
 
     self._inside_adanet_training_loop = True
-    yield
-    self._inside_adanet_training_loop = False
+    try:
+      yield
+    finally:
+      self._inside_adanet_training_loop = False
 
   def train(self,
             input_fn,
@@ -662,6 +665,20 @@ class Estimator(tf.estimator.Estimator):
     frozen_checkpoint = os.path.join(self.model_dir, "architecture")
     return "{}-{}.json".format(frozen_checkpoint, iteration_number)
 
+  @contextlib.contextmanager
+  def _reset_state_context(self):
+    """Resets stateful properties before delegating control to the user."""
+
+    prepare_next_iteration_state = self._prepare_next_iteration_state
+    inside_training_loop = self._inside_adanet_training_loop
+    self._prepare_next_iteration_state = None
+    self._inside_adanet_training_loop = False
+    try:
+      yield
+    finally:
+      self._inside_adanet_training_loop = inside_training_loop
+      self._prepare_next_iteration_state = prepare_next_iteration_state
+
   def _overwrite_checkpoint(self, current_iteration, iteration_number_tensor,
                             restore_saver):
     """Overwrites the latest checkpoint with the current graph.
@@ -714,8 +731,12 @@ class Estimator(tf.estimator.Estimator):
         if not isinstance(hook, tf.train.CheckpointSaverHook)
     ]
 
-    for hook in train_hooks:
-      hook.begin()
+    # Hooks allow the user to execute arbitratry actions, including actions
+    # on this estimator, so we temporarily reset the state before returning
+    # control to the user.
+    with self._reset_state_context():
+      for hook in train_hooks:
+        hook.begin()
 
     global_step_tensor = tf.train.get_global_step()
     global_step = tf.contrib.framework.load_variable(latest_checkpoint,
@@ -741,8 +762,9 @@ class Estimator(tf.estimator.Estimator):
         saver.recover_last_checkpoints(
             checkpoint_state.all_model_checkpoint_paths)
         saver.save(sess, checkpoint_path, global_step=current_iteration.number)
-      for hook in train_hooks:
-        hook.end(sess)
+      with self._reset_state_context():
+        for hook in train_hooks:
+          hook.end(sess)
 
   def _get_best_ensemble_index(self, current_iteration):
     """Returns the best candidate ensemble's index in this iteration.
@@ -1259,6 +1281,7 @@ class Estimator(tf.estimator.Estimator):
     estimator_spec = self._create_estimator_spec(current_iteration, mode)
 
     if self._prepare_next_iteration_state == self._Keys.EVALUATE_ENSEMBLES:
+      assert mode == tf.estimator.ModeKeys.EVAL
       assert self.config.is_chief
       self._best_ensemble_index = self._get_best_ensemble_index(
           current_iteration)
@@ -1267,10 +1290,12 @@ class Estimator(tf.estimator.Estimator):
       new_architecture_filename = self._architecture_filename(iteration_number)
       self._save_architecture(new_architecture_filename, architecture)
     elif self._prepare_next_iteration_state == self._Keys.MATERIALIZE_REPORT:
+      assert mode == tf.estimator.ModeKeys.EVAL
       assert self.config.is_chief
       assert self._best_ensemble_index is not None
       self._materialize_report(current_iteration)
     elif self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
+      assert mode == tf.estimator.ModeKeys.TRAIN
       assert self.config.is_chief
       latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
       tf.logging.info(

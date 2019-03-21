@@ -662,7 +662,11 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
           collections=[tf.GraphKeys.LOCAL_VARIABLES])
       # Shape of metric different from shape of op
       op = tf.assign_add(var, [1, 2])
-      metric = tf.reshape(var[0] + var[1], [])
+      # NOTE: This mostly checks that the shapes work correctly, but reading
+      # var can be flaky. Adding control dependencies make this deterministic.
+      with tf.control_dependencies([op]):
+        value = var.read_value()
+      metric = tf.reshape(value[0] + value[1], [])
       return {"different_shape_metric": (metric, op)}
 
     with self.test_session() as sess:

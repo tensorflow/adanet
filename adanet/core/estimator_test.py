@@ -600,10 +600,9 @@ class EstimatorTest(tu.AdanetTestCase):
           "testcase_name":
               "solo_strategy_three_iterations",
           "subnetwork_generator":
-              SimpleGenerator([
-                  _DNNBuilder("dnn"),
-                  _DNNBuilder("dnn2", layer_size=3)
-              ]),
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
           "ensemble_strategies": [SoloStrategy()],
           "max_iteration_steps":
               100,
@@ -2448,6 +2447,31 @@ class EstimatorDebugTest(tu.AdanetTestCase):
         debug=True)
     with self.assertRaises(tf.errors.InvalidArgumentError):
       estimator.train(input_fn=input_fn, max_steps=3)
+
+
+class EstimatorEvaluateDuringTrainHookTest(tu.AdanetTestCase):
+  """Tests b/129000842 with a hook that calls estimator.evaluate()."""
+
+  def test_train(self):
+    run_config = tf.estimator.RunConfig(tf_random_seed=42)
+    subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
+    estimator = Estimator(
+        head=tu.head(),
+        subnetwork_generator=subnetwork_generator,
+        max_iteration_steps=1,
+        model_dir=self.test_subdirectory,
+        config=run_config)
+
+    train_input_fn = tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS)
+
+    class EvalTrainHook(tf.train.SessionRunHook):
+
+      def end(self, session):
+        estimator.evaluate(input_fn=train_input_fn, steps=1)
+
+    # This should not infinite loop.
+    estimator.train(
+        input_fn=train_input_fn, max_steps=3, hooks=[EvalTrainHook()])
 
 
 if __name__ == "__main__":
