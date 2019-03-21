@@ -31,7 +31,6 @@ import time
 
 from absl.testing import parameterized
 from adanet.core.timer import _CountDownTimer
-import portpicker
 import tensorflow as tf
 
 # Maximum number of characters to log per process.
@@ -88,6 +87,21 @@ def _create_task_process(task_type, task_index, estimator_type,
   env["GRPC_POLL_STRATEGY"] = "poll"
   popen = subprocess.Popen(args, stderr=stderr_file, env=env)
   return _ProcessInfo(process_name, popen, stderr_file)
+
+
+def _pick_unused_port():
+  """Returns a free port on localhost."""
+
+  for family in (socket.AF_INET6, socket.AF_INET):
+    try:
+      sock = socket.socket(family, socket.SOCK_STREAM)
+      sock.bind(("", 0))  # Passing port '0' binds to a free port on localhost.
+      port = sock.getsockname()[1]
+      sock.close()
+      return port
+    except socket.error:
+      continue
+  raise socket.error
 
 
 class EstimatorDistributedTrainingTest(parameterized.TestCase,
@@ -225,8 +239,8 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
     """Uses multiprocessing to simulate a distributed training environment."""
 
     # Inspired by `tf.test.create_local_cluster`.
-    worker_ports = [portpicker.pick_unused_port() for _ in range(num_workers)]
-    ps_ports = [portpicker.pick_unused_port() for _ in range(num_ps)]
+    worker_ports = [_pick_unused_port() for _ in range(num_workers)]
+    ps_ports = [_pick_unused_port() for _ in range(num_ps)]
     ws_targets = ["localhost:%s" % port for port in worker_ports]
     ps_targets = ["localhost:%s" % port for port in ps_ports]
 
