@@ -11,7 +11,6 @@ env:
   global:
     - CODECOV_TOKEN="0d2c482b-f42c-4d4c-b092-cb628ad20857"
     - BAZEL_VERSION=0.20.0
-    # - PORTSERVER_ADDRESS=@unittest-portserver
     - COVERAGE_PROCESS_START=$PWD/.coveragerc
   matrix:
     # We test against recent versions of TensorFlow and tf-nightly.
