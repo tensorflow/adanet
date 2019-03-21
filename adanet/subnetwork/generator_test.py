@@ -22,8 +22,8 @@ from __future__ import print_function
 import collections
 
 from absl.testing import parameterized
-from adanet.core.subnetwork.generator import Builder
-from adanet.core.subnetwork.generator import Subnetwork
+from adanet.subnetwork.generator import Builder
+from adanet.subnetwork.generator import Subnetwork
 import tensorflow as tf
 
 

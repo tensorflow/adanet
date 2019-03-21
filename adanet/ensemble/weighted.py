@@ -19,8 +19,8 @@ from __future__ import print_function
 
 import collections
 
-from adanet.core.ensemble.ensembler import Ensemble
-from adanet.core.ensemble.ensembler import Ensembler
+from adanet.ensemble.ensembler import Ensemble
+from adanet.ensemble.ensembler import Ensembler
 import tensorflow as tf
 
 

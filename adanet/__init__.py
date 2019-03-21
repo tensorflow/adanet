@@ -18,21 +18,21 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from adanet import distributed
+from adanet import ensemble
+from adanet import subnetwork
 from adanet.autoensemble import AutoEnsembleEstimator
-from adanet.core import distributed
-from adanet.core import ensemble
 from adanet.core import Estimator
 from adanet.core import Evaluator
 from adanet.core import ReportMaterializer
-from adanet.core import subnetwork
 from adanet.core import Summary
 from adanet.core import TPUEstimator
 # For backwards compatibility. Previously all Ensemblers were complexity
 # regularized using the AdaNet objective.
-from adanet.core.ensemble import ComplexityRegularized as Ensemble
-from adanet.core.ensemble import MixtureWeightType
-from adanet.core.ensemble import WeightedSubnetwork
-from adanet.core.subnetwork import Subnetwork
+from adanet.ensemble import ComplexityRegularized as Ensemble
+from adanet.ensemble import MixtureWeightType
+from adanet.ensemble import WeightedSubnetwork
+from adanet.subnetwork import Subnetwork
 
 __all__ = [
     "AutoEnsembleEstimator",

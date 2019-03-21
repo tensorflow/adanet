@@ -20,8 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.core import subnetwork
-
+from adanet import subnetwork
 from adanet.core.report_materializer import ReportMaterializer
 import adanet.core.testing_utils as tu
 import tensorflow as tf

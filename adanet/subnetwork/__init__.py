@@ -1,4 +1,4 @@
-# Copyright 2019 The AdaNet Authors. All Rights Reserved.
+# Copyright 2018 The AdaNet Authors. All Rights Reserved.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,24 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The `adanet.distributed` package.
 
-This package methods for distributing computation using the TensorFlow
-computation graph.
-"""
-
-# TODO: Add more details documentation.
+"""Low-level APIs for defining custom subnetworks and search spaces."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.core.distributed.placement import PlacementStrategy
-from adanet.core.distributed.placement import ReplicationStrategy
-from adanet.core.distributed.placement import RoundRobinStrategy
+from adanet.subnetwork.generator import Builder
+from adanet.subnetwork.generator import Generator
+from adanet.subnetwork.generator import SimpleGenerator
+from adanet.subnetwork.generator import Subnetwork
+from adanet.subnetwork.generator import TrainOpSpec
+from adanet.subnetwork.report import MaterializedReport
+from adanet.subnetwork.report import Report
 
 __all__ = [
-    "PlacementStrategy",
-    "ReplicationStrategy",
-    "RoundRobinStrategy",
+    "Builder",
+    "Generator",
+    "MaterializedReport",
+    "Report",
+    "SimpleGenerator",
+    "Subnetwork",
+    "TrainOpSpec",
 ]

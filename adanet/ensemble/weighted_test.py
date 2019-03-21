@@ -23,8 +23,8 @@ import collections
 import contextlib
 
 from absl.testing import parameterized
-from adanet.core import ensemble
-from adanet.core import subnetwork
+from adanet import ensemble
+from adanet import subnetwork
 from adanet.core.summary import Summary
 
 import tensorflow as tf

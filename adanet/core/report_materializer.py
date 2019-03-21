@@ -21,7 +21,7 @@ from __future__ import print_function
 
 import math
 
-from adanet.core import subnetwork
+from adanet import subnetwork
 import tensorflow as tf
 
 

@@ -24,16 +24,16 @@ import os
 import shutil
 
 from absl.testing import parameterized
-from adanet.core.ensemble import Candidate as EnsembleCandidate
-from adanet.core.ensemble import ComplexityRegularizedEnsembler
-from adanet.core.ensemble import MixtureWeightType
 from adanet.core.ensemble_builder import _EnsembleBuilder
 from adanet.core.ensemble_builder import _SubnetworkManager
 from adanet.core.eval_metrics import call_eval_metrics
-from adanet.core.subnetwork import Builder
-from adanet.core.subnetwork import Subnetwork
 from adanet.core.summary import Summary
 import adanet.core.testing_utils as tu
+from adanet.ensemble import Candidate as EnsembleCandidate
+from adanet.ensemble import ComplexityRegularizedEnsembler
+from adanet.ensemble import MixtureWeightType
+from adanet.subnetwork import Builder
+from adanet.subnetwork import Subnetwork
 import tensorflow as tf
 
 from tensorflow.python.training import training as train  # pylint: disable=g-direct-tensorflow-import
@@ -651,6 +651,24 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
       subnetwork_metrics, ensemble_metrics = _make_metrics(sess, metric_fn)
       self.assertEqual(1., subnetwork_metrics["operation_metric"])
       self.assertEqual(1., ensemble_metrics["operation_metric"])
+
+  def test_eval_metric_different_shape_op(self):
+    def metric_fn():
+      var = tf.get_variable(
+          "metric_var",
+          shape=[2],
+          trainable=False,
+          initializer=tf.zeros_initializer(),
+          collections=[tf.GraphKeys.LOCAL_VARIABLES])
+      # Shape of metric different from shape of op
+      op = tf.assign_add(var, [1, 2])
+      metric = tf.reshape(var[0] + var[1], [])
+      return {"different_shape_metric": (metric, op)}
+
+    with self.test_session() as sess:
+      subnetwork_metrics, ensemble_metrics = _make_metrics(sess, metric_fn)
+      self.assertEqual(3., subnetwork_metrics["different_shape_metric"])
+      self.assertEqual(3., ensemble_metrics["different_shape_metric"])
 
 
 if __name__ == "__main__":

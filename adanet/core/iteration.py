@@ -21,9 +21,9 @@ from __future__ import print_function
 
 import collections
 
-from adanet.core import distributed
+from adanet import distributed
+from adanet import subnetwork
 from adanet.core import ensemble_builder as ensemble_builder_lib
-from adanet.core import subnetwork
 from adanet.core.eval_metrics import _IterationMetrics
 from adanet.core.eval_metrics import call_eval_metrics
 

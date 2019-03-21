@@ -14,24 +14,24 @@
 
 """Defines built-in ensemble methods and interfaces for custom ensembles."""
 
-# TODO: Add more details documentation.
+# TODO: Add more detailed documentation.
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from adanet.core.ensemble.ensembler import Ensemble
-from adanet.core.ensemble.ensembler import Ensembler
-from adanet.core.ensemble.ensembler import TrainOpSpec
-from adanet.core.ensemble.strategy import AllStrategy
-from adanet.core.ensemble.strategy import Candidate
-from adanet.core.ensemble.strategy import GrowStrategy
-from adanet.core.ensemble.strategy import SoloStrategy
-from adanet.core.ensemble.strategy import Strategy
-from adanet.core.ensemble.weighted import ComplexityRegularized
-from adanet.core.ensemble.weighted import ComplexityRegularizedEnsembler
-from adanet.core.ensemble.weighted import MixtureWeightType
-from adanet.core.ensemble.weighted import WeightedSubnetwork
+from adanet.ensemble.ensembler import Ensemble
+from adanet.ensemble.ensembler import Ensembler
+from adanet.ensemble.ensembler import TrainOpSpec
+from adanet.ensemble.strategy import AllStrategy
+from adanet.ensemble.strategy import Candidate
+from adanet.ensemble.strategy import GrowStrategy
+from adanet.ensemble.strategy import SoloStrategy
+from adanet.ensemble.strategy import Strategy
+from adanet.ensemble.weighted import ComplexityRegularized
+from adanet.ensemble.weighted import ComplexityRegularizedEnsembler
+from adanet.ensemble.weighted import MixtureWeightType
+from adanet.ensemble.weighted import WeightedSubnetwork
 
 __all__ = [
     "Ensemble",

@@ -36,7 +36,7 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":ensemble",
-        "//adanet/core/subnetwork",
+        "//adanet/subnetwork",
     ],
 )
 
@@ -55,7 +55,7 @@ py_test(
     deps = [
         ":ensemble",
         "//adanet/core",
-        "//adanet/core/subnetwork",
+        "//adanet/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )
