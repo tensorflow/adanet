@@ -1,0 +1,15 @@
+.wy-nav-side {
+  border-right: 1px solid #dedede;
+}
+
+.wy-side-nav-search {
+  background-color: #fafafa;
+}
+
+.wy-side-nav-search>a {
+  color: #404040;
+}
+
+.wy-side-nav-search>div.version {
+  color: #808080;
+}

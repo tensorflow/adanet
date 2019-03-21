@@ -1,6 +1,11 @@
-# Examples
+# TensorBoard
 
-This directory contains some example user-defined subnetworks, generators, and complexity measures for AdaNets.
+[TensorBoard](https://www.tensorflow.org/guide/summaries_and_tensorboard) is
+AdaNet's UI.
+
+From TensorBoard, you can vizualize the performance of candidate ensembles and
+individual subnetworks over time, visualize their architectures, and monitor
+statics.
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.1/dist/katex.min.css" integrity="sha384-dbVIfZGuN1Yq7/1Ocstc1lUEm+AT+/rCkibIcC/OmWo5f0EA48Vf8CytHzGrSwbQ" crossorigin="anonymous">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.10.1/dist/katex.min.js" integrity="sha384-2BKqo+exmr9su6dir+qCw08N2ZKRucY4PrGQPPWU1A7FtlCGjmEGFqXCv5nyM5Ij" crossorigin="anonymous"></script>

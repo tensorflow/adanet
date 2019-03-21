@@ -42,6 +42,27 @@ This is not an official Google product.
 .. toctree::
   :glob:
   :maxdepth: 1
+  :caption: Getting Started
+
+  overview
+  quick_start
+  tutorials
+  tensorboard
+  distributed
+  tpu
+
+.. toctree::
+  :glob:
+  :maxdepth: 1
+  :caption: Research
+
+  algorithm
+  theory
+
+
+.. toctree::
+  :glob:
+  :maxdepth: 1
   :caption: Package Reference
 
   adanet
