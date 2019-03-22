@@ -39,8 +39,8 @@ AdaNet provides the following AutoML features:
  * Regression, binary and multi-class classification, and multi-head task support.
  * A [`tf.estimator.Estimator`](https://www.tensorflow.org/guide/estimators) API for training, evaluation, prediction, and serving models.
  * The [`adanet.AutoEnsembleEstimator`](https://github.com/tensorflow/adanet/blob/master/adanet/autoensemble/estimator.py) for learning to ensemble user-defined `tf.estimator.Estimators`.
- * The ability to define subnetworks that change structure over time using [`tf.keras.layers`](https://www.tensorflow.org/guide/keras#functional_api) via the [`adanet.subnetwork` API](https://github.com/tensorflow/adanet/blob/master/adanet/core/subnetwork/generator.py).
- * CPU and GPU support (TPU coming soon).
+ * The ability to define subnetworks that change structure over time using [`tf.keras.layers`](https://www.tensorflow.org/guide/keras#functional_api) via the [`adanet.subnetwork` API](https://github.com/tensorflow/adanet/blob/master/adanet/subnetwork/generator.py).
+ * CPU, GPU, and TPU support.
  * [Distributed multi-server training](https://cloud.google.com/blog/products/gcp/easy-distributed-training-with-tensorflow-using-tfestimatortrain-and-evaluate-on-cloud-ml-engine).
  * TensorBoard integration.
 
@@ -148,17 +148,3 @@ If you use this AdaNet library for academic research, you are encouraged to cite
 ## License
 
 AdaNet is released under the [Apache License 2.0](LICENSE).
-
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.1/dist/katex.min.css" integrity="sha384-dbVIfZGuN1Yq7/1Ocstc1lUEm+AT+/rCkibIcC/OmWo5f0EA48Vf8CytHzGrSwbQ" crossorigin="anonymous">
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.10.1/dist/katex.min.js" integrity="sha384-2BKqo+exmr9su6dir+qCw08N2ZKRucY4PrGQPPWU1A7FtlCGjmEGFqXCv5nyM5Ij" crossorigin="anonymous"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.10.1/dist/contrib/auto-render.min.js" integrity="sha384-kWPLUVMOks5AQFrykwIup5lo0m3iMkkHrD0uJ4H5cjeGihAutqP0yW0J6dpFiVkI" crossorigin="anonymous"></script>
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        renderMathInElement(document.body, {
-            delimiters: [
-                {left: "$$", right: "$$", display: true},
-                {left: "$", right: "$", display: false},
-            ]
-        });
-    });
-</script>
