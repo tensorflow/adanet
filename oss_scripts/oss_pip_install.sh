@@ -17,8 +17,6 @@
 set -v  # print commands as they're executed
 set -e  # fail and exit on any command erroring
 
-BAZEL_VERSION=0.20.0
-
 : "${TF_VERSION:?}"
 
 if [[ "$TF_VERSION" == "tf-nightly"  ]]

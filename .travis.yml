@@ -11,16 +11,25 @@ env:
   global:
     - CODECOV_TOKEN="0d2c482b-f42c-4d4c-b092-cb628ad20857"
     - BAZEL_VERSION=0.20.0
+    - COVERAGE_PROCESS_START=$PWD/.coveragerc
   matrix:
     # We test against recent versions of TensorFlow and tf-nightly.
-    # If updating, also update TF_LATEST above
-    # TODO: Enable recent versions on release
-    - TF_VERSION="1.9.*"
-    - TF_VERSION="1.10.*"
-    - TF_VERSION="1.11.*"
-    - TF_VERSION="1.12.*"
-    - TF_VERSION="1.13.*"
-    - TF_VERSION="tf-nightly"
+
+    # Quick test suite.
+    - TF_VERSION="1.9.*" SUITE="quick"
+    - TF_VERSION="1.10.*" SUITE="quick"
+    - TF_VERSION="1.11.*" SUITE="quick"
+    - TF_VERSION="1.12.*" SUITE="quick"
+    - TF_VERSION="1.13.*" SUITE="quick"
+    - TF_VERSION="tf-nightly" SUITE="quick"
+
+    # E2E Tests.
+    - TF_VERSION="1.9.*" SUITE="e2e"
+    - TF_VERSION="1.10.*" SUITE="e2e"
+    - TF_VERSION="1.11.*" SUITE="e2e"
+    - TF_VERSION="1.12.*" SUITE="e2e"
+    - TF_VERSION="1.13.*" SUITE="e2e"
+    - TF_VERSION="tf-nightly" SUITE="e2e"
 before_install:
   - sudo apt-get -y install pkg-config zip g++ zlib1g-dev unzip
   - wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
@@ -32,9 +41,15 @@ addons:
 install:
   - pip install -r requirements.txt
   - pip install numpy --upgrade
+  - pip install coverage-enable-subprocess
   - ./oss_scripts/oss_pip_install.sh
 script:
-  - nosetests
+  - |
+    if [ $SUITE == "e2e" ]; then
+      NOSE_EXCLUDE='.*workers.*' nosetests adanet/core/estimator_distributed_test.py
+    else
+      NOSE_EXCLUDE='.*nasnet.*.py|.*test_distributed_training.*' nosetests
+    fi
   - cat /tmp/absl_testing/**/*.txt || true  # Don't error if file does not exist.
 after_success:
   # Install codecov for tracking coverage over time.
