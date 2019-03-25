@@ -4,7 +4,7 @@
 [![PyPI version](https://badge.fury.io/py/adanet.svg)](https://badge.fury.io/py/adanet)
 [![Travis](https://travis-ci.org/tensorflow/adanet.svg?branch=master)](https://travis-ci.org/tensorflow/adanet)
 [![codecov](https://codecov.io/gh/tensorflow/adanet/branch/master/graph/badge.svg)](https://codecov.io/gh/tensorflow/adanet)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/tensorflow/adanet/blob/master/LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/tensorflow/adanet/blob/master/LICENSE) [![Join the chat at https://gitter.im/tensorflow/adanet](https://badges.gitter.im/tensorflow/adanet.svg)](https://gitter.im/tensorflow/adanet?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 <div align="center">
   <img src="https://tensorflow.github.io/adanet/images/adanet_tangram_logo.png" alt="adanet_tangram_logo"><br><br>
