@@ -13,14 +13,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================-->
 
-# Current version (0.6.0-dev)
+# Current version (0.7.0-dev)
  * Under development.
+ * TODO: Add official Keras Model support, including Keras layers, Sequential, and Model subclasses for defining subnetworks.
+
+# Release 0.6.0
+ * Official support AdaNet on TPU using `adanet.TPUEstimator` with `adanet.Estimator` feature parity.
  * Support dictionary candidate pools in `adanet.AutoEnsembleEstimator` constructor to specify human-readable candidate names.
+ * Improve AutoEnsembleEstimator ability to handling custom `tf.estimator.Estimator` subclasses.
  * Introduce `adanet.ensemble` which contains interfaces and examples of ways to learn ensembles using AdaNet. Users can now extend AdaNet to use custom ensemble-learning methods.
- * Add support for evaluation on TPU using `adanet.TPUEstimator`.
- * Support recording TensorBoard `scalar`, `image`, `histogram`, and `audio` summaries on TPU during training.
+ * Record TensorBoard `scalar`, `image`, `histogram`, and `audio` summaries on TPU during training.
  * Add debug mode to help detect NaNs and Infs during training.
- * BREAKING CHANGE: Doing `from adanet.core import subnetwork` will no longer work, because the `subnetwork` package was moved to `adanet.subnetwork`. Most users should already be using `adanet.subnetwork`, and should not be affected.
+ * Improve subnetwork `tf.train.SessionRunHook` support to handle more edge cases.
+ * Maintain compatibility with TensorFlow versions 1.9 thru 1.13.
+ * Improve documentation including adding 'Getting Started' documentation to `adanet.readthedocs.io`.
+ * **BREAKING CHANGE**: Importing the `adanet.subnetwork` package using `from adanet.core import subnetwork` will no longer work, because the package was moved to the `adanet/subnetwork` directory. Most users should already be using `adanet.subnetwork` or `from adanet import subnetwork`, and should not be affected.
 
 # Release 0.5.0
  * Support training on TPU using `adanet.TPUEstimator`.
