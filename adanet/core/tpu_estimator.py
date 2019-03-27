@@ -106,12 +106,35 @@ class _StepCounterHook(tf.train.SessionRunHook):
 
 
 class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
-  """An adanet.Estimator capable of running on TPU.
+  """An :class: `adanet.Estimator` capable of training and evaluating on TPU.
 
-  If running on TPU, all summary calls are rewired to be no-ops during training.
+  Note: Unless :code: `use_tpu=False`, training will run on TPU. However,
+  certain parts of AdaNet training loop, such as report materialization and best
+  candidate selection still occurr on CPU. Furthermore, inference also occurs on
+  CPU.
 
-  WARNING: this API is highly experimental, unstable, and can change  without
-  warning.
+  Args:
+    head: See :class:`adanet.Estimator`.
+    subnetwork_generator: See :class:`adanet.Estimator`.
+    max_iteration_steps: See :class:`adanet.Estimator`.
+    ensemblers: See :class:`adanet.Estimator`.
+    ensemble_strategies: See :class:`adanet.Estimator`.
+    evaluator: See :class:`adanet.Estimator`.
+    report_materializer: See :class:`adanet.Estimator`.
+    metric_fn: See :class:`adanet.Estimator`.
+    force_grow: See :class:`adanet.Estimator`.
+    replicate_ensemble_in_training: See :class:`adanet.Estimator`.
+    adanet_loss_decay: See :class:`adanet.Estimator`.
+    report_dir: See :class:`adanet.Estimator`.
+    config: See :class:`adanet.Estimator`.
+    use_tpu: Boolean to enable *both* training and evaluating on TPU. Defaults
+      to :code: `True` and is only provided to allow debugging models on
+      CPU/GPU. Use :class: `adanet.Estimator` instead if you do not plan to run
+      on TPU.
+    train_batch_size: See :class:`tf.contrib.tpu.TPUEstimator`.
+    eval_batch_size: See :class:`tf.contrib.tpu.TPUEstimator`.
+    debug: See :class:`adanet.Estimator`.
+    **kwargs: Extra keyword args passed to the parent.
   """
 
   def __init__(self,
@@ -126,13 +149,13 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                force_grow=False,
                replicate_ensemble_in_training=False,
                adanet_loss_decay=.9,
-               worker_wait_timeout_secs=7200,
                model_dir=None,
                report_dir=None,
                config=None,
                use_tpu=True,
                train_batch_size=None,
                eval_batch_size=None,
+               debug=False,
                **kwargs):
     self._use_tpu = use_tpu
     if not self._use_tpu:
@@ -157,7 +180,6 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         force_grow=force_grow,
         replicate_ensemble_in_training=replicate_ensemble_in_training,
         adanet_loss_decay=adanet_loss_decay,
-        worker_wait_timeout_secs=worker_wait_timeout_secs,
         model_dir=model_dir,
         report_dir=report_dir,
         config=config if config else tf.contrib.tpu.RunConfig(),
@@ -168,12 +190,14 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         eval_batch_size=self._eval_batch_size,
         **kwargs)
 
+  # Yields predictions on CPU even when use_tpu=True.
   def predict(self,
               input_fn,
               predict_keys=None,
               hooks=None,
               checkpoint_path=None,
               yield_single_examples=True):
+
     # TODO: Required to support predict on CPU for TPUEstimator.
     # This is the recommended method from TensorFlow TPUEstimator docs:
     # https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimator#current_limitations
