@@ -1,14 +1,15 @@
 # AdaNet
 
+<div align="center">
+  <img src="https://tensorflow.github.io/adanet/images/adanet_tangram_logo.png" alt="adanet_tangram_logo"><br><br>
+</div>
+
 [![Documentation Status](https://readthedocs.org/projects/adanet/badge)](https://adanet.readthedocs.io)
 [![PyPI version](https://badge.fury.io/py/adanet.svg)](https://badge.fury.io/py/adanet)
 [![Travis](https://travis-ci.org/tensorflow/adanet.svg?branch=master)](https://travis-ci.org/tensorflow/adanet)
 [![codecov](https://codecov.io/gh/tensorflow/adanet/branch/master/graph/badge.svg)](https://codecov.io/gh/tensorflow/adanet)
+[![Gitter](https://badges.gitter.im/tensorflow/adanet.svg)](https://gitter.im/tensorflow/adanet?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/tensorflow/adanet/blob/master/LICENSE)
-
-<div align="center">
-  <img src="https://tensorflow.github.io/adanet/images/adanet_tangram_logo.png" alt="adanet_tangram_logo"><br><br>
-</div>
 
 **AdaNet** is a lightweight TensorFlow-based framework for automatically learning high-quality models with minimal expert intervention. AdaNet builds on recent AutoML efforts to be fast and flexible while providing learning guarantees. Importantly, AdaNet provides a general framework for not only learning a neural network architecture, but also for learning to ensemble to obtain even better models.
 
