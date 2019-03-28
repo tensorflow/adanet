@@ -17,6 +17,9 @@ limitations under the License.
  * Under development.
  * TODO: Add official Keras Model support, including Keras layers, Sequential, and Model subclasses for defining subnetworks.
 
+# Release 0.6.1
+ * Maintain compatibility with TensorFlow versions ~~1.9 thru 1.13~~.
+
 # Release 0.6.0
  * Officially support AdaNet on TPU using `adanet.TPUEstimator` with `adanet.Estimator` feature parity.
  * Support dictionary candidate pools in `adanet.AutoEnsembleEstimator` constructor to specify human-readable candidate names.
@@ -25,7 +28,7 @@ limitations under the License.
  * Record TensorBoard `scalar`, `image`, `histogram`, and `audio` summaries on TPU during training.
  * Add debug mode to help detect NaNs and Infs during training.
  * Improve subnetwork `tf.train.SessionRunHook` support to handle more edge cases.
- * Maintain compatibility with TensorFlow versions 1.9 thru 1.13.
+ * ~~Maintain compatibility with TensorFlow versions 1.9 thru 1.13~~ Only works for TensorFlow version >=1.13.
  * Improve documentation including adding 'Getting Started' documentation to [adanet.readthedocs.io](http://adanet.readthedocs.io).
  * **BREAKING CHANGE**: Importing the `adanet.subnetwork` package using `from adanet.core import subnetwork` will no longer work, because the package was moved to the `adanet/subnetwork` directory. Most users should already be using `adanet.subnetwork` or `from adanet import subnetwork`, and should not be affected.
 
