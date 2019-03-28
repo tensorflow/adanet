@@ -20,7 +20,6 @@ from __future__ import division
 from __future__ import print_function
 
 import contextlib
-import json
 import os
 
 from absl.testing import parameterized
@@ -180,11 +179,6 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     if LooseVersion(tf.VERSION) < LooseVersion("1.11.0"):
       self.skipTest("TPUEstimatorSpec does not support `training_hooks`"
                     "TF v1.11.0.")
-
-    # TPUConfig initializes model_dir from TF_CONFIG and checks that the user
-    # provided model_dir matches the TF_CONFIG one.
-    tf_config = {"model_dir": self.test_subdirectory}
-    os.environ["TF_CONFIG"] = json.dumps(tf_config)
 
   @parameterized.named_parameters(
       {

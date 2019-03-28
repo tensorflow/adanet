@@ -21,7 +21,6 @@ from __future__ import print_function
 
 import contextlib
 import errno
-import json
 import os
 import time
 
@@ -41,6 +40,8 @@ from adanet.ensemble import GrowStrategy
 import numpy as np
 import six
 import tensorflow as tf
+
+from tensorflow.python.ops import resources  # pylint: disable=g-direct-tensorflow-import
 
 
 class _StopAfterTrainingHook(tf.train.SessionRunHook):
@@ -154,137 +155,6 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
             "or a serialized string of Summary.", key)
     summary_writer.add_summary(summary_proto, current_global_step)
     summary_writer.flush()
-
-
-class _OverwriteCheckpointHook(tf.train.SessionRunHook):
-  """Hook to overwrite the latest checkpoint with next iteration variables."""
-
-  def __init__(self, current_iteration, iteration_number_tensor,
-               previous_iteration_vars, config):
-    """Initilizes an _OverwriteCheckpointHook instance.
-
-    Args:
-      current_iteration: Current `_Iteration` object.
-      iteration_number_tensor: Int variable `Tensor` storing the current
-        iteration number.
-      previous_iteration_vars: Variables to restore from the previous iteration
-        before overwriting the checkpoint.
-      config: The Estimator's RunConfig object.
-    """
-
-    self._iteration_number = current_iteration.number
-    self._iteration_number_tensor = iteration_number_tensor
-    self._previous_iteration_vars = previous_iteration_vars
-    self._model_dir = config.model_dir
-    self._checkpoint_state = tf.train.get_checkpoint_state(self._model_dir)
-    self._keep_checkpoint_max = config.keep_checkpoint_max
-
-    self._update_op = None
-    self._overwrite_saver = None
-    self._checkpoint_overwritten = False
-
-  def begin(self):
-    """Creates the savers and adds ops needed for overwriting the checkpoint.
-
-    Two savers are created, a restore saver which is passed the variables from
-    the previous iteration to restore, and an overwrite saver which will
-    actually overwrite the checkpoint.
-    """
-
-    self._restore_saver = tf.train.Saver(
-        sharded=True, var_list=self._previous_iteration_vars)
-    # Note: self._iteration_number already contains the value of the next
-    # iteration since _OverwriteCheckpointHook should only execute during the
-    # graph growing phase.
-    self._update_op = tf.assign(self._iteration_number_tensor,
-                                self._iteration_number)
-    self._overwrite_saver = tf.train.Saver(
-        sharded=True, max_to_keep=self._keep_checkpoint_max)
-    self._overwrite_saver.recover_last_checkpoints(
-        self._checkpoint_state.all_model_checkpoint_paths)
-
-  def before_run(self, run_context):
-    """Overwrites checkpoint before any calls to session.run().
-
-    This is to ensure that the values of the variables in the overwritten
-    checkpoint match those in the pevious iteration checkpoint.
-
-    Args:
-      run_context: The tf.train.SessionRunContext passed to the hook.
-    """
-
-    if not self._checkpoint_overwritten:
-      session = run_context.session
-      self._restore_saver.restore(session,
-                                  self._checkpoint_state.model_checkpoint_path)
-      session.run(self._update_op)
-      checkpoint_path = os.path.join(self._model_dir, "increment.ckpt")
-      # Specify global_step=self._iteration_number to append the iteration
-      # number to the checkpoint name, e.g. <model_dir>/increment-1.ckpt.
-      self._overwrite_saver.save(
-          session, checkpoint_path, global_step=self._iteration_number)
-      self._checkpoint_overwritten = True
-
-
-class _HookContextDecorator(tf.train.SessionRunHook):
-  """Decorates a SessionRunHook's public methods to run within a context."""
-
-  def __init__(self, hook, context, is_growing_phase):
-    """Initializes a _HookContextDecorator instance.
-
-    Args:
-      hook: The tf.train.SessionRunHook to decorate.
-      context: The context to enter before calling the hook's public methods.
-      is_growing_phase: Whether we are in the AdaNet graph growing phase. If so,
-        only hook.begin() and hook.end() will be called.
-    """
-    self._hook = hook
-    self._context = context
-    self._is_growing_phase = is_growing_phase
-
-  def begin(self):
-    with self._context():
-      self._hook.begin()
-
-  def after_create_session(self, session, coord):
-    if not self._is_growing_phase:
-      with self._context():
-        self._hook.after_create_session(session, coord)
-
-  def before_run(self, run_context):
-    if not self._is_growing_phase:
-      with self._context():
-        return self._hook.before_run(run_context)
-
-  def after_run(self, run_context, run_values):
-    if not self._is_growing_phase:
-      with self._context():
-        self._hook.after_run(run_context, run_values)
-
-  def end(self, session):
-    with self._context():
-      self._hook.end(session)
-
-
-@contextlib.contextmanager
-def _temp_tf_config(temp_model_dir):
-  """Temporarily modifies the TF_CONFIG variable for the graph growing phase."""
-
-  actual_tf_config_string = os.environ.get("TF_CONFIG", "")
-  if not actual_tf_config_string:
-    yield
-    return
-
-  temp_tf_config = json.loads(actual_tf_config_string)
-  temp_tf_config["model_dir"] = temp_model_dir
-  if "cluster" in temp_tf_config:
-    temp_tf_config["cluster"].pop("ps", None)
-    temp_tf_config["cluster"].pop("worker", None)
-  os.environ["TF_CONFIG"] = json.dumps(temp_tf_config)
-  try:
-    yield
-  finally:
-    os.environ["TF_CONFIG"] = actual_tf_config_string
 
 
 class Estimator(tf.estimator.Estimator):
@@ -412,8 +282,7 @@ class Estimator(tf.estimator.Estimator):
     :code:`ValueError`: If :code:`ensemblers` is size > 1.
     :code:`ValueError`: If :code:`subnetwork_generator` is :code:`None`.
     :code:`ValueError`: If :code:`max_iteration_steps` is <= 0.
-    :code:`ValueError`: If :code:`model_dir` is not specified during distributed
-      training.
+    :code:`ValueError`: If :code:`model_dir` is not specified during distributed training.
   """
   # pyformat: enable
 
@@ -618,8 +487,6 @@ class Estimator(tf.estimator.Estimator):
     if steps is not None:
       max_steps = self._latest_checkpoint_global_step() + steps
 
-    hooks = self._decorate_hooks(hooks or [])
-
     # Each iteration of this AdaNet loop represents an `_Iteration`. The
     # current iteration number is stored as a variable in the checkpoint so
     # that training can be stopped and started at anytime.
@@ -747,28 +614,6 @@ class Estimator(tf.estimator.Estimator):
         features, labels = inputs
       self.model_fn(features, labels, mode, self.config)
 
-  def _create_temp_estimator(self, temp_model_dir):
-    """Creates a temp `Estimator` to grow the graph for the next iteration."""
-
-    config = self.config
-    temp_run_config = tf.estimator.RunConfig(
-        model_dir=temp_model_dir,
-        tf_random_seed=config.tf_random_seed,
-        save_summary_steps=config.save_summary_steps,
-        save_checkpoints_steps=config.save_checkpoints_steps,
-        save_checkpoints_secs=config.save_checkpoints_secs,
-        session_config=config.session_config,
-        keep_checkpoint_max=config.keep_checkpoint_max,
-        keep_checkpoint_every_n_hours=config.keep_checkpoint_every_n_hours,
-        log_step_count_steps=config.log_step_count_steps,
-        device_fn=config.device_fn,
-        protocol=config.protocol)
-    return tf.estimator.Estimator(
-        model_fn=self._adanet_model_fn,
-        config=temp_run_config,
-        model_dir=temp_model_dir,
-        params={})
-
   def _prepare_next_iteration(self, train_input_fn):
     """Prepares the next iteration.
 
@@ -808,19 +653,7 @@ class Estimator(tf.estimator.Estimator):
     # directory checkpoint with the expanded graph.
     tf.logging.info("Adapting graph and incrementing iteration number...")
     self._prepare_next_iteration_state = self._Keys.INCREMENT_ITERATION
-    temp_model_dir = os.path.join(self.model_dir, "temp_model_dir")
-    if tf.gfile.Exists(temp_model_dir):
-      tf.gfile.DeleteRecursively(temp_model_dir)
-    with _temp_tf_config(temp_model_dir):
-      temp_estimator = self._create_temp_estimator(temp_model_dir)
-      # Do not train with any saving_listeners since this is just a temporary
-      # estimator.
-      temp_estimator.train(
-          input_fn=train_input_fn,
-          hooks=self._train_hooks,
-          max_steps=1,
-          saving_listeners=None)
-    tf.gfile.DeleteRecursively(temp_model_dir)
+    self._call_adanet_model_fn(train_input_fn, tf.estimator.ModeKeys.TRAIN)
     self._prepare_next_iteration_state = None
     tf.logging.info("Done adapting graph and incrementing iteration number.")
 
@@ -845,6 +678,93 @@ class Estimator(tf.estimator.Estimator):
     finally:
       self._inside_adanet_training_loop = inside_training_loop
       self._prepare_next_iteration_state = prepare_next_iteration_state
+
+  def _overwrite_checkpoint(self, current_iteration, iteration_number_tensor,
+                            restore_saver):
+    """Overwrites the latest checkpoint with the current graph.
+
+    This is necessary for two reasons:
+     1. To add variables to the checkpoint that were newly created for the
+     next iteration. Otherwise Estimator will raise an exception for having a
+     checkpoint missing variables.
+     2. To increment the current iteration number so that workers know when to
+     begin training the next iteration.
+
+    Args:
+      current_iteration: Current `_Iteration` object.
+      iteration_number_tensor: Int variable `Tensor` storing the current
+        iteration number.
+      restore_saver: A `tf.train.Saver` instance for restoring variable values
+        from a checkpoint.
+    """
+
+    checkpoint_state = tf.train.get_checkpoint_state(self.model_dir)
+    latest_checkpoint = checkpoint_state.model_checkpoint_path
+    if not latest_checkpoint:
+      return
+
+    # Run train hook 'begin' methods which can add ops to the graph, so that
+    # they are still present in the overwritten checkpoint.
+    train_hooks = tuple(self._train_hooks) or ()
+    for subnetwork_spec in current_iteration.subnetwork_specs:
+      if not subnetwork_spec.train_op:
+        continue
+      train_hooks += subnetwork_spec.train_op.chief_hooks
+      train_hooks += subnetwork_spec.train_op.hooks
+    for candidate in current_iteration.candidates:
+      if not candidate.ensemble_spec.train_op:
+        continue
+      train_hooks += candidate.ensemble_spec.train_op.chief_hooks
+      train_hooks += candidate.ensemble_spec.train_op.hooks
+
+    for hook in train_hooks:
+      if isinstance(hook, tf.train.CheckpointSaverHook):
+        # CheckpointSaverHooks are stateful and will carry a Saver across
+        # graphs causing errors. To fix this, we reset the saver between
+        # iterations.
+        hook._saver = None  # pylint: disable=protected-access
+
+    # Remove all CheckpointSaverHooks since they are not intended to run between
+    # training runs and will cause errors.
+    train_hooks = [
+        hook for hook in train_hooks
+        if not isinstance(hook, tf.train.CheckpointSaverHook)
+    ]
+
+    # Hooks allow the user to execute arbitratry actions, including actions
+    # on this estimator, so we temporarily reset the state before returning
+    # control to the user.
+    with self._reset_state_context():
+      for hook in train_hooks:
+        hook.begin()
+
+    global_step_tensor = tf.train.get_global_step()
+    global_step = tf.contrib.framework.load_variable(latest_checkpoint,
+                                                     tf.GraphKeys.GLOBAL_STEP)
+
+    checkpoint_path = os.path.join(self.model_dir, "increment.ckpt")
+    with tf.Session(target=self.config.master) as sess:
+      init = tf.group(
+          tf.global_variables_initializer(), tf.local_variables_initializer(),
+          tf.tables_initializer(),
+          resources.initialize_resources(resources.shared_resources()))
+      sess.run(init)
+      restore_saver.restore(sess, latest_checkpoint)
+      coord = tf.train.Coordinator()
+      tf.train.start_queue_runners(sess=sess, coord=coord)
+      control_deps = [
+          tf.assign(global_step_tensor, global_step),
+          tf.assign(iteration_number_tensor, current_iteration.number),
+      ]
+      with tf.control_dependencies(control_deps):
+        saver = tf.train.Saver(
+            sharded=True, max_to_keep=self.config.keep_checkpoint_max)
+        saver.recover_last_checkpoints(
+            checkpoint_state.all_model_checkpoint_paths)
+        saver.save(sess, checkpoint_path, global_step=current_iteration.number)
+      with self._reset_state_context():
+        for hook in train_hooks:
+          hook.end(sess)
 
   def _get_best_ensemble_index(self, current_iteration):
     """Returns the best candidate ensemble's index in this iteration.
@@ -960,34 +880,12 @@ class Estimator(tf.estimator.Estimator):
     tf.logging.info("Finished saving subnetwork reports for iteration %s",
                     current_iteration.number)
 
-  def _decorate_hooks(self, hooks):
-    """Decorate hooks to reset AdaNet state before calling their methods."""
-
-    is_growing_phase = (
-        self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION)
-    decorated_hooks = []
-    for hook in hooks:
-      # Set is_growing_phase=False for OverwriteCheckpointHook so the hook's
-      # before_run method is called to overwrite the checkpoint.
-      if isinstance(hook, _OverwriteCheckpointHook):
-        assert is_growing_phase
-        is_growing_phase = False
-      decorated_hooks.append(
-          _HookContextDecorator(hook, self._reset_state_context,
-                                is_growing_phase))
-    return decorated_hooks
-
-  def _training_hooks(self, current_iteration, training,
-                      iteration_number_tensor, previous_iteration_vars):
+  def _training_hooks(self, current_iteration, training):
     """Returns training hooks for this iteration.
 
     Args:
       current_iteration: Current `_Iteration`.
       training: Whether in training mode.
-      iteration_number_tensor: An int tensor of the current AdaNet iteraiton.
-      previous_iteration_vars: The variables of the previous iteration to be
-        restored by the _OverwriteCheckpointHook. If empty, no
-        _OverwriteCheckpointHook will be created.
 
     Returns:
       A list of `tf.train.SessionRunHook` instances.
@@ -1002,13 +900,6 @@ class Estimator(tf.estimator.Estimator):
     training_hooks = list(current_iteration.estimator_spec.training_hooks) + [
         _StopAfterTrainingHook(current_iteration, after_fn=after_fn)
     ]
-
-    if previous_iteration_vars:
-      assert (
-          self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION)
-      training_hooks.append(
-          _OverwriteCheckpointHook(current_iteration, iteration_number_tensor,
-                                   previous_iteration_vars, self.config))
 
     for summary in current_iteration.summaries:
       output_dir = self.model_dir
@@ -1252,16 +1143,7 @@ class Estimator(tf.estimator.Estimator):
 
     return previous_ensemble_reports, all_reports
 
-  def _train_op(self, iteration_estimator_spec):
-    """Returns the iteration train op or tf.no_op if growing the graph."""
-
-    train_op = iteration_estimator_spec.train_op
-    if self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
-      train_op = tf.no_op()
-    return train_op
-
-  def _create_estimator_spec(self, current_iteration, mode,
-                             iteration_number_tensor, previous_iteration_vars):
+  def _create_estimator_spec(self, current_iteration, mode):
     """Creates the EstimatorSpec which will be returned by _adanet_model_fn."""
 
     training = mode == tf.estimator.ModeKeys.TRAIN
@@ -1270,14 +1152,10 @@ class Estimator(tf.estimator.Estimator):
         mode=mode,
         predictions=iteration_estimator_spec.predictions,
         loss=iteration_estimator_spec.loss,
-        train_op=self._train_op(iteration_estimator_spec),
+        train_op=iteration_estimator_spec.train_op,
         eval_metric_ops=iteration_estimator_spec.eval_metric_ops,
-        training_chief_hooks=self._decorate_hooks(
-            iteration_estimator_spec.training_chief_hooks),
-        training_hooks=self._decorate_hooks(
-            self._training_hooks(current_iteration, training,
-                                 iteration_number_tensor,
-                                 previous_iteration_vars)),
+        training_chief_hooks=iteration_estimator_spec.training_chief_hooks,
+        training_hooks=self._training_hooks(current_iteration, training),
         evaluation_hooks=self._evaluation_hooks(current_iteration, training),
         scaffold=tf.train.Scaffold(summary_op=tf.constant("")),
         export_outputs=iteration_estimator_spec.export_outputs)
@@ -1363,18 +1241,12 @@ class Estimator(tf.estimator.Estimator):
             skip_summary=skip_summaries)
         previous_ensemble_subnetwork_builders = (
             previous_ensemble_spec.subnetwork_builders)
-      previous_iteration_vars = None
+      restore_saver = None
       if self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
-        # Keep track of the previous iteration variables so we can restore them
-        # from the previous checkpoint after growing the graph. After this line,
-        # any variables created will not have a matching one in the checkpoint
-        # until it gets overwritten.
-        # Note: It's not possible to just create a tf.train.Saver here since
-        # this code is also run on TPU, which does not support creating Savers
-        # inside model_fn.
-        previous_iteration_vars = (
-            tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) +
-            tf.get_collection(tf.GraphKeys.SAVEABLE_OBJECTS))
+        # Create Saver now so that it only restores the current variables in the
+        # graph from the checkpoint. After this line, any variables created will
+        # not have a matching one in the checkpoint until it gets overwritten.
+        restore_saver = tf.train.Saver()
       previous_ensemble_reports, all_reports = [], []
       if self._report_materializer:
         previous_ensemble_reports, all_reports = (
@@ -1399,14 +1271,14 @@ class Estimator(tf.estimator.Estimator):
           previous_ensemble_spec=previous_ensemble_spec)
 
     # Variable which allows us to read the current iteration from a checkpoint.
-    # This must be created here so it is available when calling
-    # _prepare_next_iteration after the first iteration.
     iteration_number_tensor = tf.get_variable(
         self._Keys.CURRENT_ITERATION,
         shape=[],
         dtype=tf.int64,
         initializer=tf.zeros_initializer(),
         trainable=False)
+
+    estimator_spec = self._create_estimator_spec(current_iteration, mode)
 
     if self._prepare_next_iteration_state == self._Keys.EVALUATE_ENSEMBLES:
       assert mode == tf.estimator.ModeKeys.EVAL
@@ -1429,6 +1301,7 @@ class Estimator(tf.estimator.Estimator):
       tf.logging.info(
           "Overwriting checkpoint with new graph for iteration %s to %s",
           iteration_number, latest_checkpoint)
-    return self._create_estimator_spec(current_iteration, mode,
-                                       iteration_number_tensor,
-                                       previous_iteration_vars)
+      self._overwrite_checkpoint(current_iteration, iteration_number_tensor,
+                                 restore_saver)
+
+    return estimator_spec
