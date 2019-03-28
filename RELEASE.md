@@ -18,7 +18,7 @@ limitations under the License.
  * TODO: Add official Keras Model support, including Keras layers, Sequential, and Model subclasses for defining subnetworks.
 
 # Release 0.6.1
- * Maintain compatibility with TensorFlow versions ~~1.9 thru 1.13~~.
+ * Maintain compatibility with TensorFlow versions >=1.9.
 
 # Release 0.6.0
  * Officially support AdaNet on TPU using `adanet.TPUEstimator` with `adanet.Estimator` feature parity.
