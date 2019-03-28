@@ -182,6 +182,7 @@ class _OverwriteCheckpointHook(tf.train.SessionRunHook):
 
     self._update_op = None
     self._overwrite_saver = None
+    self._checkpoint_overwritten = False
 
   def begin(self):
     """Creates the savers and adds ops needed for overwriting the checkpoint.
@@ -203,18 +204,40 @@ class _OverwriteCheckpointHook(tf.train.SessionRunHook):
     self._overwrite_saver.recover_last_checkpoints(
         self._checkpoint_state.all_model_checkpoint_paths)
 
-  def end(self, session):
-    # Overwrites checkpoint after the session ends.
-    # This is to ensure that the values of the variables in the overwritten
-    # checkpoint match those in the pevious iteration checkpoint.
-    self._restore_saver.restore(session,
-                                self._checkpoint_state.model_checkpoint_path)
-    session.run(self._update_op)
-    checkpoint_path = os.path.join(self._model_dir, "increment.ckpt")
-    # Specify global_step=self._iteration_number to append the iteration
-    # number to the checkpoint name, e.g. <model_dir>/increment-1.ckpt.
-    self._overwrite_saver.save(
-        session, checkpoint_path, global_step=self._iteration_number)
+  def before_run(self, run_context):
+    """Overwrites checkpoint before any calls to session.run().
+
+    This is to ensure that the values of the variables in the overwritten
+    checkpoint match those in the pevious iteration checkpoint.
+
+    Args:
+      run_context: The tf.train.SessionRunContext passed to the hook.
+    """
+
+    if not self._checkpoint_overwritten:
+      session = run_context.session
+      self._restore_saver.restore(session,
+                                  self._checkpoint_state.model_checkpoint_path)
+      session.run(self._update_op)
+      checkpoint_path = os.path.join(self._model_dir, "increment.ckpt")
+      # Specify global_step=self._iteration_number to append the iteration
+      # number to the checkpoint name, e.g. <model_dir>/increment-1.ckpt.
+      self._overwrite_saver.save(
+          session, checkpoint_path, global_step=self._iteration_number)
+      self._checkpoint_overwritten = True
+
+  # def end(self, session):
+  #   # Overwrites checkpoint after the session ends.
+  #   # This is to ensure that the values of the variables in the overwritten
+  #   # checkpoint match those in the pevious iteration checkpoint.
+  #   self._restore_saver.restore(session,
+  #                               self._checkpoint_state.model_checkpoint_path)
+  #   session.run(self._update_op)
+  #   checkpoint_path = os.path.join(self._model_dir, "increment.ckpt")
+  #   # Specify global_step=self._iteration_number to append the iteration
+  #   # number to the checkpoint name, e.g. <model_dir>/increment-1.ckpt.
+  #   self._overwrite_saver.save(
+  #       session, checkpoint_path, global_step=self._iteration_number)
 
 
 class _HookContextDecorator(tf.train.SessionRunHook):
@@ -959,11 +982,11 @@ class Estimator(tf.estimator.Estimator):
         self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION)
     decorated_hooks = []
     for hook in hooks:
-      # # Set is_growing_phase=False for OverwriteCheckpointHook so the hook's
-      # # before_run method is called to overwrite the checkpoint.
-      # if isinstance(hook, _OverwriteCheckpointHook):
-      #   assert is_growing_phase
-      #   is_growing_phase = False
+      # Set is_growing_phase=False for OverwriteCheckpointHook so the hook's
+      # before_run method is called to overwrite the checkpoint.
+      if isinstance(hook, _OverwriteCheckpointHook):
+        assert is_growing_phase
+        is_growing_phase = False
       decorated_hooks.append(
           _HookContextDecorator(hook, self._reset_state_context,
                                 is_growing_phase))
