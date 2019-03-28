@@ -226,19 +226,6 @@ class _OverwriteCheckpointHook(tf.train.SessionRunHook):
           session, checkpoint_path, global_step=self._iteration_number)
       self._checkpoint_overwritten = True
 
-  # def end(self, session):
-  #   # Overwrites checkpoint after the session ends.
-  #   # This is to ensure that the values of the variables in the overwritten
-  #   # checkpoint match those in the pevious iteration checkpoint.
-  #   self._restore_saver.restore(session,
-  #                               self._checkpoint_state.model_checkpoint_path)
-  #   session.run(self._update_op)
-  #   checkpoint_path = os.path.join(self._model_dir, "increment.ckpt")
-  #   # Specify global_step=self._iteration_number to append the iteration
-  #   # number to the checkpoint name, e.g. <model_dir>/increment-1.ckpt.
-  #   self._overwrite_saver.save(
-  #       session, checkpoint_path, global_step=self._iteration_number)
-
 
 class _HookContextDecorator(tf.train.SessionRunHook):
   """Decorates a SessionRunHook's public methods to run within a context."""
@@ -768,13 +755,9 @@ class Estimator(tf.estimator.Estimator):
     temp_run_config_args = dict(
         model_dir=temp_model_dir,
         tf_random_seed=config.tf_random_seed,
-        # save_summary_steps=config.save_summary_steps,
-        # save_checkpoints_steps=config.save_checkpoints_steps,
-        # save_checkpoints_secs=config.save_checkpoints_secs,
         session_config=config.session_config,
         keep_checkpoint_max=config.keep_checkpoint_max,
         keep_checkpoint_every_n_hours=config.keep_checkpoint_every_n_hours,
-        # log_step_count_steps=config.log_step_count_steps,
         device_fn=config.device_fn)
     if LooseVersion(tf.VERSION) >= LooseVersion("1.11.0"):
       temp_run_config_args["protocol"] = config.protocol

@@ -229,13 +229,9 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         master=config.master,
         cluster=config.cluster,
         tf_random_seed=config.tf_random_seed,
-        # save_summary_steps=config.save_summary_steps,
-        # save_checkpoints_steps=config.save_checkpoints_steps,
-        # save_checkpoints_secs=config.save_checkpoints_secs,
         session_config=config.session_config,
         keep_checkpoint_max=config.keep_checkpoint_max,
         keep_checkpoint_every_n_hours=config.keep_checkpoint_every_n_hours,
-        # log_step_count_steps=config.log_step_count_steps,
         device_fn=config.device_fn)
     if LooseVersion(tf.VERSION) >= LooseVersion("1.11.0"):
       temp_run_config_args["protocol"] = config.protocol
