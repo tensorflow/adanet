@@ -23,6 +23,7 @@ import collections
 import functools
 
 from adanet.core.estimator import Estimator
+from distutils.version import LooseVersion
 import tensorflow as tf
 from tensorflow.contrib.tpu.python.tpu import tpu_function
 from tensorflow.python.framework import ops  # pylint: disable=g-direct-tensorflow-import
@@ -106,9 +107,9 @@ class _StepCounterHook(tf.train.SessionRunHook):
 
 
 class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
-  """An :class: `adanet.Estimator` capable of training and evaluating on TPU.
+  """An :class:`adanet.Estimator` capable of training and evaluating on TPU.
 
-  Note: Unless :code: `use_tpu=False`, training will run on TPU. However,
+  Note: Unless :code:`use_tpu=False`, training will run on TPU. However,
   certain parts of AdaNet training loop, such as report materialization and best
   candidate selection still occurr on CPU. Furthermore, inference also occurs on
   CPU.
@@ -128,8 +129,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
     report_dir: See :class:`adanet.Estimator`.
     config: See :class:`adanet.Estimator`.
     use_tpu: Boolean to enable *both* training and evaluating on TPU. Defaults
-      to :code: `True` and is only provided to allow debugging models on
-      CPU/GPU. Use :class: `adanet.Estimator` instead if you do not plan to run
+      to :code:`True` and is only provided to allow debugging models on
+      CPU/GPU. Use :class:`adanet.Estimator` instead if you do not plan to run
       on TPU.
     train_batch_size: See :class:`tf.contrib.tpu.TPUEstimator`.
     eval_batch_size: See :class:`tf.contrib.tpu.TPUEstimator`.
@@ -221,26 +222,27 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
     """See the `Estimator` base class for details."""
 
     config = self.config
-    temp_run_config = tf.contrib.tpu.RunConfig(
+    temp_run_config_args = dict(
         model_dir=temp_model_dir,
         tpu_config=config.tpu_config,
         evaluation_master=config.evaluation_master,
         master=config.master,
         cluster=config.cluster,
         tf_random_seed=config.tf_random_seed,
-        save_summary_steps=config.save_summary_steps,
-        save_checkpoints_steps=config.save_checkpoints_steps,
-        save_checkpoints_secs=config.save_checkpoints_secs,
+        # save_summary_steps=config.save_summary_steps,
+        # save_checkpoints_steps=config.save_checkpoints_steps,
+        # save_checkpoints_secs=config.save_checkpoints_secs,
         session_config=config.session_config,
         keep_checkpoint_max=config.keep_checkpoint_max,
         keep_checkpoint_every_n_hours=config.keep_checkpoint_every_n_hours,
-        log_step_count_steps=config.log_step_count_steps,
-        device_fn=config.device_fn,
-        protocol=config.protocol)
+        # log_step_count_steps=config.log_step_count_steps,
+        device_fn=config.device_fn)
+    if LooseVersion(tf.VERSION) >= LooseVersion("1.11.0"):
+      temp_run_config_args["protocol"] = config.protocol
     return tf.contrib.tpu.TPUEstimator(
         model_fn=self._adanet_model_fn,
         params={},
-        config=temp_run_config,
+        config=tf.contrib.tpu.RunConfig(**temp_run_config_args),
         model_dir=temp_model_dir,
         use_tpu=self._use_tpu,
         eval_on_tpu=self._use_tpu,

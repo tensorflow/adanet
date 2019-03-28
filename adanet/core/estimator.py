@@ -38,6 +38,7 @@ from adanet.distributed import ReplicationStrategy
 from adanet.distributed.devices import monkey_patch_default_variable_placement_strategy
 from adanet.ensemble import ComplexityRegularizedEnsembler
 from adanet.ensemble import GrowStrategy
+from distutils.version import LooseVersion
 import numpy as np
 import six
 import tensorflow as tf
@@ -181,7 +182,6 @@ class _OverwriteCheckpointHook(tf.train.SessionRunHook):
 
     self._update_op = None
     self._overwrite_saver = None
-    self._checkpoint_overwritten = False
 
   def begin(self):
     """Creates the savers and adds ops needed for overwriting the checkpoint.
@@ -203,27 +203,18 @@ class _OverwriteCheckpointHook(tf.train.SessionRunHook):
     self._overwrite_saver.recover_last_checkpoints(
         self._checkpoint_state.all_model_checkpoint_paths)
 
-  def before_run(self, run_context):
-    """Overwrites checkpoint before any calls to session.run().
-
-    This is to ensure that the values of the variables in the overwritten
-    checkpoint match those in the pevious iteration checkpoint.
-
-    Args:
-      run_context: The tf.train.SessionRunContext passed to the hook.
-    """
-
-    if not self._checkpoint_overwritten:
-      session = run_context.session
-      self._restore_saver.restore(session,
-                                  self._checkpoint_state.model_checkpoint_path)
-      session.run(self._update_op)
-      checkpoint_path = os.path.join(self._model_dir, "increment.ckpt")
-      # Specify global_step=self._iteration_number to append the iteration
-      # number to the checkpoint name, e.g. <model_dir>/increment-1.ckpt.
-      self._overwrite_saver.save(
-          session, checkpoint_path, global_step=self._iteration_number)
-      self._checkpoint_overwritten = True
+  def end(self, session):
+    # Overwrites checkpoint after the session ends.
+    # This is to ensure that the values of the variables in the overwritten
+    # checkpoint match those in the pevious iteration checkpoint.
+    self._restore_saver.restore(session,
+                                self._checkpoint_state.model_checkpoint_path)
+    session.run(self._update_op)
+    checkpoint_path = os.path.join(self._model_dir, "increment.ckpt")
+    # Specify global_step=self._iteration_number to append the iteration
+    # number to the checkpoint name, e.g. <model_dir>/increment-1.ckpt.
+    self._overwrite_saver.save(
+        session, checkpoint_path, global_step=self._iteration_number)
 
 
 class _HookContextDecorator(tf.train.SessionRunHook):
@@ -751,21 +742,22 @@ class Estimator(tf.estimator.Estimator):
     """Creates a temp `Estimator` to grow the graph for the next iteration."""
 
     config = self.config
-    temp_run_config = tf.estimator.RunConfig(
+    temp_run_config_args = dict(
         model_dir=temp_model_dir,
         tf_random_seed=config.tf_random_seed,
-        save_summary_steps=config.save_summary_steps,
-        save_checkpoints_steps=config.save_checkpoints_steps,
-        save_checkpoints_secs=config.save_checkpoints_secs,
+        # save_summary_steps=config.save_summary_steps,
+        # save_checkpoints_steps=config.save_checkpoints_steps,
+        # save_checkpoints_secs=config.save_checkpoints_secs,
         session_config=config.session_config,
         keep_checkpoint_max=config.keep_checkpoint_max,
         keep_checkpoint_every_n_hours=config.keep_checkpoint_every_n_hours,
-        log_step_count_steps=config.log_step_count_steps,
-        device_fn=config.device_fn,
-        protocol=config.protocol)
+        # log_step_count_steps=config.log_step_count_steps,
+        device_fn=config.device_fn)
+    if LooseVersion(tf.VERSION) >= LooseVersion("1.11.0"):
+      temp_run_config_args["protocol"] = config.protocol
     return tf.estimator.Estimator(
         model_fn=self._adanet_model_fn,
-        config=temp_run_config,
+        config=tf.estimator.RunConfig(**temp_run_config_args),
         model_dir=temp_model_dir,
         params={})
 
@@ -967,11 +959,11 @@ class Estimator(tf.estimator.Estimator):
         self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION)
     decorated_hooks = []
     for hook in hooks:
-      # Set is_growing_phase=False for OverwriteCheckpointHook so the hook's
-      # before_run method is called to overwrite the checkpoint.
-      if isinstance(hook, _OverwriteCheckpointHook):
-        assert is_growing_phase
-        is_growing_phase = False
+      # # Set is_growing_phase=False for OverwriteCheckpointHook so the hook's
+      # # before_run method is called to overwrite the checkpoint.
+      # if isinstance(hook, _OverwriteCheckpointHook):
+      #   assert is_growing_phase
+      #   is_growing_phase = False
       decorated_hooks.append(
           _HookContextDecorator(hook, self._reset_state_context,
                                 is_growing_phase))
@@ -1191,6 +1183,7 @@ class Estimator(tf.estimator.Estimator):
           mode=mode,
           previous_ensemble_summary=previous_ensemble_summary,
           previous_ensemble_spec=previous_ensemble_spec,
+          skip_summaries=True,
           rebuilding=True)
       max_candidates = 2 if previous_ensemble_spec else 1
       assert len(current_iteration.candidates) == max_candidates
@@ -1257,7 +1250,7 @@ class Estimator(tf.estimator.Estimator):
 
     train_op = iteration_estimator_spec.train_op
     if self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
-      train_op = tf.no_op()
+      train_op = tf.assign_add(tf.train.get_global_step(), 1)
     return train_op
 
   def _create_estimator_spec(self, current_iteration, mode,
@@ -1335,7 +1328,7 @@ class Estimator(tf.estimator.Estimator):
     if self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
       iteration_number += 1
 
-    skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
+    skip_summaries = (mode != tf.estimator.ModeKeys.TRAIN or self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION)
     with tf.variable_scope("adanet"):
       previous_ensemble_spec = None
       previous_ensemble = None
@@ -1396,7 +1389,8 @@ class Estimator(tf.estimator.Estimator):
           labels=labels,
           mode=mode,
           previous_ensemble_summary=previous_ensemble_summary,
-          previous_ensemble_spec=previous_ensemble_spec)
+          previous_ensemble_spec=previous_ensemble_spec,
+          skip_summaries=skip_summaries)
 
     # Variable which allows us to read the current iteration from a checkpoint.
     # This must be created here so it is available when calling

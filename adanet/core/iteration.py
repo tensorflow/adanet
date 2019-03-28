@@ -210,6 +210,7 @@ class _IterationBuilder(object):
                       labels=None,
                       previous_ensemble_summary=None,
                       previous_ensemble_spec=None,
+                      skip_summaries=False,
                       rebuilding=False):
     """Builds and returns AdaNet iteration t.
 
@@ -266,7 +267,6 @@ class _IterationBuilder(object):
     features, labels = self._check_numerics(features, labels)
 
     training = mode == tf.estimator.ModeKeys.TRAIN
-    skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
     with tf.variable_scope("iteration_{}".format(iteration_number)):
       # Iteration step to use instead of global step.
       iteration_step = tf.get_variable(
