@@ -19,6 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import json
 import os
 
 from absl.testing import parameterized
@@ -2472,6 +2473,38 @@ class EstimatorEvaluateDuringTrainHookTest(tu.AdanetTestCase):
     # This should not infinite loop.
     estimator.train(
         input_fn=train_input_fn, max_steps=3, hooks=[EvalTrainHook()])
+
+
+class EstimatorTFLearnRunConfigTest(tu.AdanetTestCase):
+  """Tests b/129483642 for tf.contrib.learn.RunConfig.
+
+  Checks that TF_CONFIG is overwritten correctly when no cluster is specified
+  in the RunConfig and the only task is of type chief.
+  """
+
+  def test_train(self):
+    tf_config = {
+        "task": {
+            "type": "chief",
+            "index": 0
+        },
+    }
+    os.environ["TF_CONFIG"] = json.dumps(tf_config)
+    run_config = tf.contrib.learn.RunConfig(tf_random_seed=42)
+    run_config._is_chief = True  # pylint: disable=protected-access
+
+    subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
+    estimator = Estimator(
+        head=tu.head(),
+        subnetwork_generator=subnetwork_generator,
+        max_iteration_steps=1,
+        model_dir=self.test_subdirectory,
+        config=run_config)
+    train_input_fn = tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS)
+
+    # Will fail if TF_CONFIG is not overwritten correctly in
+    # Estimator#prepare_next_iteration.
+    estimator.train(input_fn=train_input_fn, max_steps=3)
 
 
 if __name__ == "__main__":

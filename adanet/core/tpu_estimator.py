@@ -23,6 +23,7 @@ import collections
 import functools
 
 from adanet.core.estimator import Estimator
+from distutils.version import LooseVersion
 import tensorflow as tf
 from tensorflow.contrib.tpu.python.tpu import tpu_function
 from tensorflow.python.framework import ops  # pylint: disable=g-direct-tensorflow-import
@@ -106,9 +107,9 @@ class _StepCounterHook(tf.train.SessionRunHook):
 
 
 class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
-  """An :class: `adanet.Estimator` capable of training and evaluating on TPU.
+  """An :class:`adanet.Estimator` capable of training and evaluating on TPU.
 
-  Note: Unless :code: `use_tpu=False`, training will run on TPU. However,
+  Note: Unless :code:`use_tpu=False`, training will run on TPU. However,
   certain parts of AdaNet training loop, such as report materialization and best
   candidate selection still occurr on CPU. Furthermore, inference also occurs on
   CPU.
@@ -128,9 +129,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
     report_dir: See :class:`adanet.Estimator`.
     config: See :class:`adanet.Estimator`.
     use_tpu: Boolean to enable *both* training and evaluating on TPU. Defaults
-      to :code: `True` and is only provided to allow debugging models on
-      CPU/GPU. Use :class: `adanet.Estimator` instead if you do not plan to run
-      on TPU.
+      to :code:`True` and is only provided to allow debugging models on CPU/GPU.
+      Use :class:`adanet.Estimator` instead if you do not plan to run on TPU.
     train_batch_size: See :class:`tf.contrib.tpu.TPUEstimator`.
     eval_batch_size: See :class:`tf.contrib.tpu.TPUEstimator`.
     debug: See :class:`adanet.Estimator`.
@@ -157,15 +157,14 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                eval_batch_size=None,
                debug=False,
                **kwargs):
+
     self._use_tpu = use_tpu
     if not self._use_tpu:
       tf.logging.warning(
           "This adanet.TPUEstimator is meant to be used for running on TPU. "
           "If you want to run on CPU/GPU, use adanet.Estimator instead.")
-
-    # TODO: Figure out why self.config.log_step_count_steps is
-    # always None with TPUEstimator.
-    self._log_step_count_steps = config.log_step_count_steps or 100
+    self._train_batch_size = train_batch_size or 0
+    self._eval_batch_size = eval_batch_size or train_batch_size or 0
 
     super(TPUEstimator, self).__init__(
         head=head,
@@ -185,8 +184,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         use_tpu=use_tpu,
         eval_on_tpu=use_tpu,
         export_to_tpu=False,
-        train_batch_size=train_batch_size or 0,
-        eval_batch_size=eval_batch_size or train_batch_size or 0,
+        train_batch_size=self._train_batch_size,
+        eval_batch_size=self._eval_batch_size,
         **kwargs)
 
   # Yields predictions on CPU even when use_tpu=True.
@@ -216,10 +215,36 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         checkpoint_path=checkpoint_path,
         yield_single_examples=yield_single_examples)
 
+  def _create_temp_estimator(self, temp_model_dir):
+    """See the `Estimator` base class for details."""
+
+    config = self.config
+    temp_run_config_kwargs = dict(
+        model_dir=temp_model_dir,
+        tpu_config=config.tpu_config,
+        evaluation_master=config.evaluation_master,
+        master=config.master,
+        cluster=config.cluster,
+        tf_random_seed=config.tf_random_seed,
+        session_config=config.session_config,
+        device_fn=config.device_fn)
+    if LooseVersion(tf.VERSION) >= LooseVersion("1.11.0"):
+      temp_run_config_kwargs["protocol"] = config.protocol
+    return tf.contrib.tpu.TPUEstimator(
+        model_fn=self._adanet_model_fn,
+        params={},
+        config=tf.contrib.tpu.RunConfig(**temp_run_config_kwargs),
+        model_dir=temp_model_dir,
+        use_tpu=self._use_tpu,
+        eval_on_tpu=self._use_tpu,
+        export_to_tpu=False,
+        train_batch_size=self._train_batch_size,
+        eval_batch_size=self._eval_batch_size)
+
   def _call_adanet_model_fn(self, input_fn, mode):
     """See the `Estimator` base class for details."""
 
-    # Fakes TPU shard context before calling through to the parent to supress
+    # Fakes TPU shard context before calling through to the parent to suppress
     # warnings by CrossShardOptimizer when running on TPU. Warnings are issued
     # when `_adanet_model_fn` is called directly on CPU during the bookkeeping
     # phase. Since we rebuild the graph each time `_adanet_model_fn` is called,
@@ -230,12 +255,15 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
       input_fn = functools.partial(input_fn, self.params)  # A deep copy.
       super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode)
 
-  def _create_estimator_spec(self, current_iteration, mode):
+  def _create_estimator_spec(self, current_iteration, mode,
+                             iteration_number_tensor, previous_iteration_vars):
     """See the `Estimator` base class for details."""
 
     if not self._use_tpu:
-      return super(TPUEstimator, self)._create_estimator_spec(
-          current_iteration, mode)
+      return super(TPUEstimator,
+                   self)._create_estimator_spec(current_iteration, mode,
+                                                iteration_number_tensor,
+                                                previous_iteration_vars)
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     iteration_estimator_spec = current_iteration.estimator_spec
@@ -243,21 +271,27 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         mode=mode,
         predictions=iteration_estimator_spec.predictions,
         loss=iteration_estimator_spec.loss,
-        train_op=iteration_estimator_spec.train_op,
+        train_op=self._train_op(iteration_estimator_spec),
         host_call=self._create_host_call(current_iteration, training),
         eval_metrics=iteration_estimator_spec.eval_metrics,
         export_outputs=iteration_estimator_spec.export_outputs,
         # Return a constant summary_op, otherwise `Estimator` creates summary
         # ops that do not work on TPU.
         scaffold_fn=lambda: tf.train.Scaffold(summary_op=tf.constant("")),
-        training_hooks=self._training_hooks(current_iteration, training),
+        training_hooks=self._decorate_hooks(
+            self._training_hooks(current_iteration, training,
+                                 iteration_number_tensor,
+                                 previous_iteration_vars)),
         evaluation_hooks=self._evaluation_hooks(current_iteration, training))
 
-  def _training_hooks(self, current_iteration, training):
+  def _training_hooks(self, current_iteration, training,
+                      iteration_number_tensor, previous_iteration_vars):
     """See the `Estimator` base class for details."""
 
-    training_hooks = super(TPUEstimator, self)._training_hooks(
-        current_iteration, training)
+    training_hooks = super(TPUEstimator,
+                           self)._training_hooks(current_iteration, training,
+                                                 iteration_number_tensor,
+                                                 previous_iteration_vars)
     if self._use_tpu:
       # Remove summary hooks on TPU since summaries are saved via host_call.
       training_hooks = [
@@ -265,9 +299,10 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
           if not isinstance(hook, tf.train.SummarySaverHook)
       ]
       training_hooks.append(
+          # Use self._log_every_n_steps since TPUEstimator sets it equal to
+          # config.log_step_count_steps and sets the latter to 0.
           _StepCounterHook(
-              every_n_steps=self._log_step_count_steps,
-              output_dir=self.model_dir))
+              every_n_steps=self._log_every_n_steps, output_dir=self.model_dir))
     return training_hooks
 
   def _create_host_call(self, current_iteration, training):

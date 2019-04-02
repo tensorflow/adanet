@@ -210,6 +210,7 @@ class _IterationBuilder(object):
                       labels=None,
                       previous_ensemble_summary=None,
                       previous_ensemble_spec=None,
+                      skip_summaries=False,
                       rebuilding=False):
     """Builds and returns AdaNet iteration t.
 
@@ -230,6 +231,8 @@ class _IterationBuilder(object):
       labels: `Tensor` of labels. Can be `None`.
       previous_ensemble_summary: The `adanet.Summary` for the previous ensemble.
       previous_ensemble_spec: Optional `_EnsembleSpec` for iteration t-1.
+      skip_summaries: Whether to skip creating the summary ops when building
+        the `_Iteration`.
       rebuilding: Boolean whether the iteration is being rebuilt only to restore
         the previous best subnetworks and ensembles.
 

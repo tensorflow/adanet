@@ -33,6 +33,7 @@ from adanet.distributed.placement import RoundRobinStrategy
 from adanet.subnetwork import Builder
 from adanet.subnetwork import SimpleGenerator
 from adanet.subnetwork import Subnetwork
+from distutils.version import LooseVersion
 import tensorflow as tf
 
 # pylint: disable=g-direct-tensorflow-import
@@ -247,9 +248,13 @@ def train_and_evaluate_estimator():
     input_labels = tf.constant(xor_labels, name="y")
     return input_features, input_labels
 
-  train_hooks = [
-      tf.train.ProfilerHook(save_steps=50, output_dir=FLAGS.model_dir)
-  ]
+  train_hooks = []
+  # ProfilerHook raises the following error in older TensorFlow versions:
+  # ValueError: The provided tag was already used for this event type.
+  if LooseVersion(tf.VERSION) >= LooseVersion("1.13.0"):
+    train_hooks = [
+        tf.train.ProfilerHook(save_steps=50, output_dir=FLAGS.model_dir)
+    ]
   # Train for three iterations.
   train_spec = tf.estimator.TrainSpec(
       input_fn=input_fn, max_steps=300, hooks=train_hooks)
