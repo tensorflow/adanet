@@ -1,6 +1,8 @@
 # Description:
 # Core AdaNet logic.
 
+load("//tools/build_defs/proto/cpp:cc_proto_library.bzl", "cc_proto_library")
+
 licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
@@ -268,6 +270,12 @@ py_library(
 
 proto_library(
     name = "report_proto",
+    srcs = ["report.proto"],
+    visibility = whitelist,
+)
+
+cc_proto_library(
+    name = "report_cc_proto",
     srcs = ["report.proto"],
     visibility = whitelist,
 )
