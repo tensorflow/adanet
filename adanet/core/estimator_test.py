@@ -2506,6 +2506,9 @@ class EstimatorTFLearnRunConfigTest(tu.AdanetTestCase):
     # Estimator#prepare_next_iteration.
     estimator.train(input_fn=train_input_fn, max_steps=3)
 
+    # Revert TF_CONFIG environment variable in order to not break other tests.
+    del os.environ["TF_CONFIG"]
+
 
 if __name__ == "__main__":
   tf.test.main()
