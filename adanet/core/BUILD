@@ -62,7 +62,8 @@ py_test(
     size = "large",
     srcs = ["estimator_distributed_test.py"],
     data = [
-        ":estimator_distributed_test_runner",
+        ":estimator_distributed_test_runner" +
+        "",
     ],
     flaky = 1,
     shard_count = 10,
