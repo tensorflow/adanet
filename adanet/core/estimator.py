@@ -1263,6 +1263,9 @@ class Estimator(tf.estimator.Estimator):
     train_op = iteration_estimator_spec.train_op
     if self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
       train_op = tf.assign_add(tf.train.get_global_step(), 1)
+      # NOTE: some version of TensorFlow check that train_op is an Op or Tensor
+      # and crash if train_op is a Variable.
+      train_op = tf.identity(train_op)
     return train_op
 
   def _create_estimator_spec(self, current_iteration, mode,
