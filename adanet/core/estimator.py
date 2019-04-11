@@ -132,8 +132,8 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
     # Forked from tensorflow/python/estimator/estimator.py function called
     # _write_dict_to_summary.
     current_global_step = tf.train.get_global_step()
-    eval_dict, current_global_step = session.run((self._eval_metric_tensors,
-                                                  current_global_step))
+    eval_dict, current_global_step = session.run(
+        (self._eval_metric_tensors, current_global_step))
 
     tf.logging.info("Saving %s '%s' dict for global step %d: %s",
                     self._kind, self._name, current_global_step,
@@ -981,9 +981,37 @@ class Estimator(tf.estimator.Estimator):
                                 is_growing_phase))
     return decorated_hooks
 
+  def _training_chief_hooks(self, current_iteration, training):
+    """Returns chief-only training hooks to be run this iteration.
+
+    Args:
+      current_iteration: Current `_Iteration`.
+      training: Whether in training mode.
+
+    Returns:
+      A list of `tf.train.SessionRunHook` instances.
+    """
+
+    if not training:
+      return []
+
+    training_hooks = []
+    for summary in current_iteration.summaries:
+      output_dir = self.model_dir
+      if summary.scope:
+        output_dir = os.path.join(output_dir, summary.namespace, summary.scope)
+      summary_saver_hook = tf.train.SummarySaverHook(
+          save_steps=self.config.save_summary_steps,
+          output_dir=output_dir,
+          summary_op=summary.merge_all())
+      training_hooks.append(summary_saver_hook)
+    training_hooks += list(
+        current_iteration.estimator_spec.training_chief_hooks)
+    return training_hooks
+
   def _training_hooks(self, current_iteration, training,
                       iteration_number_tensor, previous_iteration_vars):
-    """Returns training hooks for this iteration.
+    """Returns training hooks to be run on all workers and chief this iteration.
 
     Args:
       current_iteration: Current `_Iteration`.
@@ -1013,16 +1041,6 @@ class Estimator(tf.estimator.Estimator):
       training_hooks.append(
           _OverwriteCheckpointHook(current_iteration, iteration_number_tensor,
                                    previous_iteration_vars, self.config))
-
-    for summary in current_iteration.summaries:
-      output_dir = self.model_dir
-      if summary.scope:
-        output_dir = os.path.join(output_dir, summary.namespace, summary.scope)
-      summary_saver_hook = tf.train.SummarySaverHook(
-          save_steps=self.config.save_summary_steps,
-          output_dir=output_dir,
-          summary_op=summary.merge_all())
-      training_hooks.append(summary_saver_hook)
     return training_hooks
 
   def _evaluation_hooks(self, current_iteration, training):
@@ -1281,7 +1299,7 @@ class Estimator(tf.estimator.Estimator):
         train_op=self._train_op(iteration_estimator_spec),
         eval_metric_ops=iteration_estimator_spec.eval_metric_ops,
         training_chief_hooks=self._decorate_hooks(
-            iteration_estimator_spec.training_chief_hooks),
+            self._training_chief_hooks(current_iteration, training)),
         training_hooks=self._decorate_hooks(
             self._training_hooks(current_iteration, training,
                                  iteration_number_tensor,
