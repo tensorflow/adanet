@@ -57,6 +57,19 @@ Each of these concepts has an associated Python object:
     [`adanet.ensemble`](https://adanet.readthedocs.io/en/latest/adanet.ensemble.html)
     package.
 
+## Design
+
+AdaNet is designed to operate primarily inside of TensorFlow's computation
+graph. This allows it to efficiently utilize available resources like
+distributed compute, GPU, and TPU, using TensorFlow primitives.
+
+AdaNet provides a unique adaptive computation graph, which can support building
+models that create and remove ops and variables over time, but still have the
+optimizations and scalability of TensorFlow's graph-mode. This adaptive graph
+enables users to develop progressively growing models (e.g. boosting style),
+develop architecture search algorithms, and perform hyper-parameter tuning
+without needing to manage an external for-loop.
+
 ## Example ensembles
 
 Below are a few more examples of ensembles you can obtain with AdaNet depending
