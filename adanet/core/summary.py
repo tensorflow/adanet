@@ -25,9 +25,11 @@ import os
 
 import tensorflow as tf
 from tensorflow.contrib.tpu.python.tpu import tpu_function
+# pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.ops import summary_op_util
 from tensorflow.python.ops import summary_ops_v2 as summary_v2_lib
 from tensorflow.python.summary import summary as summary_lib
+# pylint: enable=g-direct-tensorflow-import
 
 _DEFAULT_SCOPE = "default"
 
@@ -336,6 +338,9 @@ class _ScopedSummary(Summary):
     return [op for op in self._summary_ops if op.graph == current_graph]
 
 
+# TODO: _ScopedSummary and _TPUScopedSummary share a lot of the same
+# methods. Extract a base class for the two, or move shared methods into
+# Summary.
 class _TPUScopedSummary(Summary):
   """Records summaries in a given scope.
 
@@ -347,12 +352,7 @@ class _TPUScopedSummary(Summary):
   same name in the same charts.
   """
 
-  def __init__(self,
-               logdir,
-               namespace=None,
-               scope=None,
-               skip_summary=False,
-               global_step=None):
+  def __init__(self, logdir, namespace=None, scope=None, skip_summary=False):
     """Initializes a `_TPUScopedSummary`.
 
     Args:
@@ -361,7 +361,6 @@ class _TPUScopedSummary(Summary):
         other `_ScopedSummary` objects.
       scope: String scope name.
       skip_summary: Whether to record summary ops.
-      global_step: Global step `Tensor`.
 
     Returns:
       A `_ScopedSummary` instance.
@@ -372,14 +371,6 @@ class _TPUScopedSummary(Summary):
     if scope == _DEFAULT_SCOPE:
       raise ValueError("scope cannot be 'default'.")
 
-    lazy = False
-    if tpu_function.get_tpu_context().number_of_shards:
-      tf.logging.log_first_n(
-          tf.logging.INFO, "Summaries will be created lazily to work with TPU.",
-          1)
-      lazy = True
-
-    self._lazy = lazy
     if namespace:
       logdir = os.path.join(logdir, namespace)
     if scope:
@@ -389,16 +380,11 @@ class _TPUScopedSummary(Summary):
     self._scope = scope
     self._additional_scope = None
     self._skip_summary = skip_summary
-    self._summary_ops = []
     self._actual_summary_scalar_fn = tf.contrib.summary.scalar
     self._actual_summary_image_fn = tf.contrib.summary.image
     self._actual_summary_histogram_fn = tf.contrib.summary.histogram
     self._actual_summary_audio_fn = tf.contrib.summary.audio
-    if global_step is None:
-      global_step = tf.train.get_global_step()
-    self._global_step = global_step
-    self._lazy_summaries = []
-    self._flush_op = {}
+    self._summary_tuples = []
 
   @property
   def namespace(self):
@@ -411,6 +397,12 @@ class _TPUScopedSummary(Summary):
     """Returns scope string."""
 
     return self._scope
+
+  @property
+  def logdir(self):
+    """Returns the logdir."""
+
+    return self._logdir
 
   @contextlib.contextmanager
   def current_scope(self):
@@ -449,8 +441,8 @@ class _TPUScopedSummary(Summary):
   def _create_summary(self, summary_fn, name, tensor):
     """Creates a summary op.
 
-    On TPU, this will create a function that takes a `Tensor` and adds it to a
-    list with its matching `tensor` that can be obtained from `lazy_fns`.
+    This will create a function that takes a `Tensor` and adds it to a list with
+    its matching `tensor`.
 
     Args:
       summary_fn: A function that takes a name string and `Tensor` and returns a
@@ -467,32 +459,27 @@ class _TPUScopedSummary(Summary):
     # name_scope is from whichever scope the summary actually gets called in.
     # e.g. "foo/bar/baz"
     name_scope = tf.get_default_graph().get_name_scope()
+    # Reuse name_scope if it exists by appending "/" to it.
+    name_scope = name_scope + "/" if name_scope else name_scope
 
     def _summary_fn(tensor, step):
       """Creates a summary with the given `Tensor`."""
 
-      writer = tf.contrib.summary.create_file_writer(logdir=self._logdir)
       summary_name = self._prefix_scope(name)
-      if self._lazy:
-        # Recover the current name scope when this fn is be called, because the
-        # scope may be different when fns are called.
-        # e.g. "foo/bar/baz/scalar" will become "baz/scalar" when
-        # additional_scope is "foo/bar".
-        # TODO: Figure out a cleaner way to handle this.
-        assert not tf.get_default_graph().get_name_scope()
-        summary_name = "{}/{}".format(name_scope, summary_name)
-      with writer.as_default(), self._strip_tag_scope(additional_scope):
-        summary = summary_fn(summary_name, tensor, step)
+      # Recover the current name scope when this fn is be called, because the
+      # scope may be different when fns are called.
+      # e.g. "foo/bar/baz/scalar" will become "baz/scalar" when
+      # additional_scope is "foo/bar".
+      # TODO: Figure out a cleaner way to handle this.
+      assert not tf.get_default_graph().get_name_scope()
+      with tf.name_scope(name_scope):
+        with self._strip_tag_scope(additional_scope):
+          # TODO: Do summaries need to be reduced before writing?
+          # Presumably each tensor core creates its own summary so we may be
+          # writing out num_tensor_cores copies of the same value.
+          return summary_fn(summary_name, tensor, step)
 
-      self._summary_ops.append(summary)
-      self._flush_op[summary.graph] = writer.close()
-      return summary
-
-    if self._lazy:
-      self._lazy_summaries.append((_summary_fn, tensor))
-      return
-    with tf.contrib.summary.always_record_summaries():
-      _summary_fn(tensor, step=self._global_step)
+    self._summary_tuples.append((_summary_fn, tensor))
 
   def scalar(self, name, tensor, family=None):
 
@@ -536,7 +523,7 @@ class _TPUScopedSummary(Summary):
 
     self._create_summary(_summary_fn, name, tf.cast(tensor, tf.float32))
 
-  def lazy_fns(self):
+  def summary_tuples(self):
     """Returns an iterable of functions that convert a Tensor to a summary.
 
     Used for TPU host calls.
@@ -544,29 +531,12 @@ class _TPUScopedSummary(Summary):
     Returns:
       Iterable of functions that take a single `Tensor` argument.
     """
-    return tuple(self._lazy_summaries)
+    return tuple(self._summary_tuples)
 
-  def merge_all(self):
-    """Returns the list of this graph's scoped summary ops.
+  def clear_summary_tuples(self):
+    """Clears the list of current summary tuples."""
 
-    Note: this is an abuse of the tf.summary.merge_all API since it is expected
-    to return a summary op with all summaries merged. However, ScopedSummary is
-    only used in the internal implementation, so this should be OK.
-
-    Returns:
-      Iterable of summary ops for the default graph.
-    """
-
-    current_graph = tf.get_default_graph()
-    return [op for op in self._summary_ops if op.graph == current_graph]
-
-  def flush(self):
-    """Returns this graph's op for flushing to disk."""
-
-    current_graph = tf.get_default_graph()
-    if current_graph in self._flush_op:
-      return self._flush_op[current_graph]
-    return tf.no_op()
+    self._summary_tuples = []
 
 
 class _SummaryWrapper(object):

@@ -377,8 +377,21 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     event_files = sorted(tf.gfile.Glob(os.path.join(dir_, "*.v2")))
     events = list(tf.train.summary_iterator(event_files[-1]))
     # Expect a boilerplate event for the file_version, then the summary one.
-    self.assertTrue(len(events) >= 2)
+    self.assertGreaterEqual(len(events), 2)
     return events[1:]
+
+  def write_summaries(self, summary):
+    summary_ops = []
+    writer = tf.contrib.summary.create_file_writer(summary.logdir)
+    with writer.as_default(), tf.contrib.summary.always_record_summaries():
+      for summary_fn, tensor in summary.summary_tuples():
+        summary_ops.append(summary_fn(tensor, step=10))
+
+    with self.test_session() as sess:
+      sess.run(tf.global_variables_initializer())
+      sess.run(tf.contrib.summary.summary_writer_initializer_op())
+      sess.run(summary_ops)
+      sess.run(writer.flush())
 
   @parameterized.named_parameters({
       "testcase_name": "without_scope",
@@ -388,8 +401,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
       "scope": "with_scope",
   })
   def test_scope(self, scope):
-    scoped_summary = _TPUScopedSummary(
-        self.test_subdirectory, scope=scope, global_step=10)
+    scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     self.assertEqual(scope, scoped_summary.scope)
 
   @parameterized.named_parameters({
@@ -405,17 +417,11 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
   })
   def test_scalar_summary(self, scope, skip_summary=False):
     scoped_summary = _TPUScopedSummary(
-        self.test_subdirectory,
-        scope=scope,
-        skip_summary=skip_summary,
-        global_step=10)
-    with self.test_session() as s:
-      i = tf.constant(3)
-      with tf.name_scope("outer"):
-        scoped_summary.scalar("inner", i)
-      s.run(tf.contrib.summary.summary_writer_initializer_op())
-      s.run(scoped_summary.merge_all())
-      s.run(scoped_summary.flush())
+        self.test_subdirectory, scope=scope, skip_summary=skip_summary)
+    i = tf.constant(3)
+    with tf.name_scope("outer"):
+      scoped_summary.scalar("inner", i)
+    self.write_summaries(scoped_summary)
     if skip_summary:
       return
     events = self.read_single_event_from_eventfile(scoped_summary)
@@ -424,24 +430,21 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     self.assertEqual(values[0].tag, "outer/inner")
     self.assertEqual(values[0].simple_value, 3.0)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_scalar_summary_with_family(self, scope):
-    scoped_summary = _TPUScopedSummary(
-        self.test_subdirectory, scope=scope, global_step=10)
-    with self.test_session() as s:
-      i = tf.constant(7)
-      with tf.name_scope("outer"):
-        scoped_summary.scalar("inner", i, family="family")
-        scoped_summary.scalar("inner", i, family="family")
-      s.run(tf.contrib.summary.summary_writer_initializer_op())
-      s.run(scoped_summary.merge_all())
-      s.run(scoped_summary.flush())
+    scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
+    i = tf.constant(7)
+    with tf.name_scope("outer"):
+      scoped_summary.scalar("inner", i, family="family")
+      scoped_summary.scalar("inner", i, family="family")
+    self.write_summaries(scoped_summary)
     events = self.read_single_event_from_eventfile(scoped_summary)
     self.assertLen(events[0].summary.value, 1)
     self.assertLen(events[1].summary.value, 1)
@@ -462,17 +465,11 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
       "scope": "with_scope",
   })
   def test_summarizing_variable(self, scope):
-    scoped_summary = _TPUScopedSummary(
-        self.test_subdirectory, scope=scope, global_step=10)
-    with self.test_session() as s:
-      c = tf.constant(42.0)
-      v = tf.Variable(c)
-      scoped_summary.scalar("summary", v)
-      init = tf.global_variables_initializer()
-      s.run(init)
-      s.run(tf.contrib.summary.summary_writer_initializer_op())
-      s.run(scoped_summary.merge_all())
-      s.run(scoped_summary.flush())
+    scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
+    c = tf.constant(42.0)
+    v = tf.Variable(c)
+    scoped_summary.scalar("summary", v)
+    self.write_summaries(scoped_summary)
     events = self.read_single_event_from_eventfile(scoped_summary)
     values = events[0].summary.value
     self.assertLen(values, 1)
@@ -493,17 +490,11 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
   })
   def test_image_summary(self, scope, skip_summary=False):
     scoped_summary = _TPUScopedSummary(
-        self.test_subdirectory,
-        scope=scope,
-        skip_summary=skip_summary,
-        global_step=10)
-    with self.test_session() as s:
-      i = tf.ones((5, 4, 4, 3))
-      with tf.name_scope("outer"):
-        scoped_summary.image("inner", i, max_outputs=3)
-      s.run(tf.contrib.summary.summary_writer_initializer_op())
-      s.run(scoped_summary.merge_all())
-      s.run(scoped_summary.flush())
+        self.test_subdirectory, scope=scope, skip_summary=skip_summary)
+    i = tf.ones((5, 4, 4, 3))
+    with tf.name_scope("outer"):
+      scoped_summary.image("inner", i, max_outputs=3)
+    self.write_summaries(scoped_summary)
     if skip_summary:
       return
     events = self.read_single_event_from_eventfile(scoped_summary)
@@ -521,15 +512,11 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
       "scope": "with_scope",
   })
   def test_image_summary_with_family(self, scope):
-    scoped_summary = _TPUScopedSummary(
-        self.test_subdirectory, scope=scope, global_step=10)
-    with self.test_session() as s:
-      i = tf.ones((5, 2, 3, 1))
-      with tf.name_scope("outer"):
-        scoped_summary.image("inner", i, max_outputs=3, family="family")
-      s.run(tf.contrib.summary.summary_writer_initializer_op())
-      s.run(scoped_summary.merge_all())
-      s.run(scoped_summary.flush())
+    scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
+    i = tf.ones((5, 2, 3, 1))
+    with tf.name_scope("outer"):
+      scoped_summary.image("inner", i, max_outputs=3, family="family")
+    self.write_summaries(scoped_summary)
     events = self.read_single_event_from_eventfile(scoped_summary)
     values = events[0].summary.value
     self.assertLen(values, 3)
@@ -551,17 +538,11 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
   })
   def test_histogram_summary(self, scope, skip_summary=False):
     scoped_summary = _TPUScopedSummary(
-        self.test_subdirectory,
-        scope=scope,
-        skip_summary=skip_summary,
-        global_step=10)
-    with self.test_session() as s:
-      i = tf.ones((5, 4, 4, 3))
-      with tf.name_scope("outer"):
-        scoped_summary.histogram("inner", i)
-      s.run(tf.contrib.summary.summary_writer_initializer_op())
-      s.run(scoped_summary.merge_all())
-      s.run(scoped_summary.flush())
+        self.test_subdirectory, scope=scope, skip_summary=skip_summary)
+    i = tf.ones((5, 4, 4, 3))
+    with tf.name_scope("outer"):
+      scoped_summary.histogram("inner", i)
+    self.write_summaries(scoped_summary)
     if skip_summary:
       return
     events = self.read_single_event_from_eventfile(scoped_summary)
@@ -577,15 +558,11 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
       "scope": "with_scope",
   })
   def test_histogram_summary_with_family(self, scope):
-    scoped_summary = _TPUScopedSummary(
-        self.test_subdirectory, scope=scope, global_step=10)
-    with self.test_session() as s:
-      i = tf.ones((5, 4, 4, 3))
-      with tf.name_scope("outer"):
-        scoped_summary.histogram("inner", i, family="family")
-      s.run(tf.contrib.summary.summary_writer_initializer_op())
-      s.run(scoped_summary.merge_all())
-      s.run(scoped_summary.flush())
+    scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
+    i = tf.ones((5, 4, 4, 3))
+    with tf.name_scope("outer"):
+      scoped_summary.histogram("inner", i, family="family")
+    self.write_summaries(scoped_summary)
     events = self.read_single_event_from_eventfile(scoped_summary)
     values = events[0].summary.value
     self.assertLen(values, 1)
@@ -604,17 +581,11 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
   })
   def test_audio_summary(self, scope, skip_summary=False):
     scoped_summary = _TPUScopedSummary(
-        self.test_subdirectory,
-        scope=scope,
-        skip_summary=skip_summary,
-        global_step=10)
-    with self.test_session() as s:
-      i = tf.ones((5, 3, 4))
-      with tf.name_scope("outer"):
-        scoped_summary.audio("inner", i, 0.2, max_outputs=3)
-      s.run(tf.contrib.summary.summary_writer_initializer_op())
-      s.run(scoped_summary.merge_all())
-      s.run(scoped_summary.flush())
+        self.test_subdirectory, scope=scope, skip_summary=skip_summary)
+    i = tf.ones((5, 3, 4))
+    with tf.name_scope("outer"):
+      scoped_summary.audio("inner", i, 0.2, max_outputs=3)
+    self.write_summaries(scoped_summary)
     if skip_summary:
       return
     events = self.read_single_event_from_eventfile(scoped_summary)
@@ -632,15 +603,11 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
       "scope": "with_scope",
   })
   def test_audio_summary_with_family(self, scope):
-    scoped_summary = _TPUScopedSummary(
-        self.test_subdirectory, scope=scope, global_step=10)
-    with self.test_session() as s:
-      i = tf.ones((5, 3, 4))
-      with tf.name_scope("outer"):
-        scoped_summary.audio("inner", i, 0.2, max_outputs=3, family="family")
-      s.run(tf.contrib.summary.summary_writer_initializer_op())
-      s.run(scoped_summary.merge_all())
-      s.run(scoped_summary.flush())
+    scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
+    i = tf.ones((5, 3, 4))
+    with tf.name_scope("outer"):
+      scoped_summary.audio("inner", i, 0.2, max_outputs=3, family="family")
+    self.write_summaries(scoped_summary)
     events = self.read_single_event_from_eventfile(scoped_summary)
     values = events[0].summary.value
     self.assertLen(values, 3)
@@ -657,73 +624,18 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
       "scope": "with_scope",
   })
   def test_summary_name_conversion(self, scope):
-    scoped_summary = _TPUScopedSummary(
-        self.test_subdirectory, scope=scope, global_step=10)
+    scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     c = tf.constant(3)
     scoped_summary.scalar("name with spaces", c)
     scoped_summary.scalar("name with many $#illegal^: characters!", c)
     scoped_summary.scalar("/name/with/leading/slash", c)
-    with self.test_session() as sess:
-      sess.run(tf.contrib.summary.summary_writer_initializer_op())
-      sess.run(scoped_summary.merge_all())
-      sess.run(scoped_summary.flush())
+    self.write_summaries(scoped_summary)
     events = self.read_single_event_from_eventfile(scoped_summary)
     self.assertLen(events, 3)
     tags = [event.summary.value[0].tag for event in events]
     self.assertIn("name_with_spaces", tags)
     self.assertIn("name_with_many___illegal___characters_", tags)
     self.assertIn("name/with/leading/slash", tags)
-
-  @parameterized.named_parameters({
-      "testcase_name": "single_graph",
-      "nest_graph": False,
-  }, {
-      "testcase_name": "nested_graph",
-      "nest_graph": True,
-  })
-  def test_merge_all(self, nest_graph):
-    c0 = tf.constant(0)
-    c1 = tf.constant(1)
-
-    scoped_summary0 = _TPUScopedSummary(self.test_subdirectory, global_step=10)
-    scoped_summary0.scalar("c0", c0)
-    scoped_summary0.scalar("c1", c1)
-
-    scoped_summary1 = _TPUScopedSummary(
-        self.test_subdirectory, scope="scope1", global_step=10)
-    scoped_summary1.scalar("c0", c0)
-    scoped_summary1.scalar("c1", c1)
-
-    scoped_summary2 = _TPUScopedSummary(
-        self.test_subdirectory, scope="scope2", global_step=10)
-    scoped_summary2.scalar("c0", c0)
-    scoped_summary2.scalar("c1", c1)
-
-    if nest_graph:
-      with tf.Graph().as_default():
-        scoped_summary2.scalar("c2", tf.constant(2))
-        with tf.Session() as sess:
-          sess.run(tf.contrib.summary.summary_writer_initializer_op())
-          sess.run(scoped_summary2.merge_all())
-          sess.run(scoped_summary2.flush())
-          events = self.read_single_event_from_eventfile(scoped_summary2)
-          values = {
-              e.summary.value[0].tag: e.summary.value[0].simple_value
-              for e in events
-          }
-          self.assertEqual({"c2": 2}, values)
-
-    with tf.Session() as sess:
-      sess.run(tf.contrib.summary.summary_writer_initializer_op())
-      for scoped_summary in [scoped_summary0, scoped_summary1, scoped_summary2]:
-        sess.run(scoped_summary.merge_all())
-        sess.run(scoped_summary.flush())
-        events = self.read_single_event_from_eventfile(scoped_summary)
-        values = {
-            e.summary.value[0].tag: e.summary.value[0].simple_value
-            for e in events
-        }
-        self.assertEqual({"c0": 0, "c1": 1}, values)
 
   @parameterized.named_parameters({
       "testcase_name": "without_scope",
@@ -733,18 +645,14 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
       "scope": "with_scope",
   })
   def test_current_scope(self, scope):
-    scoped_summary = _TPUScopedSummary(
-        self.test_subdirectory, scope=scope, global_step=10)
+    scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     i = tf.constant(3)
     with tf.variable_scope("outer1"):
       with tf.variable_scope("outer2"):
         with scoped_summary.current_scope():
           with tf.variable_scope("inner1"):
             scoped_summary.scalar("inner2/a/b/c", i)
-    with self.test_session() as s:
-      s.run(tf.contrib.summary.summary_writer_initializer_op())
-      s.run(scoped_summary.merge_all())
-      s.run(scoped_summary.flush())
+    self.write_summaries(scoped_summary)
     events = self.read_single_event_from_eventfile(scoped_summary)
     values = events[0].summary.value
     self.assertLen(values, 1)
@@ -752,35 +660,40 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     self.assertEqual(values[0].simple_value, 3.0)
 
   def test_summary_args(self):
-    summary = _TPUScopedSummary(self.test_subdirectory, global_step=10)
+    summary = _TPUScopedSummary(self.test_subdirectory)
     summary.scalar("scalar", 1, "family")
     summary.image("image", 1, 3, "family")
     summary.histogram("histogram", 1, "family")
     summary.audio("audio", 1, 3, 3, "family")
-    self.assertLen(summary.merge_all(), 4)
+    self.assertLen(summary.summary_tuples(), 4)
 
   def test_summary_kwargs(self):
-    summary = _TPUScopedSummary(self.test_subdirectory, global_step=10)
+    summary = _TPUScopedSummary(self.test_subdirectory)
     summary.scalar(name="scalar", tensor=1, family="family")
     summary.image(name="image", tensor=1, max_outputs=3, family="family")
     summary.histogram(name="histogram", values=1, family="family")
     summary.audio(
         name="audio", tensor=1, sample_rate=3, max_outputs=3, family="family")
-    self.assertLen(summary.merge_all(), 4)
+    self.assertLen(summary.summary_tuples(), 4)
 
 
 class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
 
-  @parameterized.named_parameters({
-      "testcase_name": "with_scoped_summary",
-      "summary_maker": _ScopedSummary,
-  }, {
-      "testcase_name":
-          "with_tpu_scoped_summary",
-      "summary_maker":
-          functools.partial(
-              _TPUScopedSummary, logdir="/tmp/fakedir", global_step=10),
-  })
+  def _get_summary_ops(self, summary):
+    if isinstance(summary, _TPUScopedSummary):
+      return [fn(arg, step=10) for fn, arg in summary.summary_tuples()]
+    return summary.merge_all()
+
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "with_scoped_summary",
+          "summary_maker": _ScopedSummary,
+      }, {
+          "testcase_name":
+              "with_tpu_scoped_summary",
+          "summary_maker":
+              functools.partial(_TPUScopedSummary, logdir="/tmp/fakedir")
+      })
   def test_monkey_patched_summaries_args(self, summary_maker):
     summary = summary_maker()
     with monkey_patched_summaries(summary):
@@ -793,7 +706,7 @@ class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
       tf.contrib.summary.image("image_v2", 1, True, 3, "family", 10)
       tf.contrib.summary.histogram("histogram_v2", 1, "family", 10)
       tf.contrib.summary.audio("audio_v2", 1, 3, 3, "family", 10)
-    self.assertLen(summary.merge_all(), 8)
+    self.assertLen(self._get_summary_ops(summary), 8)
 
   @parameterized.named_parameters({
       "testcase_name": "with_scoped_summary",
@@ -846,7 +759,7 @@ class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
           max_outputs=3,
           family="family",
           step=10)
-    self.assertLen(summary.merge_all(), 8)
+    self.assertLen(self._get_summary_ops(summary), 8)
 
 
 if __name__ == "__main__":

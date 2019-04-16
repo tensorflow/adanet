@@ -316,17 +316,16 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
       (fn, args) Pair to be called by TPUEstimator as the host_call.
     """
 
+    # Collect and flatten summary functions and arguments.
     summary_kwargs = collections.OrderedDict()
     gs_t = tf.reshape(tf.to_int32(tf.train.get_global_step()), [1])
     summary_kwargs["global_step"] = gs_t
 
-    i = 0
-    summary_fns = []
-    for summary in current_iteration.summaries:
-      for summary_fn, tensor in summary.lazy_fns():
-        summary_fns.append(summary_fn)
-        summary_kwargs["summary_{}".format(i)] = tensor
-        i += 1
+    summary_fns = collections.defaultdict(list)
+    for i, summary in enumerate(current_iteration.summaries):
+      for j, (summary_fn, tensor) in enumerate(summary.summary_tuples()):
+        summary_fns[i].append(summary_fn)
+        summary_kwargs["summary_{}_{}".format(i, j)] = tensor
 
     def _host_call_fn(**kwargs):
       """Training host call.
@@ -344,11 +343,15 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
       gs = tf.to_int64(kwargs.pop("global_step")[0])
       if not training:
         return [tf.no_op()]
-      with tf.contrib.summary.record_summaries_every_n_global_steps(
-          n=self.config.save_summary_steps, global_step=gs):
-        for i, summary_fn in enumerate(summary_fns):
-          tensor = kwargs.pop("summary_{}".format(i))
-          summary_fn(tensor, step=gs)
+
+      for i, summary in enumerate(current_iteration.summaries):
+        with tf.contrib.summary.create_file_writer(summary.logdir).as_default():
+          with tf.contrib.summary.record_summaries_every_n_global_steps(
+              n=self.config.save_summary_steps, global_step=gs):
+            for j, summary_fn in enumerate(summary_fns[i]):
+              tensor = kwargs["summary_{}_{}".format(i, j)]
+              summary_fn(tensor, step=gs)
+        summary.clear_summary_tuples()
       return tf.contrib.summary.all_summary_ops()
 
     return _host_call_fn, summary_kwargs
