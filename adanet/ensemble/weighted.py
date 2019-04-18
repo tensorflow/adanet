@@ -19,6 +19,8 @@ from __future__ import print_function
 
 import collections
 
+from absl import logging
+from adanet import tf_compat
 from adanet.ensemble.ensembler import Ensemble
 from adanet.ensemble.ensembler import Ensembler
 import tensorflow as tf
@@ -253,13 +255,13 @@ class ComplexityRegularizedEnsembler(Ensembler):
           if isinstance(weighted_subnetwork.subnetwork.last_layer, dict):
             weight_initializer = {
                 key: self._load_variable_from_model_dir(
-                    weighted_subnetwork.weight[key].op.name)
+                    tf_compat.tensor_name(weighted_subnetwork.weight[key]))
                 for key in sorted(weighted_subnetwork.subnetwork.last_layer)
             }
           else:
             weight_initializer = self._load_variable_from_model_dir(
-                weighted_subnetwork.weight.op.name)
-        with tf.variable_scope(
+                tf_compat.tensor_name(weighted_subnetwork.weight))
+        with tf_compat.v1.variable_scope(
             "weighted_subnetwork_{}".format(subnetwork_index)):
           weighted_subnetworks.append(
               self._build_weighted_subnetwork(
@@ -269,7 +271,8 @@ class ComplexityRegularizedEnsembler(Ensembler):
         subnetwork_index += 1
 
     for subnetwork in subnetworks:
-      with tf.variable_scope("weighted_subnetwork_{}".format(subnetwork_index)):
+      with tf_compat.v1.variable_scope(
+          "weighted_subnetwork_{}".format(subnetwork_index)):
         weighted_subnetworks.append(
             self._build_weighted_subnetwork(subnetwork, num_subnetworks))
       subnetwork_index += 1
@@ -281,10 +284,11 @@ class ComplexityRegularizedEnsembler(Ensembler):
             weighted_subnetworks, prior=previous_ensemble.bias)
       else:
         bias = self._create_bias_term(weighted_subnetworks)
-        tf.logging.info("Builders using a pruned set of the subnetworks "
-                        "from the previous ensemble, so its ensemble's bias "
-                        "term will not be warm started with the previous "
-                        "ensemble's bias.")
+        logging.info(
+            "Builders using a pruned set of the subnetworks "
+            "from the previous ensemble, so its ensemble's bias "
+            "term will not be warm started with the previous "
+            "ensemble's bias.")
     else:
       bias = self._create_bias_term(weighted_subnetworks)
 
@@ -314,15 +318,16 @@ class ComplexityRegularizedEnsembler(Ensembler):
     if self._adanet_lambda == 0.:
       return self._adanet_beta
     return tf.scalar_mul(self._adanet_lambda,
-                         tf.to_float(complexity)) + self._adanet_beta
+                         tf.cast(complexity,
+                                 dtype=tf.float32)) + self._adanet_beta
 
   def _select_mixture_weight_initializer(self, num_subnetworks):
     if self._mixture_weight_initializer:
       return self._mixture_weight_initializer
     if (self._mixture_weight_type == MixtureWeightType.SCALAR or
         self._mixture_weight_type == MixtureWeightType.VECTOR):
-      return tf.constant_initializer(1. / num_subnetworks)
-    return tf.zeros_initializer()
+      return tf_compat.v1.constant_initializer(1. / num_subnetworks)
+    return tf_compat.v1.zeros_initializer()
 
   def _build_weighted_subnetwork(self,
                                  subnetwork,
@@ -347,8 +352,8 @@ class ComplexityRegularizedEnsembler(Ensembler):
       logits, weight = {}, {}
       for i, key in enumerate(sorted(subnetwork.last_layer)):
         logits[key], weight[key] = self._build_weighted_subnetwork_helper(
-            subnetwork, num_subnetworks, _lookup_if_dict(
-                weight_initializer, key), key, i)
+            subnetwork, num_subnetworks,
+            _lookup_if_dict(weight_initializer, key), key, i)
     else:
       logits, weight = self._build_weighted_subnetwork_helper(
           subnetwork, num_subnetworks, weight_initializer)
@@ -371,7 +376,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
     weight_shape = None
     last_layer_size = last_layer.get_shape().as_list()[-1]
     logits_size = logits.get_shape().as_list()[-1]
-    batch_size = tf.shape(last_layer)[0]
+    batch_size = tf.shape(input=last_layer)[0]
 
     if weight_initializer is None:
       weight_initializer = self._select_mixture_weight_initializer(
@@ -383,8 +388,9 @@ class ComplexityRegularizedEnsembler(Ensembler):
       if self._mixture_weight_type == MixtureWeightType.MATRIX:
         weight_shape = [last_layer_size, logits_size]
 
-    with tf.variable_scope("logits_{}".format(index) if index else "logits"):
-      weight = tf.get_variable(
+    with tf_compat.v1.variable_scope(
+        "logits_{}".format(index) if index else "logits"):
+      weight = tf_compat.v1.get_variable(
           name="mixture_weight",
           shape=weight_shape,
           initializer=weight_initializer)
@@ -399,10 +405,11 @@ class ComplexityRegularizedEnsembler(Ensembler):
         # [batch_size x timesteps, emb_dim] for matrix multiplication
         # and reshaping back.
         if ndims == 3:
-          tf.logging.info("Rank 3 tensors like [batch_size, timesteps, d]  are "
-                          "reshaped to rank 2 [ batch_size x timesteps, d] for "
-                          "the weight matrix multiplication, and are reshaped "
-                          "to their original shape afterwards.")
+          logging.info(
+              "Rank 3 tensors like [batch_size, timesteps, d]  are "
+              "reshaped to rank 2 [ batch_size x timesteps, d] for "
+              "the weight matrix multiplication, and are reshaped "
+              "to their original shape afterwards.")
           last_layer = tf.reshape(last_layer, [-1, last_layer_size])
         logits = tf.matmul(last_layer, weight)
         if ndims == 3:
@@ -446,14 +453,14 @@ class ComplexityRegularizedEnsembler(Ensembler):
 
     shape = None
     if prior is None or not self._warm_start_mixture_weights:
-      prior = tf.zeros_initializer()
+      prior = tf_compat.v1.zeros_initializer()
       logits = _lookup_if_dict(weighted_subnetworks[0].subnetwork.logits, key)
       dims = logits.shape.as_list()
       shape = dims[-1] if len(dims) > 1 else 1
     else:
       prior = self._load_variable_from_model_dir(
-          _lookup_if_dict(prior, key).op.name)
-    return tf.get_variable(
+          tf_compat.tensor_name(_lookup_if_dict(prior, key)))
+    return tf_compat.v1.get_variable(
         name="bias_{}".format(index) if index else "bias",
         shape=shape,
         initializer=prior,
@@ -497,7 +504,8 @@ class ComplexityRegularizedEnsembler(Ensembler):
     subnetwork_logits = []
     for weighted_subnetwork in weighted_subnetworks:
       subnetwork_logits.append(_lookup_if_dict(weighted_subnetwork.logits, key))
-    with tf.variable_scope("logits_{}".format(index) if index else "logits"):
+    with tf_compat.v1.variable_scope(
+        "logits_{}".format(index) if index else "logits"):
       ensemble_logits = _lookup_if_dict(bias, key)
       for logits in subnetwork_logits:
         ensemble_logits = tf.add(ensemble_logits, logits)
@@ -514,7 +522,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
     weights = []
     for weighted_subnetwork in weighted_subnetworks:
       weight_l1_norm = tf.norm(
-          _lookup_if_dict(weighted_subnetwork.weight, key), ord=1)
+          tensor=_lookup_if_dict(weighted_subnetwork.weight, key), ord=1)
       total_weight_l1_norms += weight_l1_norm
       ensemble_complexity_regularization += (
           self._compute_complexity_regularization_helper(

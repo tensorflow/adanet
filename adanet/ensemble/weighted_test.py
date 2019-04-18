@@ -25,10 +25,12 @@ import contextlib
 from absl.testing import parameterized
 from adanet import ensemble
 from adanet import subnetwork
+from adanet import tf_compat
 from adanet.core.summary import Summary
-
+import mock
 import tensorflow as tf
-mock = tf.test.mock
+
+tfe = tf.contrib.eager
 
 
 class _FakeSummary(Summary):
@@ -71,13 +73,15 @@ def _get_complexity_regularization_summary_key():
   return 'complexity_regularization/adanet/adanet_weighted_ensemble'
 
 
+@tf.contrib.eager.run_all_tests_in_graph_and_eager_modes
 class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
                                          tf.test.TestCase):
 
   def setUp(self):
     super(ComplexityRegularizedEnsemblerTest, self).setUp()
 
-    self._optimizer = tf.train.GradientDescentOptimizer(learning_rate=.1)
+    self._optimizer = tf_compat.v1.train.GradientDescentOptimizer(
+        learning_rate=.1)
     self.easy_ensembler = ensemble.ComplexityRegularizedEnsembler(
         optimizer=self._optimizer)
 
@@ -94,11 +98,6 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
 
     self.summary = _FakeSummary()
 
-  def _assert_list_almost_equal(self, l1, l2):
-    self.assertLen(l1, len(l2))
-    for i in range(len(l1)):
-      self.assertAlmostEqual(l1[i], l2[i])
-
   def _build_easy_ensemble(self, subnetworks):
     return self.easy_ensembler.build_ensemble(
         subnetworks=subnetworks,
@@ -114,13 +113,13 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
   def _build_subnetwork(self, multi_head=False):
 
     last_layer = tf.Variable(
-        tf.random_normal(shape=(2, 3)), trainable=False).read_value()
+        tf.random.normal(shape=(2, 3)), trainable=False).read_value()
 
     def new_logits():
-      return tf.layers.dense(
+      return tf_compat.v1.layers.dense(
           last_layer,
           units=1,
-          kernel_initializer=tf.glorot_uniform_initializer())
+          kernel_initializer=tf_compat.v1.glorot_uniform_initializer())
 
     if multi_head:
       logits = {k: new_logits() for k in multi_head}
@@ -130,195 +129,196 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
 
     return subnetwork.Subnetwork(last_layer=logits, logits=logits, complexity=2)
 
-  @parameterized.named_parameters({
-      'testcase_name': 'default',
-      'expected_summary_scalars': {
-          _get_norm_summary_key(0): [1],
-          _get_fractions_summary_key(0): [1],
-          _get_complexity_regularization_summary_key(): [0.],
-      },
-      'expected_complexity_regularization': 0.,
-  }, {
-      'testcase_name': 'one_previous_network',
-      'num_previous_ensemble_subnetworks': 1,
-      'expected_summary_scalars': {
-          _get_norm_summary_key(0): [0.5],
-          _get_norm_summary_key(1): [0.5],
-          _get_fractions_summary_key(0): [0.5],
-          _get_fractions_summary_key(1): [0.5],
-          _get_complexity_regularization_summary_key(): [0.],
-      },
-      'expected_complexity_regularization': 0.,
-  }, {
-      'testcase_name': 'one_previous_network_with_lambda',
-      'adanet_lambda': 0.1,
-      'num_previous_ensemble_subnetworks': 1,
-      'expected_summary_scalars': {
-          _get_norm_summary_key(0): [0.5],
-          _get_norm_summary_key(1): [0.5],
-          _get_fractions_summary_key(0): [0.5],
-          _get_fractions_summary_key(1): [0.5],
-          _get_complexity_regularization_summary_key(): [0.2],
-      },
-      'expected_complexity_regularization': 0.2,
-  }, {
-      'testcase_name': 'two_subnetworks_one_previous_network_with_lambda',
-      'adanet_lambda': 0.1,
-      'num_previous_ensemble_subnetworks': 1,
-      'expected_summary_scalars': {
-          _get_norm_summary_key(0): [0.5],
-          _get_norm_summary_key(1): [0.5],
-          _get_fractions_summary_key(0): [0.5],
-          _get_fractions_summary_key(1): [0.5],
-          _get_complexity_regularization_summary_key(): [0.2],
-      },
-      'expected_complexity_regularization': 0.2,
-  }, {
-      'testcase_name': 'all_previous_networks_with_lambda',
-      'adanet_lambda': 0.1,
-      'num_previous_ensemble_subnetworks': 2,
-      'expected_summary_scalars': {
-          _get_norm_summary_key(0): [1 / 3.],
-          _get_norm_summary_key(1): [1 / 3.],
-          _get_norm_summary_key(2): [1 / 3.],
-          _get_fractions_summary_key(0): [1 / 3.],
-          _get_fractions_summary_key(1): [1 / 3.],
-          _get_fractions_summary_key(2): [1 / 3.],
-          _get_complexity_regularization_summary_key(): [1 / 5.],
-      },
-      'expected_complexity_regularization': 1 / 5.,
-  }, {
-      'testcase_name': 'all_previous_networks_and_two_subnetworks',
-      'num_subnetworks': 2,
-      'adanet_lambda': 0.1,
-      'num_previous_ensemble_subnetworks': 2,
-      'expected_summary_scalars': {
-          _get_norm_summary_key(0): [1 / 4.],
-          _get_norm_summary_key(1): [1 / 4.],
-          _get_norm_summary_key(2): [1 / 4.],
-          _get_norm_summary_key(3): [1 / 4.],
-          _get_fractions_summary_key(0): [1 / 4.],
-          _get_fractions_summary_key(1): [1 / 4.],
-          _get_fractions_summary_key(2): [1 / 4.],
-          _get_fractions_summary_key(3): [1 / 4.],
-          _get_complexity_regularization_summary_key(): [1 / 5.],
-      },
-      'expected_complexity_regularization': 1 / 5.,
-  }, {
-      'testcase_name': 'all_nets_and_string_multihead',
-      'num_subnetworks': 2,
-      'adanet_lambda': 0.1,
-      'multi_head': ['head1', 'head2'],
-      'use_bias': True,
-      'num_previous_ensemble_subnetworks': 2,
-      'expected_summary_scalars': {
-          _get_norm_summary_key(0): [1 / 4., 1 / 4.],
-          _get_norm_summary_key(1): [1 / 4., 1 / 4.],
-          _get_norm_summary_key(2): [1 / 4., 1 / 4.],
-          _get_norm_summary_key(3): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(0): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(1): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(2): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(3): [1 / 4., 1 / 4.],
-          _get_complexity_regularization_summary_key(): [1 / 5., 1 / 5.],
-      },
-      'expected_complexity_regularization': 2 / 5.,
-  }, {
-      'testcase_name': 'all_nets_and_string_tuple_multihead',
-      'num_subnetworks': 2,
-      'adanet_lambda': 0.1,
-      'multi_head': [('bar', 'baz'), ('foo', 'bar')],
-      'use_bias': True,
-      'num_previous_ensemble_subnetworks': 2,
-      'expected_summary_scalars': {
-          _get_norm_summary_key(0): [1 / 4., 1 / 4.],
-          _get_norm_summary_key(1): [1 / 4., 1 / 4.],
-          _get_norm_summary_key(2): [1 / 4., 1 / 4.],
-          _get_norm_summary_key(3): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(0): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(1): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(2): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(3): [1 / 4., 1 / 4.],
-          _get_complexity_regularization_summary_key(): [1 / 5., 1 / 5.],
-      },
-      'expected_complexity_regularization': 2 / 5.,
-  }, {
-      'testcase_name': 'all_nets_and_tuple_multihead',
-      'num_subnetworks': 2,
-      'adanet_lambda': 0.1,
-      'multi_head': [('bar', 0), ('foo', 1)],
-      'use_bias': True,
-      'num_previous_ensemble_subnetworks': 2,
-      'expected_summary_scalars': {
-          _get_norm_summary_key(0): [1 / 4., 1 / 4.],
-          _get_norm_summary_key(1): [1 / 4., 1 / 4.],
-          _get_norm_summary_key(2): [1 / 4., 1 / 4.],
-          _get_norm_summary_key(3): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(0): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(1): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(2): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(3): [1 / 4., 1 / 4.],
-          _get_complexity_regularization_summary_key(): [1 / 5., 1 / 5.],
-      },
-      'expected_complexity_regularization': 2 / 5.,
-  }, {
-      'testcase_name': 'all_nets_and_number_multihead',
-      'num_subnetworks': 2,
-      'adanet_lambda': 0.1,
-      'multi_head': [0, 1],
-      'use_bias': True,
-      'num_previous_ensemble_subnetworks': 2,
-      'expected_summary_scalars': {
-          _get_norm_summary_key(0): [1 / 4., 1 / 4.],
-          _get_norm_summary_key(1): [1 / 4., 1 / 4.],
-          _get_norm_summary_key(2): [1 / 4., 1 / 4.],
-          _get_norm_summary_key(3): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(0): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(1): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(2): [1 / 4., 1 / 4.],
-          _get_fractions_summary_key(3): [1 / 4., 1 / 4.],
-          _get_complexity_regularization_summary_key(): [1 / 5., 1 / 5.],
-      },
-      'expected_complexity_regularization': 2 / 5.,
-  }, {
-      'testcase_name': 'all_nets_with_warm_start',
-      'num_subnetworks': 2,
-      'adanet_lambda': 0.1,
-      'warm_start_mixture_weights': True,
-      'num_previous_ensemble_subnetworks': 2,
-      'expected_summary_scalars': {
-          _get_norm_summary_key(0): [1.],
-          _get_norm_summary_key(1): [1.],
-          _get_norm_summary_key(2): [0.25],
-          _get_norm_summary_key(3): [0.25],
-          _get_fractions_summary_key(0): [.4],
-          _get_fractions_summary_key(1): [.4],
-          _get_fractions_summary_key(2): [.1],
-          _get_fractions_summary_key(3): [.1],
-          _get_complexity_regularization_summary_key(): [1 / 2.],
-      },
-      'expected_complexity_regularization': 1 / 2.,
-  }, {
-      'testcase_name': 'all_nets_with_warm_start_and_multihead',
-      'num_subnetworks': 2,
-      'adanet_lambda': 0.1,
-      'multi_head': ['head1', 'head2'],
-      'use_bias': True,
-      'warm_start_mixture_weights': True,
-      'num_previous_ensemble_subnetworks': 2,
-      'expected_summary_scalars': {
-          _get_norm_summary_key(0): [1., 1.],
-          _get_norm_summary_key(1): [1., 1.],
-          _get_norm_summary_key(2): [0.25, .25],
-          _get_norm_summary_key(3): [0.25, .25],
-          _get_fractions_summary_key(0): [.4, .4],
-          _get_fractions_summary_key(1): [.4, .4],
-          _get_fractions_summary_key(2): [.1, .1],
-          _get_fractions_summary_key(3): [.1, .1],
-          _get_complexity_regularization_summary_key(): [1 / 2., 1 / 2.],
-      },
-      'expected_complexity_regularization': 1.,
-  })
+  @parameterized.named_parameters(
+      {
+          'testcase_name': 'default',
+          'expected_summary_scalars': {
+              _get_norm_summary_key(0): [1],
+              _get_fractions_summary_key(0): [1],
+              _get_complexity_regularization_summary_key(): [0.],
+          },
+          'expected_complexity_regularization': 0.,
+      }, {
+          'testcase_name': 'one_previous_network',
+          'num_previous_ensemble_subnetworks': 1,
+          'expected_summary_scalars': {
+              _get_norm_summary_key(0): [0.5],
+              _get_norm_summary_key(1): [0.5],
+              _get_fractions_summary_key(0): [0.5],
+              _get_fractions_summary_key(1): [0.5],
+              _get_complexity_regularization_summary_key(): [0.],
+          },
+          'expected_complexity_regularization': 0.,
+      }, {
+          'testcase_name': 'one_previous_network_with_lambda',
+          'adanet_lambda': 0.1,
+          'num_previous_ensemble_subnetworks': 1,
+          'expected_summary_scalars': {
+              _get_norm_summary_key(0): [0.5],
+              _get_norm_summary_key(1): [0.5],
+              _get_fractions_summary_key(0): [0.5],
+              _get_fractions_summary_key(1): [0.5],
+              _get_complexity_regularization_summary_key(): [0.2],
+          },
+          'expected_complexity_regularization': 0.2,
+      }, {
+          'testcase_name': 'two_subnetworks_one_previous_network_with_lambda',
+          'adanet_lambda': 0.1,
+          'num_previous_ensemble_subnetworks': 1,
+          'expected_summary_scalars': {
+              _get_norm_summary_key(0): [0.5],
+              _get_norm_summary_key(1): [0.5],
+              _get_fractions_summary_key(0): [0.5],
+              _get_fractions_summary_key(1): [0.5],
+              _get_complexity_regularization_summary_key(): [0.2],
+          },
+          'expected_complexity_regularization': 0.2,
+      }, {
+          'testcase_name': 'all_previous_networks_with_lambda',
+          'adanet_lambda': 0.1,
+          'num_previous_ensemble_subnetworks': 2,
+          'expected_summary_scalars': {
+              _get_norm_summary_key(0): [1 / 3.],
+              _get_norm_summary_key(1): [1 / 3.],
+              _get_norm_summary_key(2): [1 / 3.],
+              _get_fractions_summary_key(0): [1 / 3.],
+              _get_fractions_summary_key(1): [1 / 3.],
+              _get_fractions_summary_key(2): [1 / 3.],
+              _get_complexity_regularization_summary_key(): [1 / 5.],
+          },
+          'expected_complexity_regularization': 1 / 5.,
+      }, {
+          'testcase_name': 'all_previous_networks_and_two_subnetworks',
+          'num_subnetworks': 2,
+          'adanet_lambda': 0.1,
+          'num_previous_ensemble_subnetworks': 2,
+          'expected_summary_scalars': {
+              _get_norm_summary_key(0): [1 / 4.],
+              _get_norm_summary_key(1): [1 / 4.],
+              _get_norm_summary_key(2): [1 / 4.],
+              _get_norm_summary_key(3): [1 / 4.],
+              _get_fractions_summary_key(0): [1 / 4.],
+              _get_fractions_summary_key(1): [1 / 4.],
+              _get_fractions_summary_key(2): [1 / 4.],
+              _get_fractions_summary_key(3): [1 / 4.],
+              _get_complexity_regularization_summary_key(): [1 / 5.],
+          },
+          'expected_complexity_regularization': 1 / 5.,
+      }, {
+          'testcase_name': 'all_nets_and_string_multihead',
+          'num_subnetworks': 2,
+          'adanet_lambda': 0.1,
+          'multi_head': ['head1', 'head2'],
+          'use_bias': True,
+          'num_previous_ensemble_subnetworks': 2,
+          'expected_summary_scalars': {
+              _get_norm_summary_key(0): [1 / 4., 1 / 4.],
+              _get_norm_summary_key(1): [1 / 4., 1 / 4.],
+              _get_norm_summary_key(2): [1 / 4., 1 / 4.],
+              _get_norm_summary_key(3): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(0): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(1): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(2): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(3): [1 / 4., 1 / 4.],
+              _get_complexity_regularization_summary_key(): [1 / 5., 1 / 5.],
+          },
+          'expected_complexity_regularization': 2 / 5.,
+      }, {
+          'testcase_name': 'all_nets_and_string_tuple_multihead',
+          'num_subnetworks': 2,
+          'adanet_lambda': 0.1,
+          'multi_head': [('bar', 'baz'), ('foo', 'bar')],
+          'use_bias': True,
+          'num_previous_ensemble_subnetworks': 2,
+          'expected_summary_scalars': {
+              _get_norm_summary_key(0): [1 / 4., 1 / 4.],
+              _get_norm_summary_key(1): [1 / 4., 1 / 4.],
+              _get_norm_summary_key(2): [1 / 4., 1 / 4.],
+              _get_norm_summary_key(3): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(0): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(1): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(2): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(3): [1 / 4., 1 / 4.],
+              _get_complexity_regularization_summary_key(): [1 / 5., 1 / 5.],
+          },
+          'expected_complexity_regularization': 2 / 5.,
+      }, {
+          'testcase_name': 'all_nets_and_tuple_multihead',
+          'num_subnetworks': 2,
+          'adanet_lambda': 0.1,
+          'multi_head': [('bar', 0), ('foo', 1)],
+          'use_bias': True,
+          'num_previous_ensemble_subnetworks': 2,
+          'expected_summary_scalars': {
+              _get_norm_summary_key(0): [1 / 4., 1 / 4.],
+              _get_norm_summary_key(1): [1 / 4., 1 / 4.],
+              _get_norm_summary_key(2): [1 / 4., 1 / 4.],
+              _get_norm_summary_key(3): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(0): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(1): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(2): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(3): [1 / 4., 1 / 4.],
+              _get_complexity_regularization_summary_key(): [1 / 5., 1 / 5.],
+          },
+          'expected_complexity_regularization': 2 / 5.,
+      }, {
+          'testcase_name': 'all_nets_and_number_multihead',
+          'num_subnetworks': 2,
+          'adanet_lambda': 0.1,
+          'multi_head': [0, 1],
+          'use_bias': True,
+          'num_previous_ensemble_subnetworks': 2,
+          'expected_summary_scalars': {
+              _get_norm_summary_key(0): [1 / 4., 1 / 4.],
+              _get_norm_summary_key(1): [1 / 4., 1 / 4.],
+              _get_norm_summary_key(2): [1 / 4., 1 / 4.],
+              _get_norm_summary_key(3): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(0): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(1): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(2): [1 / 4., 1 / 4.],
+              _get_fractions_summary_key(3): [1 / 4., 1 / 4.],
+              _get_complexity_regularization_summary_key(): [1 / 5., 1 / 5.],
+          },
+          'expected_complexity_regularization': 2 / 5.,
+      }, {
+          'testcase_name': 'all_nets_with_warm_start',
+          'num_subnetworks': 2,
+          'adanet_lambda': 0.1,
+          'warm_start_mixture_weights': True,
+          'num_previous_ensemble_subnetworks': 2,
+          'expected_summary_scalars': {
+              _get_norm_summary_key(0): [1.],
+              _get_norm_summary_key(1): [1.],
+              _get_norm_summary_key(2): [0.25],
+              _get_norm_summary_key(3): [0.25],
+              _get_fractions_summary_key(0): [.4],
+              _get_fractions_summary_key(1): [.4],
+              _get_fractions_summary_key(2): [.1],
+              _get_fractions_summary_key(3): [.1],
+              _get_complexity_regularization_summary_key(): [1 / 2.],
+          },
+          'expected_complexity_regularization': 1 / 2.,
+      }, {
+          'testcase_name': 'all_nets_with_warm_start_and_multihead',
+          'num_subnetworks': 2,
+          'adanet_lambda': 0.1,
+          'multi_head': ['head1', 'head2'],
+          'use_bias': True,
+          'warm_start_mixture_weights': True,
+          'num_previous_ensemble_subnetworks': 2,
+          'expected_summary_scalars': {
+              _get_norm_summary_key(0): [1., 1.],
+              _get_norm_summary_key(1): [1., 1.],
+              _get_norm_summary_key(2): [0.25, .25],
+              _get_norm_summary_key(3): [0.25, .25],
+              _get_fractions_summary_key(0): [.4, .4],
+              _get_fractions_summary_key(1): [.4, .4],
+              _get_fractions_summary_key(2): [.1, .1],
+              _get_fractions_summary_key(3): [.1, .1],
+              _get_complexity_regularization_summary_key(): [1 / 2., 1 / 2.],
+          },
+          'expected_complexity_regularization': 1.,
+      })
   def test_build_ensemble(self,
                           mixture_weight_type=ensemble.MixtureWeightType.SCALAR,
                           mixture_weight_initializer=None,
@@ -344,7 +344,7 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
         adanet_beta=adanet_beta,
         use_bias=use_bias)
 
-    with tf.variable_scope('dummy_adanet_scope_iteration_0'):
+    with tf_compat.v1.variable_scope('dummy_adanet_scope_iteration_0'):
       previous_ensemble_subnetworks_all = [
           self._build_subnetwork(multi_head),
           self._build_subnetwork(multi_head)
@@ -353,7 +353,7 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
       previous_ensemble = self._build_easy_ensemble(
           previous_ensemble_subnetworks_all)
 
-    with tf.variable_scope('dummy_adanet_scope_iteration_1'):
+    with tf_compat.v1.variable_scope('dummy_adanet_scope_iteration_1'):
       subnetworks_pool = [
           self._build_subnetwork(multi_head),
           self._build_subnetwork(multi_head),
@@ -377,24 +377,41 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
           summary=self.summary,
           previous_ensemble=previous_ensemble)
 
-    with self.test_session() as sess:
-      sess.run(tf.global_variables_initializer())
-
-      [summary_scalars, complexity_regularization] = sess.run(
-          [self.summary.scalars, built_ensemble.complexity_regularization])
+    if tf.executing_eagerly():
+      summary_scalars, complexity_regularization = (
+          self.summary.scalars, built_ensemble.complexity_regularization)
 
       if expected_summary_scalars:
         for key in expected_summary_scalars.keys():
-          self._assert_list_almost_equal(summary_scalars[key],
-                                         expected_summary_scalars[key])
+          self.assertAllClose(summary_scalars[key],
+                              expected_summary_scalars[key])
 
       self.assertEqual(
           [l.subnetwork for l in built_ensemble.weighted_subnetworks],
           previous_ensemble_subnetworks + subnetworks)
 
-      self.assertAlmostEqual(complexity_regularization,
-                             expected_complexity_regularization)
-      self.assertIsNotNone(sess.run(built_ensemble.logits))
+      self.assertAllClose(complexity_regularization,
+                          expected_complexity_regularization)
+      self.assertIsNotNone(built_ensemble.logits)
+    else:
+      with self.test_session() as sess:
+        sess.run(tf_compat.v1.global_variables_initializer())
+
+        summary_scalars, complexity_regularization = sess.run(
+            (self.summary.scalars, built_ensemble.complexity_regularization))
+
+        if expected_summary_scalars:
+          for key in expected_summary_scalars.keys():
+            self.assertAllClose(summary_scalars[key],
+                                expected_summary_scalars[key])
+
+        self.assertEqual(
+            [l.subnetwork for l in built_ensemble.weighted_subnetworks],
+            previous_ensemble_subnetworks + subnetworks)
+
+        self.assertAllClose(complexity_regularization,
+                            expected_complexity_regularization)
+        self.assertIsNotNone(sess.run(built_ensemble.logits))
 
   def test_build_ensemble_subnetwork_has_scalar_logits(self):
     logits = tf.ones(shape=(100,))
@@ -404,10 +421,12 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
     self.assertEqual([1], ensemble_spec.bias.shape.as_list())
 
   def test_build_train_op_no_op(self):
-    self.assertEqual(
-        ensemble.ComplexityRegularizedEnsembler().build_train_op(
-            *[None] * 7).type,  # arguments unused
-        tf.no_op().type)
+    train_op = ensemble.ComplexityRegularizedEnsembler().build_train_op(
+        *[None] * 7)  # arguments unused
+    if tf.executing_eagerly():
+      self.assertIsNone(train_op)
+    else:
+      self.assertEqual(train_op.type, tf.no_op().type)
 
   def test_build_train_op(self):
     dummy_loss = tf.Variable(1e-3, name='dummy_loss')
@@ -420,7 +439,7 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
   def tearDown(self):
     self.summary.clear_scalars()
     mock.patch.stopall()
-    tf.reset_default_graph()
+    tf_compat.v1.reset_default_graph()
     super(ComplexityRegularizedEnsemblerTest, self).tearDown()
 
 

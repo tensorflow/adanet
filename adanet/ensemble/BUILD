@@ -45,6 +45,8 @@ py_library(
     srcs = ["weighted.py"],
     deps = [
         ":ensembler",
+        "//adanet/tf_compat",
+        "@absl_py//absl/logging",
     ],
 )
 
@@ -56,6 +58,7 @@ py_test(
         ":ensemble",
         "//adanet/core",
         "//adanet/subnetwork",
+        "//adanet/tf_compat",
         "@absl_py//absl/testing:parameterized",
     ],
 )

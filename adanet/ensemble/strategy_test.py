@@ -21,11 +21,13 @@ from __future__ import print_function
 
 from adanet import ensemble
 from adanet import subnetwork
-
+import mock
 import tensorflow as tf
-mock = tf.test.mock
+
+tfe = tf.contrib.eager
 
 
+@tf.contrib.eager.run_all_tests_in_graph_and_eager_modes
 class StrategyTest(tf.test.TestCase):
 
   def setUp(self):
