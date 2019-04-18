@@ -30,6 +30,12 @@ env:
     - TF_VERSION="1.12.*" SUITE="e2e"
     - TF_VERSION="1.13.*" SUITE="e2e"
     - TF_VERSION="tf-nightly" SUITE="e2e"
+
+    # Begin testing TF 2.0 support.
+    allow_failures:
+    - TF_VERSION="2.0.0-alpha0" SUITE="quick"
+    - TF_VERSION="2.0.0-alpha0" SUITE="e2e"
+
 before_install:
   - sudo apt-get -y install pkg-config zip g++ zlib1g-dev unzip
   - wget https://github.com/bazelbuild/bazel/releases/download/"$BAZEL_VERSION"/bazel-"$BAZEL_VERSION"-installer-linux-x86_64.sh
