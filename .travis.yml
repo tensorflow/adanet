@@ -35,7 +35,14 @@ env:
 
 matrix:
   allow_failures:
-    - env: TF_VERSION="2.0.0-alpha0"
+    - python: "2.7"
+      env: TF_VERSION="2.0.0-alpha0" SUITE="quick"
+    - python: "2.7"
+      env: TF_VERSION="2.0.0-alpha0" SUITE="e2e"
+    - python: "3.6"
+      env: TF_VERSION="2.0.0-alpha0" SUITE="quick"
+    - python: "3.6"
+      env: TF_VERSION="2.0.0-alpha0" SUITE="e2e"
 
 before_install:
   - sudo apt-get -y install pkg-config zip g++ zlib1g-dev unzip
