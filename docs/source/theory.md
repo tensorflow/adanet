@@ -66,7 +66,7 @@ rigorous manner.
 Using these insights, AdaNet seeks to minimize the generalization error more
 directly using this loss function:
 
-$$\begin{align*} &F\left ( w \right ) = \frac{1}{m} \sum_{i=0}^{N-1} \Phi \left (\sum_{j=0}^{N-1}w_jh_j(x_i), y_i  \right ) + \sum_{j=0}^{N-1} \left (\lambda r(h_j) + \beta   \right )\left | w_j \right |\\ &\text{where }w_j \text{ is the weight of model } j \text{'s contribution to the ensemble,}\\ &h_j \text{ is model } j,\\ &\Phi \text{ is the loss function,}\\ &r(h_j) \text{ is model } j\text{'s complexity, and}\\ &\lambda \text{ and } \beta \text{ are tunable hyperparameters.} \end{align*}$$
+$$\begin{align*} &F\left ( w \right ) = \frac{1}{m} \sum_{i=1}^{m} \Phi \left (\sum_{j=1}^{N}w_jh_j(x_i), y_i  \right ) + \sum_{j=1}^{N} \left (\lambda r(h_j) + \beta   \right )\left | w_j \right |\\ &\text{where }w_j \text{ is the weight of model } j \text{'s contribution to the ensemble,}\\ &h_j \text{ is model } j,\\ &\Phi \text{ is the loss function,}\\ &r(h_j) \text{ is model } j\text{'s complexity, and}\\ &\lambda \text{ and } \beta \text{ are tunable hyperparameters.} \end{align*}$$
 
 By minimizing this loss function, AdaNet is able to combine base learners of
 different complexities in a way that generalizes better than one might expect
