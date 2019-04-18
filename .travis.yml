@@ -20,8 +20,8 @@ env:
     # - TF_VERSION="1.10.*" SUITE="quick"
     # - TF_VERSION="1.11.*" SUITE="quick"
     # - TF_VERSION="1.12.*" SUITE="quick"
-    # - TF_VERSION="1.13.*" SUITE="quick"
-    - TF_VERSION="tf-nightly" SUITE="quick"
+    - TF_VERSION="1.13.*" SUITE="quick"
+    # - TF_VERSION="tf-nightly" SUITE="quick"
     - TF_VERSION="2.0.0-alpha0" SUITE="quick"
 
     # E2E Tests.
@@ -29,8 +29,8 @@ env:
     # - TF_VERSION="1.10.*" SUITE="e2e"
     # - TF_VERSION="1.11.*" SUITE="e2e"
     # - TF_VERSION="1.12.*" SUITE="e2e"
-    # - TF_VERSION="1.13.*" SUITE="e2e"
-    - TF_VERSION="tf-nightly" SUITE="e2e"
+    - TF_VERSION="1.13.*" SUITE="e2e"
+    # - TF_VERSION="tf-nightly" SUITE="e2e"
     - TF_VERSION="2.0.0-alpha0" SUITE="e2e"
 
 matrix:
