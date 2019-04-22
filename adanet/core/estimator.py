@@ -110,8 +110,8 @@ class _EvalMetricSaverHook(tf.train.SessionRunHook):
     # the metric variables. The metrics themselves are computed as a result of
     # being returned in the EstimatorSpec by _adanet_model_fn.
     metric_fn, tensors = self._eval_metrics
-    tensors = {k: tf.placeholder(v.dtype, v.shape) for k, v in tensors.items()}
-    eval_metric_ops = metric_fn(**tensors)
+    tensors = [tf.placeholder(t.dtype, t.shape) for t in tensors]
+    eval_metric_ops = metric_fn(*tensors)
     self._eval_metric_tensors = {k: v[0] for k, v in eval_metric_ops.items()}
 
   def _dict_to_str(self, dictionary):
