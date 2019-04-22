@@ -35,8 +35,8 @@ def _run_metrics(sess, metrics):
   metric_ops = metrics
   if isinstance(metric_ops, tuple):
     metric_ops = call_eval_metrics(metric_ops)
-  sess.run((tf.global_variables_initializer(),
-            tf.local_variables_initializer()))
+  sess.run((tf.compat.v1.global_variables_initializer(),
+            tf.compat.v1.local_variables_initializer()))
   sess.run(metric_ops)
   return {k: sess.run(metric_ops[k][0]) for k in metric_ops}
 
@@ -53,7 +53,7 @@ class MetricsTest(tu.AdanetTestCase):
     self._labels = {head: labels for head in heads}
     predictions = {(head, "predictions"): labels for head in heads}
     loss = tf.constant(2.)
-    self._estimator_spec = tf.contrib.tpu.TPUEstimatorSpec(
+    self._estimator_spec = tf.compat.v1.estimator.tpu.TPUEstimatorSpec(
         mode=tf.estimator.ModeKeys.EVAL,
         loss=loss,
         predictions=predictions,
@@ -76,13 +76,13 @@ class MetricsTest(tu.AdanetTestCase):
         self._estimator_spec.loss
     ]
     self._assert_tensors_equal(actual, expected)
-    return {"metric_1": tf.metrics.mean(tf.constant(1.))}
+    return {"metric_1": tf.compat.v1.metrics.mean(tf.constant(1.))}
 
   def _metric_fn(self, features, predictions):
     actual = [features, predictions]
     expected = [self._features, self._estimator_spec.predictions]
     self._assert_tensors_equal(actual, expected)
-    return {"metric_2": tf.metrics.mean(tf.constant(2.))}
+    return {"metric_2": tf.compat.v1.metrics.mean(tf.constant(2.))}
 
   @parameterized.named_parameters({
       "testcase_name": "use_tpu",
@@ -110,7 +110,7 @@ class MetricsTest(tu.AdanetTestCase):
     overridden_value = 100.
 
     def _overriding_metric_fn():
-      return {"metric_1": tf.metrics.mean(tf.constant(overridden_value))}
+      return {"metric_1": tf.compat.v1.metrics.mean(tf.constant(overridden_value))}
 
     metrics = _SubnetworkMetrics()
     metrics.create_eval_metrics(self._features, self._labels,
@@ -164,7 +164,7 @@ class MetricsTest(tu.AdanetTestCase):
     for i in range(10):
 
       def metric_fn(val=i):
-        return {"ensemble_metric": tf.metrics.mean(tf.constant(val))}
+        return {"ensemble_metric": tf.compat.v1.metrics.mean(tf.constant(val))}
 
       spec = _EnsembleSpec(
           name="ensemble_{}".format(i),

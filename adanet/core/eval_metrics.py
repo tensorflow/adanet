@@ -104,7 +104,7 @@ class _SubnetworkMetrics(object):
     self._eval_metrics_store.add_eval_metrics(
         self._templatize_metric_fn(spec_fn), spec_args)
 
-    loss_fn = lambda loss: {"loss": tf.metrics.mean(loss)}
+    loss_fn = lambda loss: {"loss": tf.compat.v1.metrics.mean(loss)}
     loss_fn_args = [tf.reshape(estimator_spec.loss, [1])]
     self._eval_metrics_store.add_eval_metrics(
         self._templatize_metric_fn(loss_fn), loss_fn_args)
@@ -147,21 +147,21 @@ class _SubnetworkMetrics(object):
       for i, key in enumerate(sorted(metrics)):
         tensor, op = metrics[key]
         # key cannot be in var name since it may contain illegal chars.
-        var = tf.get_variable(
+        var = tf.compat.v1.get_variable(
             "metric_{}".format(i),
             shape=tensor.shape,
             dtype=tensor.dtype,
             trainable=False,
-            initializer=tf.zeros_initializer(),
-            collections=[tf.GraphKeys.LOCAL_VARIABLES])
+            initializer=tf.compat.v1.zeros_initializer(),
+            collections=[tf.compat.v1.GraphKeys.LOCAL_VARIABLES])
         if isinstance(op, tf.Operation) or op.shape != tensor.shape:
           with tf.control_dependencies([op]):
-            op = tf.assign(var, tensor)
-        metric = (var, tf.assign(var, op))
+            op = tf.compat.v1.assign(var, tensor)
+        metric = (var, tf.compat.v1.assign(var, op))
         wrapped_metrics[key] = metric
       return wrapped_metrics
 
-    return tf.make_template("metric_fn_template", _metric_fn)
+    return tf.compat.v1.make_template("metric_fn_template", _metric_fn)
 
   def eval_metrics_tuple(self):
     """Returns tuple of (metric_fn, tensors) which can be executed on TPU."""
@@ -210,15 +210,15 @@ class _EnsembleMetrics(_SubnetworkMetrics):
       # included in the ensemble name.
       architecture_ = " | ".join([name for _, name in architecture.subnetworks])
       architecture_ = "| {} |".format(architecture_)
-      summary_metadata = tf.SummaryMetadata(
-          plugin_data=tf.SummaryMetadata.PluginData(plugin_name="text"))
-      summary_proto = tf.summary.Summary()
+      summary_metadata = tf.compat.v1.SummaryMetadata(
+          plugin_data=tf.compat.v1.SummaryMetadata.PluginData(plugin_name="text"))
+      summary_proto = tf.compat.v1.summary.Summary()
       summary_proto.value.add(
           metadata=summary_metadata,
           tag="architecture/adanet",
-          tensor=tf.make_tensor_proto(architecture_, dtype=tf.string))
+          tensor=tf.compat.v1.make_tensor_proto(architecture_, dtype=tf.string))
       architecture_summary = tf.convert_to_tensor(
-          summary_proto.SerializeToString(), name="architecture")
+          value=summary_proto.SerializeToString(), name="architecture")
       return {
           "architecture/adanet/ensembles": (architecture_summary, tf.no_op())
       }
@@ -283,9 +283,9 @@ class _IterationMetrics(object):
     def _best_eval_metrics_fn(*args):
       """Returns the best eval metrics."""
 
-      with tf.variable_scope("best_eval_metrics"):
+      with tf.compat.v1.variable_scope("best_eval_metrics"):
         args = list(args)
-        idx, idx_update_op = tf.metrics.mean(args.pop())
+        idx, idx_update_op = tf.compat.v1.metrics.mean(args.pop())
 
         metric_fns = self._candidates_eval_metrics_store.metric_fns
         metric_fn_args = self._candidates_eval_metrics_store.pack_args(
