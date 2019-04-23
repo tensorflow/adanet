@@ -209,10 +209,10 @@ def dataset_input_fn(features=8., labels=9.):
 
     del params  # Unused.
 
-    input_features = tf_compat.v1.data.make_one_shot_iterator(tf.data.Dataset.from_tensors(
+    input_features = tf_compat.make_one_shot_iterator(tf.data.Dataset.from_tensors(
         [features])).get_next()
     if labels is not None:
-      input_labels = tf_compat.v1.data.make_one_shot_iterator(tf.data.Dataset.from_tensors(
+      input_labels = tf_compat.make_one_shot_iterator(tf.data.Dataset.from_tensors(
           [labels])).get_next()
     else:
       input_labels = None

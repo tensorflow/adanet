@@ -71,3 +71,9 @@ def version_greater_or_equal(semver):
   except:
     tf_version = tf.VERSION
   return LooseVersion(tf_version) >= LooseVersion(semver)
+
+def make_one_shot_iterator(dataset):
+  try:
+    return v1.data.make_one_shot_iterator(dataset)
+  except AttributeError:
+    return dataset.make_one_shot_iterator()

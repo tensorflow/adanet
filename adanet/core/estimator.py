@@ -67,7 +67,7 @@ class _StopAfterTrainingHook(tf_compat.SessionRunHook):
     """See `SessionRunHook`."""
 
     del run_context  # Unused
-    return tf.estimator.SessionRunArgs(self._iteration.is_over_fn())
+    return tf.train.SessionRunArgs(self._iteration.is_over_fn())
 
   def after_run(self, run_context, run_values):
     """See `SessionRunHook`."""
@@ -112,8 +112,8 @@ class _EvalMetricSaverHook(tf_compat.SessionRunHook):
     # the metric variables. The metrics themselves are computed as a result of
     # being returned in the EstimatorSpec by _adanet_model_fn.
     metric_fn, tensors = self._eval_metrics
-    tensors = {k: tf.placeholder(v.dtype, v.shape) for k, v in tensors.items()}
-    eval_metric_ops = metric_fn(**tensors)
+    tensors = [tf.placeholder(t.dtype, t.shape) for t in tensors]
+    eval_metric_ops = metric_fn(*tensors)
     self._eval_metric_tensors = {k: v[0] for k, v in eval_metric_ops.items()}
 
   def _dict_to_str(self, dictionary):
@@ -235,7 +235,7 @@ class _HookContextDecorator(tf_compat.SessionRunHook):
     """Initializes a _HookContextDecorator instance.
 
     Args:
-      hook: The tf_compat.SessionRunHook to decorate.
+      hook: The SessionRunHook to decorate.
       context: The context to enter before calling the hook's public methods.
       is_growing_phase: Whether we are in the AdaNet graph growing phase. If so,
         only hook.begin() and hook.end() will be called.
