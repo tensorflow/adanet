@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from distutils.version import LooseVersion
 import tensorflow as tf
 
 try:
@@ -39,3 +40,13 @@ def tensor_name(tensor):
   """
 
   return tensor.name.split(":")[-2]
+
+
+def version_greater_or_equal(semver):
+  """Returns whether the current TF version is >= to semver string."""
+
+  try:
+    tf_version = tf.version.VERSION
+  except:
+    tf_version = tf.VERSION
+  return LooseVersion(tf_version) >= LooseVersion(semver)
