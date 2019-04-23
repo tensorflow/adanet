@@ -104,7 +104,14 @@ class _SubnetworkMetrics(object):
     self._eval_metrics_store.add_eval_metrics(
         self._templatize_metric_fn(spec_fn), spec_args)
 
-    loss_fn = lambda loss: {"loss": tf.compat.v1.metrics.mean(loss)}
+    if tf.executing_eagerly():
+      loss_metric = tf.keras.metrics.Mean()
+
+      def loss_fn(loss):
+        loss_metric(loss)
+        return {"loss": loss_metric }
+    else:
+      loss_fn = lambda loss: {"loss": tf.compat.v1.metrics.mean(loss) }
     loss_fn_args = [tf.reshape(estimator_spec.loss, [1])]
     self._eval_metrics_store.add_eval_metrics(
         self._templatize_metric_fn(loss_fn), loss_fn_args)
@@ -136,6 +143,9 @@ class _SubnetworkMetrics(object):
     Returns:
       The original metric_fn wrapped with a template function.
     """
+
+    if tf.executing_eagerly():
+      return metric_fn
 
     def _metric_fn(*args, **kwargs):
       """The wrapping function to be returned."""
@@ -179,6 +189,17 @@ class _SubnetworkMetrics(object):
 
     return _metric_fn, self._eval_metrics_store.flatten_args()
 
+class _StringMetric(tf.keras.metrics.Metric):
+
+  def __init__(self, name='string_metric', **kwargs):
+    super(_StringMetric, self).__init__(name=name, **kwargs)
+    self._value = self.add_weight(name='value', initializer=tf.keras.initializers.Constant(''), dtype=tf.string)
+
+  def update_state(self, value):
+    self._value.assign(value)
+
+  def result(self):
+    return self._value
 
 class _EnsembleMetrics(_SubnetworkMetrics):
   """A object which creates evaluation metrics for Ensembles."""
@@ -219,9 +240,13 @@ class _EnsembleMetrics(_SubnetworkMetrics):
           tensor=tf.compat.v1.make_tensor_proto(architecture_, dtype=tf.string))
       architecture_summary = tf.convert_to_tensor(
           value=summary_proto.SerializeToString(), name="architecture")
-      return {
-          "architecture/adanet/ensembles": (architecture_summary, tf.no_op())
-      }
+
+      if tf.executing_eagerly:
+        metric = _StringMetric()
+        metric(architecture_summary)
+      else:
+        metric = (architecture_summary, tf.no_op())
+      return {"architecture/adanet/ensembles": metric}
 
     return _architecture_metric_fn
 
@@ -285,7 +310,11 @@ class _IterationMetrics(object):
 
       with tf.compat.v1.variable_scope("best_eval_metrics"):
         args = list(args)
-        idx, idx_update_op = tf.compat.v1.metrics.mean(args.pop())
+        if tf.executing_eagerly():
+          mean = tf.keras.metrics.Mean()
+          idx, idx_update_op = mean.result(), mean(args.pop())
+        else:
+          idx, idx_update_op = tf.compat.v1.metrics.mean(args.pop())
 
         metric_fns = self._candidates_eval_metrics_store.metric_fns
         metric_fn_args = self._candidates_eval_metrics_store.pack_args(

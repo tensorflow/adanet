@@ -25,12 +25,16 @@ import functools
 from adanet.core.estimator import Estimator
 from distutils.version import LooseVersion
 import tensorflow as tf
-from tensorflow.contrib.tpu.python.tpu import tpu_function
+from tensorflow.python.tpu import tpu_function
 from tensorflow.python.framework import ops  # pylint: disable=g-direct-tensorflow-import
 
+try:
+  _TPU_ESTIMATOR_CLASS = tf.contrib.estimator.tpu.TPUEstimator
+except AttributeError:
+  _TPU_ESTIMATOR_CLASS = object
 
 # TODO: Move hooks to their own module.
-class _StepCounterHook(tf.train.SessionRunHook):
+class _StepCounterHook(tf.estimator.SessionRunHook):
   """Hook that counts steps per second.
 
   TODO: Remove once Estimator uses summaries v2 by default.
@@ -106,7 +110,7 @@ class _StepCounterHook(tf.train.SessionRunHook):
         self._summary_writer.flush()
 
 
-class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
+class TPUEstimator(Estimator, _TPU_ESTIMATOR_CLASS):
   """An :class:`adanet.Estimator` capable of training and evaluating on TPU.
 
   Note: Unless :code:`use_tpu=False`, training will run on TPU. However,
@@ -157,6 +161,9 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                eval_batch_size=None,
                debug=False,
                **kwargs):
+
+    if LooseVersion(tf.VERSION) >= LooseVersion("2.0.0"):
+      raise ValueError("TPUEstimator is not yet supported with TensorFlow 2.0.")
 
     self._use_tpu = use_tpu
     if not self._use_tpu:

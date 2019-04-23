@@ -35,6 +35,8 @@ def _run_metrics(sess, metrics):
   metric_ops = metrics
   if isinstance(metric_ops, tuple):
     metric_ops = call_eval_metrics(metric_ops)
+  if tf.executing_eagerly():
+    return {k: metric_ops[k].result().numpy() for k in metric_ops}
   sess.run((tf.compat.v1.global_variables_initializer(),
             tf.compat.v1.local_variables_initializer()))
   sess.run(metric_ops)
@@ -65,8 +67,9 @@ class MetricsTest(tu.AdanetTestCase):
         }))
 
   def _assert_tensors_equal(self, actual, expected):
-    with self.test_session() as sess:
-      actual, expected = sess.run((actual, expected))
+    if not tf.executing_eagerly():
+      with self.test_session() as sess:
+        actual, expected = sess.run((actual, expected))
     self.assertEqual(actual, expected)
 
   def _spec_metric_fn(self, features, labels, predictions, loss):
@@ -76,12 +79,20 @@ class MetricsTest(tu.AdanetTestCase):
         self._estimator_spec.loss
     ]
     self._assert_tensors_equal(actual, expected)
+    if tf.executing_eagerly():
+      metric = tf.metrics.Mean()
+      metric(tf.constant(1.))
+      return {"metric_1": metric}
     return {"metric_1": tf.compat.v1.metrics.mean(tf.constant(1.))}
 
   def _metric_fn(self, features, predictions):
     actual = [features, predictions]
     expected = [self._features, self._estimator_spec.predictions]
     self._assert_tensors_equal(actual, expected)
+    if tf.executing_eagerly():
+      metric = tf.metrics.Mean()
+      metric(tf.constant(2.))
+      return {"metric_2": metric}
     return {"metric_2": tf.compat.v1.metrics.mean(tf.constant(2.))}
 
   @parameterized.named_parameters({
@@ -110,7 +121,12 @@ class MetricsTest(tu.AdanetTestCase):
     overridden_value = 100.
 
     def _overriding_metric_fn():
-      return {"metric_1": tf.compat.v1.metrics.mean(tf.constant(overridden_value))}
+      value = tf.constant(overridden_value)
+      if tf.executing_eagerly():
+        metric = tf.metrics.Mean()
+        metric.update_state(value)
+        return {"metric_1": metric}
+      return {"metric_1": tf.compat.v1.metrics.mean(value)}
 
     metrics = _SubnetworkMetrics()
     metrics.create_eval_metrics(self._features, self._labels,
@@ -164,6 +180,10 @@ class MetricsTest(tu.AdanetTestCase):
     for i in range(10):
 
       def metric_fn(val=i):
+        if tf.executing_eagerly():
+          metric = tf.metrics.Mean()
+          metric(tf.constant(val))
+          return {"ensemble_metric": metric}
         return {"ensemble_metric": tf.compat.v1.metrics.mean(tf.constant(val))}
 
       spec = _EnsembleSpec(
