@@ -2483,31 +2483,33 @@ class EstimatorTFLearnRunConfigTest(tu.AdanetTestCase):
   """
 
   def test_train(self):
-    tf_config = {
-        "task": {
-            "type": "chief",
-            "index": 0
-        },
-    }
-    os.environ["TF_CONFIG"] = json.dumps(tf_config)
-    run_config = tf.contrib.learn.RunConfig(tf_random_seed=42)
-    run_config._is_chief = True  # pylint: disable=protected-access
+    try:
+      tf_config = {
+          "task": {
+              "type": "chief",
+              "index": 0
+          },
+      }
+      os.environ["TF_CONFIG"] = json.dumps(tf_config)
+      run_config = tf.contrib.learn.RunConfig(tf_random_seed=42)
+      run_config._is_chief = True  # pylint: disable=protected-access
 
-    subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
-    estimator = Estimator(
-        head=tu.head(),
-        subnetwork_generator=subnetwork_generator,
-        max_iteration_steps=1,
-        model_dir=self.test_subdirectory,
-        config=run_config)
-    train_input_fn = tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS)
+      subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
+      estimator = Estimator(
+          head=tu.head(),
+          subnetwork_generator=subnetwork_generator,
+          max_iteration_steps=1,
+          model_dir=self.test_subdirectory,
+          config=run_config)
+      train_input_fn = tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS)
 
-    # Will fail if TF_CONFIG is not overwritten correctly in
-    # Estimator#prepare_next_iteration.
-    estimator.train(input_fn=train_input_fn, max_steps=3)
+      # Will fail if TF_CONFIG is not overwritten correctly in
+      # Estimator#prepare_next_iteration.
+      estimator.train(input_fn=train_input_fn, max_steps=3)
 
-    # Revert TF_CONFIG environment variable in order to not break other tests.
-    del os.environ["TF_CONFIG"]
+    finally:
+      # Revert TF_CONFIG environment variable in order to not break other tests.
+      del os.environ["TF_CONFIG"]
 
 
 if __name__ == "__main__":

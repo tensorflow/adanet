@@ -999,7 +999,7 @@ class Estimator(tf.estimator.Estimator):
       output_dir = self.model_dir
       if summary.scope:
         output_dir = os.path.join(output_dir, summary.namespace, summary.scope)
-      summary_saver_hook = tf.estimator.SummarySaverHook(
+      summary_saver_hook = tf_compat.SummarySaverHook(
           save_steps=self.config.save_summary_steps,
           output_dir=output_dir,
           summary_op=summary.merge_all())

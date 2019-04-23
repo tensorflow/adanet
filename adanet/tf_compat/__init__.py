@@ -36,6 +36,12 @@ except AttributeError:
   SessionRunHook = tf.train.SessionRunHook
 
 try:
+  SummarySaverHook = tf.estimator.SummarySaverHook
+except AttributeError:
+  SummarySaverHook = tf.train.SummarySaverHook
+
+
+try:
   TPUEstimatorSpec = tf.contrib.tpu.TPUEstimatorSpec
 except AttributeError:
   TPUEstimatorSpec = tf.compat.v1.estimator.tpu.TPUEstimatorSpec
