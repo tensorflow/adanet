@@ -25,7 +25,10 @@ import inspect
 from adanet import tf_compat
 import six
 import tensorflow as tf
-from tensorflow.python.keras.metrics import Metric
+try:
+  from tensorflow.python.keras.metrics import Metric
+except ImportError:
+  Metric = object
 from tensorflow.python.util import nest  # pylint: disable=g-direct-tensorflow-import
 
 

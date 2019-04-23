@@ -25,7 +25,10 @@ import functools
 from adanet.core.estimator import Estimator
 from distutils.version import LooseVersion
 import tensorflow as tf
-from tensorflow.python.tpu import tpu_function
+try:
+  from tensorflow.python.tpu import tpu_function
+except ImportError:
+  from tensorflow.contrib.tpu.python.tpu import tpu_function
 from tensorflow.python.framework import ops  # pylint: disable=g-direct-tensorflow-import
 
 try:
