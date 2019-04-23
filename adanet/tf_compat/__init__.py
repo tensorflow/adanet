@@ -40,11 +40,15 @@ try:
 except AttributeError:
   SummarySaverHook = tf.train.SummarySaverHook
 
+try:
+  TPUEstimatorSpec = v1.estimator.tpu.TPUEstimatorSpec
+except AttributeError:
+  TPUEstimatorSpec = tf.contrib.tpu.TPUEstimatorSpec
 
 try:
-  TPUEstimatorSpec = tf.contrib.tpu.TPUEstimatorSpec
+  TPUEstimator = tf.contrib.tpu.TPUEstimator
 except AttributeError:
-  TPUEstimatorSpec = tf.compat.v1.estimator.tpu.TPUEstimatorSpec
+  TPUEstimator = object
 
 
 def tensor_name(tensor):
@@ -72,8 +76,15 @@ def version_greater_or_equal(semver):
     tf_version = tf.VERSION
   return LooseVersion(tf_version) >= LooseVersion(semver)
 
+
 def make_one_shot_iterator(dataset):
   try:
     return v1.data.make_one_shot_iterator(dataset)
   except AttributeError:
     return dataset.make_one_shot_iterator()
+
+def random_normal(*args, **kwargs):
+  try:
+    return tf.random.normal(*args, **kwargs)
+  except AttributeError:
+    return tf.random_normal(*args, **kwargs)

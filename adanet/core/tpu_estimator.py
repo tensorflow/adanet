@@ -32,11 +32,6 @@ except ImportError:
   from tensorflow.contrib.tpu.python.tpu import tpu_function
 from tensorflow.python.framework import ops  # pylint: disable=g-direct-tensorflow-import
 
-try:
-  BaseTPUEstimator = tf.contrib.tpu.TPUEstimator
-except AttributeError:
-  BaseTPUEstimator = object
-
 # TODO: Move hooks to their own module.
 class _StepCounterHook(tf_compat.SessionRunHook):
   """Hook that counts steps per second.
@@ -114,7 +109,7 @@ class _StepCounterHook(tf_compat.SessionRunHook):
         self._summary_writer.flush()
 
 
-class TPUEstimator(Estimator, BaseTPUEstimator):
+class TPUEstimator(Estimator, tf_compat.TPUEstimator):
   """An :class:`adanet.Estimator` capable of training and evaluating on TPU.
 
   Note: Unless :code:`use_tpu=False`, training will run on TPU. However,

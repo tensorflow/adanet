@@ -38,7 +38,7 @@ def dummy_tensor(shape=(), random_seed=42):
   """Returns a randomly initialized tensor."""
 
   return tf.Variable(
-      tf.random.normal(shape=shape, seed=random_seed),
+      tf_compat.random_normal(shape=shape, seed=random_seed),
       trainable=False).read_value()
 
 
