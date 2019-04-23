@@ -25,7 +25,10 @@ import os
 
 from adanet import tf_compat
 import tensorflow as tf
-from tensorflow.python.tpu import tpu_function
+try:
+  from tensorflow.python.tpu import tpu_function
+except ImportError:
+  from tensorflow.contrib.tpu.python.tpu import tpu_function
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.ops import summary_op_util
 from tensorflow.python.ops import summary_ops_v2 as summary_v2_lib
