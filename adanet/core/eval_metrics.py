@@ -108,7 +108,7 @@ class _SubnetworkMetrics(object):
     self._eval_metrics_store.add_eval_metrics(
         self._templatize_metric_fn(spec_fn), spec_args)
 
-    if tf_compat.version_greater_or_equal("1.13.0"):
+    if tf_compat.version_greater_or_equal("1.13.0") and tf.executing_eagerly():
       loss_metric = tf.keras.metrics.Mean("mean_loss")
 
       def loss_fn(loss):

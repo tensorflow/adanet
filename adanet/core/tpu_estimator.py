@@ -22,6 +22,7 @@ from __future__ import print_function
 import collections
 import functools
 
+from adanet import tf_compat
 from adanet.core.estimator import Estimator
 from distutils.version import LooseVersion
 import tensorflow as tf
@@ -277,7 +278,7 @@ class TPUEstimator(Estimator, _TPU_ESTIMATOR_CLASS):
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     iteration_estimator_spec = current_iteration.estimator_spec
-    return tf.contrib.tpu.TPUEstimatorSpec(
+    return tf_compat.TPUEstimatorSpec(
         mode=mode,
         predictions=iteration_estimator_spec.predictions,
         loss=iteration_estimator_spec.loss,

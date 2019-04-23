@@ -35,6 +35,11 @@ try:
 except AttributeError:
   SessionRunHook = tf.train.SessionRunHook
 
+try:
+  TPUEstimatorSpec = tf.contrib.tpu.TPUEstimatorSpec
+except AttributeError:
+  TPUEstimatorSpec = tf.compat.v1.estimator.tpu.TPUEstimatorSpec
+
 
 def tensor_name(tensor):
   """Returns the Tensor's name.
