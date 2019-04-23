@@ -38,7 +38,7 @@ except AttributeError:
   _TPU_ESTIMATOR_CLASS = object
 
 # TODO: Move hooks to their own module.
-class _StepCounterHook(tf.estimator.SessionRunHook):
+class _StepCounterHook(tf_compat.SessionRunHook):
   """Hook that counts steps per second.
 
   TODO: Remove once Estimator uses summaries v2 by default.

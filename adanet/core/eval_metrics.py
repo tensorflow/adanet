@@ -251,7 +251,7 @@ class _EnsembleMetrics(_SubnetworkMetrics):
       architecture_summary = tf.convert_to_tensor(
           value=summary_proto.SerializeToString(), name="architecture")
 
-      if tf.executing_eagerly:
+      if tf.executing_eagerly():
         metric = _StringMetric()
         metric(architecture_summary)
       else:
