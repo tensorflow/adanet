@@ -25,7 +25,7 @@ import inspect
 from adanet import tf_compat
 import six
 import tensorflow as tf
-
+from tensorflow.python.keras.metrics import Metric
 from tensorflow.python.util import nest  # pylint: disable=g-direct-tensorflow-import
 
 
@@ -191,7 +191,7 @@ class _SubnetworkMetrics(object):
     return _metric_fn, self._eval_metrics_store.flatten_args()
 
 
-class _StringMetric(tf.keras.metrics.Metric):
+class _StringMetric(Metric):
 
   def __init__(self, name="string_metric", **kwargs):
     super(_StringMetric, self).__init__(name=name, **kwargs)
