@@ -25,6 +25,7 @@ import sys
 
 from absl import flags
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.core.architecture import _Architecture
 from adanet.core.ensemble_builder import _EnsembleSpec
 from adanet.ensemble import ComplexityRegularized
@@ -208,10 +209,10 @@ def dataset_input_fn(features=8., labels=9.):
 
     del params  # Unused.
 
-    input_features = tf.compat.v1.data.make_one_shot_iterator(tf.data.Dataset.from_tensors(
+    input_features = tf_compat.v1.data.make_one_shot_iterator(tf.data.Dataset.from_tensors(
         [features])).get_next()
     if labels is not None:
-      input_labels = tf.compat.v1.data.make_one_shot_iterator(tf.data.Dataset.from_tensors(
+      input_labels = tf_compat.v1.data.make_one_shot_iterator(tf.data.Dataset.from_tensors(
           [labels])).get_next()
     else:
       input_labels = None
@@ -222,10 +223,10 @@ def dataset_input_fn(features=8., labels=9.):
 
 def head():
   return tf.contrib.estimator.regression_head(
-      loss_reduction=tf.compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE)
+      loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
 
-class ModifierSessionRunHook(tf.estimator.SessionRunHook):
+class ModifierSessionRunHook(tf_compat.SessionRunHook):
   """Modifies the graph by adding a variable."""
 
   def __init__(self, var_name="hook_created_variable"):
@@ -242,7 +243,7 @@ class ModifierSessionRunHook(tf.estimator.SessionRunHook):
     if self._begun:
       raise ValueError("begin called twice without end.")
     self._begun = True
-    _ = tf.compat.v1.get_variable(name=self._var_name, initializer="")
+    _ = tf_compat.v1.get_variable(name=self._var_name, initializer="")
 
   def end(self, session):
     """Adds a variable to the graph.

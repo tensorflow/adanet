@@ -46,7 +46,7 @@ import six
 import tensorflow as tf
 
 
-class _StopAfterTrainingHook(tf.estimator.SessionRunHook):
+class _StopAfterTrainingHook(tf_compat.SessionRunHook):
   """Hook that requests stop once iteration is over."""
 
   def __init__(self, iteration, after_fn):
@@ -79,7 +79,7 @@ class _StopAfterTrainingHook(tf.estimator.SessionRunHook):
     self._after_fn()
 
 
-class _EvalMetricSaverHook(tf.estimator.SessionRunHook):
+class _EvalMetricSaverHook(tf_compat.SessionRunHook):
   """A hook for writing candidate evaluation metrics as summaries to disk."""
 
   def __init__(self, name, kind, eval_metrics, output_dir):
@@ -137,9 +137,8 @@ class _EvalMetricSaverHook(tf.estimator.SessionRunHook):
     eval_dict, current_global_step = session.run(
         (self._eval_metric_tensors, current_global_step))
 
-    logging.info("Saving %s '%s' dict for global step %d: %s",
-                    self._kind, self._name, current_global_step,
-                    self._dict_to_str(eval_dict))
+    logging.info("Saving %s '%s' dict for global step %d: %s", self._kind,
+                 self._name, current_global_step, self._dict_to_str(eval_dict))
     summary_writer = tf.summary.FileWriterCache.get(self._output_dir)
     summary_proto = tf.summary.Summary()
     for key in eval_dict:
@@ -159,7 +158,7 @@ class _EvalMetricSaverHook(tf.estimator.SessionRunHook):
     summary_writer.flush()
 
 
-class _OverwriteCheckpointHook(tf.estimator.SessionRunHook):
+class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
   """Hook to overwrite the latest checkpoint with next iteration variables."""
 
   def __init__(self, current_iteration, iteration_number_tensor,
@@ -229,14 +228,14 @@ class _OverwriteCheckpointHook(tf.estimator.SessionRunHook):
       self._checkpoint_overwritten = True
 
 
-class _HookContextDecorator(tf.estimator.SessionRunHook):
+class _HookContextDecorator(tf_compat.SessionRunHook):
   """Decorates a SessionRunHook's public methods to run within a context."""
 
   def __init__(self, hook, context, is_growing_phase):
     """Initializes a _HookContextDecorator instance.
 
     Args:
-      hook: The tf.estimator.SessionRunHook to decorate.
+      hook: The tf_compat.SessionRunHook to decorate.
       context: The context to enter before calling the hook's public methods.
       is_growing_phase: Whether we are in the AdaNet graph growing phase. If so,
         only hook.begin() and hook.end() will be called.
@@ -639,7 +638,7 @@ class Estimator(tf.estimator.Estimator):
       while True:
         current_iteration = self._latest_checkpoint_iteration_number()
         logging.info("Beginning training AdaNet iteration %s",
-                        current_iteration)
+                     current_iteration)
         self._iteration_ended = False
         result = super(Estimator, self).train(
             input_fn=input_fn,
@@ -647,8 +646,7 @@ class Estimator(tf.estimator.Estimator):
             max_steps=max_steps,
             saving_listeners=saving_listeners)
 
-        logging.info("Finished training Adanet iteration %s",
-                        current_iteration)
+        logging.info("Finished training Adanet iteration %s", current_iteration)
 
         # If training ended because the maximum number of training steps
         # occurred, exit training.
@@ -661,7 +659,7 @@ class Estimator(tf.estimator.Estimator):
           return result
 
         logging.info("Beginning bookkeeping phase for iteration %s",
-                        current_iteration)
+                     current_iteration)
 
         # The chief prepares the next AdaNet iteration, and increments the
         # iteration number by 1.
@@ -715,11 +713,11 @@ class Estimator(tf.estimator.Estimator):
                            (task_id + 1.) * self._delay_secs_per_worker)
           if delay_secs > 0.:
             logging.info("Waiting %d secs before continuing training.",
-                            delay_secs)
+                         delay_secs)
             time.sleep(delay_secs)
 
         logging.info("Finished bookkeeping phase for iteration %s",
-                        current_iteration)
+                     current_iteration)
 
   def evaluate(self,
                input_fn,
@@ -884,7 +882,7 @@ class Estimator(tf.estimator.Estimator):
 
     latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
     logging.info("Starting ensemble evaluation for iteration %s",
-                    current_iteration.number)
+                 current_iteration.number)
     with tf.Session() as sess:
       init = tf.group(tf.global_variables_initializer(),
                       tf.local_variables_initializer(), tf.tables_initializer())
@@ -920,10 +918,9 @@ class Estimator(tf.estimator.Estimator):
       else:
         index = np.argmin(adanet_losses)
     logging.info("Finished ensemble evaluation for iteration %s",
-                    current_iteration.number)
+                 current_iteration.number)
     logging.info("'%s' at index %s is moving onto the next iteration",
-                    current_iteration.candidates[index].ensemble_spec.name,
-                    index)
+                 current_iteration.candidates[index].ensemble_spec.name, index)
     return index
 
   def _materialize_report(self, current_iteration):
@@ -939,7 +936,7 @@ class Estimator(tf.estimator.Estimator):
 
     latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
     logging.info("Starting metric logging for iteration %s",
-                    current_iteration.number)
+                 current_iteration.number)
 
     assert self._best_ensemble_index is not None
     best_candidate = current_iteration.candidates[self._best_ensemble_index]
@@ -964,7 +961,7 @@ class Estimator(tf.estimator.Estimator):
                                                    materialized_reports)
 
     logging.info("Finished saving subnetwork reports for iteration %s",
-                    current_iteration.number)
+                 current_iteration.number)
 
   def _decorate_hooks(self, hooks):
     """Decorate hooks to reset AdaNet state before calling their methods."""
@@ -991,7 +988,7 @@ class Estimator(tf.estimator.Estimator):
       training: Whether in training mode.
 
     Returns:
-      A list of `tf.estimator.SessionRunHook` instances.
+      A list of `SessionRunHook` instances.
     """
 
     if not training:
@@ -1024,7 +1021,7 @@ class Estimator(tf.estimator.Estimator):
         _OverwriteCheckpointHook will be created.
 
     Returns:
-      A list of `tf.estimator.SessionRunHook` instances.
+      A list of `SessionRunHook` instances.
     """
 
     if not training:
@@ -1053,7 +1050,7 @@ class Estimator(tf.estimator.Estimator):
       training: Whether in training mode.
 
     Returns:
-      A list of `tf.estimator.SessionRunHook` instances.
+      A list of `SessionRunHook` instances.
     """
 
     if training:

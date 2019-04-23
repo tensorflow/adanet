@@ -25,6 +25,16 @@ try:
 except AttributeError:
   v1 = tf
 
+try:
+  v2 = tf.compat.v2
+except AttributeError:
+  v2 = tf.contrib
+
+try:
+  SessionRunHook = tf.estimator.SessionRunHook
+except AttributeError:
+  SessionRunHook = tf.train.SessionRunHook
+
 
 def tensor_name(tensor):
   """Returns the Tensor's name.
