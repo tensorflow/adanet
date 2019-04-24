@@ -86,6 +86,7 @@ py_binary(
         "//adanet/autoensemble",
         "//adanet/distributed",
         "//adanet/subnetwork",
+        "@absl_py//absl:app",
     ],
 )
 
@@ -273,9 +274,8 @@ proto_library(
     visibility = whitelist,
 )
 
-
-
 load("@protobuf_bzl//:protobuf.bzl", "py_proto_library")
+
 py_proto_library(
     name = "report_pb2",
     srcs = ["report.proto"],
