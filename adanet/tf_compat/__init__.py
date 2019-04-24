@@ -41,9 +41,9 @@ except AttributeError:
   SummarySaverHook = tf.train.SummarySaverHook
 
 try:
-  TPUEstimatorSpec = v1.estimator.tpu.TPUEstimatorSpec
-except AttributeError:
   TPUEstimatorSpec = tf.contrib.tpu.TPUEstimatorSpec
+except AttributeError:
+  TPUEstimatorSpec = object
 
 try:
   TPUEstimator = tf.contrib.tpu.TPUEstimator

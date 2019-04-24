@@ -23,6 +23,7 @@ import abc
 import contextlib
 import os
 
+from absl import logging
 from adanet import tf_compat
 import tensorflow as tf
 try:
@@ -205,8 +206,8 @@ class _ScopedSummary(Summary):
     """
 
     if tpu_function.get_tpu_context().number_of_shards:
-      tf_compat.v1.logging.log_first_n(
-          tf_compat.v1.logging.WARN,
+      logging.log_first_n(
+          logging.WARN,
           "Scoped summaries will be skipped since they do not support TPU", 1)
       skip_summary = True
 
@@ -215,10 +216,10 @@ class _ScopedSummary(Summary):
     self._additional_scope = None
     self._skip_summary = skip_summary
     self._summary_ops = []
-    self._actual_summary_scalar_fn = tf_compat.v1.summary.scalar
-    self._actual_summary_image_fn = tf_compat.v1.summary.image
-    self._actual_summary_histogram_fn = tf_compat.v1.summary.histogram
-    self._actual_summary_audio_fn = tf_compat.v1.summary.audio
+    self._actual_summary_scalar_fn = summary_lib.scalar
+    self._actual_summary_image_fn = summary_lib.image
+    self._actual_summary_histogram_fn = summary_lib.histogram
+    self._actual_summary_audio_fn = summary_lib.audio
 
   @property
   def scope(self):
@@ -384,10 +385,10 @@ class _TPUScopedSummary(Summary):
     self._scope = scope
     self._additional_scope = None
     self._skip_summary = skip_summary
-    self._actual_summary_scalar_fn = tf_compat.v2.summary.scalar
-    self._actual_summary_image_fn = tf_compat.v2.summary.image
-    self._actual_summary_histogram_fn = tf_compat.v2.summary.histogram
-    self._actual_summary_audio_fn = tf_compat.v2.summary.audio
+    self._actual_summary_scalar_fn = summary_v2_lib.scalar
+    self._actual_summary_image_fn = summary_v2_lib.image
+    self._actual_summary_histogram_fn = summary_v2_lib.histogram
+    self._actual_summary_audio_fn = summary_v2_lib.audio
     self._summary_tuples = []
 
   @property
@@ -553,7 +554,7 @@ class _SummaryWrapper(object):
     """See `tf.summary.scalar`."""
 
     if collections is not None:
-      tf_compat.v1.logging.warning(
+      logging.warning(
           "The `collections` argument will be "
           "ignored for scalar summary: %s, %s", name, tensor)
     return self._summary.scalar(name=name, tensor=tensor, family=family)
@@ -562,7 +563,7 @@ class _SummaryWrapper(object):
     """See `tf.summary.image`."""
 
     if collections is not None:
-      tf_compat.v1.logging.warning(
+      logging.warning(
           "The `collections` argument will be "
           "ignored for image summary: %s, %s", name, tensor)
     return self._summary.image(
@@ -572,7 +573,7 @@ class _SummaryWrapper(object):
     """See `tf.summary.histogram`."""
 
     if collections is not None:
-      tf_compat.v1.logging.warning(
+      logging.warning(
           "The `collections` argument will be "
           "ignored for histogram summary: %s, %s", name, values)
     return self._summary.histogram(name=name, values=values, family=family)
@@ -587,7 +588,7 @@ class _SummaryWrapper(object):
     """See `tf.summary.audio`."""
 
     if collections is not None:
-      tf_compat.v1.logging.warning(
+      logging.warning(
           "The `collections` argument will be "
           "ignored for audio summary: %s, %s", name, tensor)
     return self._summary.audio(
@@ -601,7 +602,7 @@ class _SummaryWrapper(object):
     """See `tf.contrib.summary.scalar`."""
 
     if step is not None:
-      tf_compat.v1.logging.warning(
+      logging.warning(
           "The `step` argument will be ignored to use the global step for "
           "scalar summary: %s, %s", name, tensor)
     return self._summary.scalar(name=name, tensor=tensor, family=family)
@@ -616,12 +617,12 @@ class _SummaryWrapper(object):
     """See `tf.contrib.summary.image`."""
 
     if step is not None:
-      tf_compat.v1.logging.warning(
+      logging.warning(
           "The `step` argument will be ignored to use the global step for "
           "image summary: %s, %s", name, tensor)
     # TODO: Add support for `bad_color` arg.
     if bad_color is not None:
-      tf_compat.v1.logging.warning(
+      logging.warning(
           "The `bad_color` arg is not supported for image summary: %s, %s",
           name, tensor)
     return self._summary.image(
@@ -631,7 +632,7 @@ class _SummaryWrapper(object):
     """See `tf.contrib.summary.histogram`."""
 
     if step is not None:
-      tf_compat.v1.logging.warning(
+      logging.warning(
           "The `step` argument will be ignored to use the global step for "
           "histogram summary: %s, %s", name, tensor)
     return self._summary.histogram(name=name, values=tensor, family=family)
@@ -646,7 +647,7 @@ class _SummaryWrapper(object):
     """See `tf.contrib.summary.audio`."""
 
     if step is not None:
-      tf_compat.v1.logging.warning(
+      logging.warning(
           "The `step` argument will be ignored to use the global step for "
           "audio summary: %s, %s", name, tensor)
     return self._summary.audio(
@@ -683,40 +684,40 @@ def monkey_patched_summaries(summary):
 
   # Monkey-patch global attributes.
   wrapped_summary = _SummaryWrapper(summary)
-  tf_compat.v1.summary.scalar = wrapped_summary.scalar
-  tf_compat.v1.summary.image = wrapped_summary.image
-  tf_compat.v1.summary.histogram = wrapped_summary.histogram
-  tf_compat.v1.summary.audio = wrapped_summary.audio
-  summary_lib.scalar = wrapped_summary.scalar
-  summary_lib.image = wrapped_summary.image
-  summary_lib.histogram = wrapped_summary.histogram
-  summary_lib.audio = wrapped_summary.audio
-  tf_compat.v2.summary.scalar = wrapped_summary.scalar_v2
-  tf_compat.v2.summary.image = wrapped_summary.image_v2
-  tf_compat.v2.summary.histogram = wrapped_summary.histogram_v2
-  tf_compat.v2.summary.audio = wrapped_summary.audio_v2
-  summary_v2_lib.scalar = wrapped_summary.scalar_v2
-  summary_v2_lib.image = wrapped_summary.image_v2
-  summary_v2_lib.histogram = wrapped_summary.histogram_v2
-  summary_v2_lib.audio = wrapped_summary.audio_v2
+  setattr(tf.summary, "scalar", wrapped_summary.scalar)
+  setattr(tf.summary, "image", wrapped_summary.image)
+  setattr(tf.summary, "histogram", wrapped_summary.histogram)
+  setattr(tf.summary, "audio", wrapped_summary.audio)
+  setattr(summary_lib, "scalar", wrapped_summary.scalar)
+  setattr(summary_lib, "image", wrapped_summary.image)
+  setattr(summary_lib, "histogram", wrapped_summary.histogram)
+  setattr(summary_lib, "audio", wrapped_summary.audio)
+  setattr(tf_compat.v2.summary, "scalar", wrapped_summary.scalar_v2)
+  setattr(tf_compat.v2.summary, "image", wrapped_summary.image_v2)
+  setattr(tf_compat.v2.summary, "histogram", wrapped_summary.histogram_v2)
+  setattr(tf_compat.v2.summary, "audio", wrapped_summary.audio_v2)
+  setattr(summary_v2_lib, "scalar", wrapped_summary.scalar_v2)
+  setattr(summary_v2_lib, "image", wrapped_summary.image_v2)
+  setattr(summary_v2_lib, "histogram", wrapped_summary.histogram_v2)
+  setattr(summary_v2_lib, "audio", wrapped_summary.audio_v2)
 
   try:
     yield
   finally:
     # Revert monkey-patches.
-    summary_v2_lib.audio = old_summary_v2_audio
-    summary_v2_lib.histogram = old_summary_v2_histogram
-    summary_v2_lib.image = old_summary_v2_image
-    summary_v2_lib.scalar = old_summary_v2_scalar
-    tf_compat.v2.summary.audio = old_summary_v2_audio
-    tf_compat.v2.summary.histogram = old_summary_v2_histogram
-    tf_compat.v2.summary.image = old_summary_v2_image
-    tf_compat.v2.summary.scalar = old_summary_v2_scalar
-    summary_lib.audio = old_summary_audio
-    summary_lib.histogram = old_summary_histogram
-    summary_lib.image = old_summary_image
-    summary_lib.scalar = old_summary_scalar
-    tf_compat.v1.summary.audio = old_summary_audio
-    tf_compat.v1.summary.histogram = old_summary_histogram
-    tf_compat.v1.summary.image = old_summary_image
-    tf_compat.v1.summary.scalar = old_summary_scalar
+    setattr(summary_v2_lib, "audio", old_summary_v2_audio)
+    setattr(summary_v2_lib, "histogram", old_summary_v2_histogram)
+    setattr(summary_v2_lib, "image", old_summary_v2_image)
+    setattr(summary_v2_lib, "scalar", old_summary_v2_scalar)
+    setattr(tf_compat.v2.summary, "audio", old_summary_v2_audio)
+    setattr(tf_compat.v2.summary, "histogram", old_summary_v2_histogram)
+    setattr(tf_compat.v2.summary, "image", old_summary_v2_image)
+    setattr(tf_compat.v2.summary, "scalar", old_summary_v2_scalar)
+    setattr(summary_lib, "audio", old_summary_audio)
+    setattr(summary_lib, "histogram", old_summary_histogram)
+    setattr(summary_lib, "image", old_summary_image)
+    setattr(summary_lib, "scalar", old_summary_scalar)
+    setattr(tf.summary, "audio", old_summary_audio)
+    setattr(tf.summary, "histogram", old_summary_histogram)
+    setattr(tf.summary, "image", old_summary_image)
+    setattr(tf.summary, "scalar", old_summary_scalar)
