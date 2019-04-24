@@ -26,84 +26,6 @@ from adanet.core.estimator import Estimator
 from distutils.version import LooseVersion
 import tensorflow as tf
 from tensorflow.contrib.tpu.python.tpu import tpu_function
-from tensorflow.python.framework import ops  # pylint: disable=g-direct-tensorflow-import
-
-
-# TODO: Move hooks to their own module.
-class _StepCounterHook(tf.train.SessionRunHook):
-  """Hook that counts steps per second.
-
-  TODO: Remove once Estimator uses summaries v2 by default.
-
-  """
-
-  def __init__(self,
-               every_n_steps=100,
-               every_n_secs=None,
-               output_dir=None,
-               summary_writer=None):
-
-    if (every_n_steps is None) == (every_n_secs is None):
-      raise ValueError(
-          "exactly one of every_n_steps and every_n_secs should be provided.")
-    self._timer = tf.train.SecondOrStepTimer(
-        every_steps=every_n_steps, every_secs=every_n_secs)
-
-    assert output_dir
-    self._summary_writer = summary_writer
-    self._output_dir = output_dir
-    self._last_global_step = None
-    self._steps_per_run = 1
-
-  def begin(self):
-    if self._summary_writer is None and self._output_dir:
-      self._summary_writer = tf.summary.FileWriter(
-          self._output_dir,
-          session=ops.get_default_session(),
-          filename_suffix=".step")
-    self._global_step_tensor = tf.train.get_global_step()
-    if self._global_step_tensor is None:
-      raise RuntimeError(
-          "Global step should be created to use StepCounterHook.")
-    self._summary_tag = tf.train.get_global_step().op.name + "/sec"
-
-  def after_create_session(self, session, coord):
-    del coord
-    # Reset any stale state in case we're recovering from a previous error.
-    session.run(tf.contrib.summary.summary_writer_initializer_op())
-    self._last_global_step = None
-    self._timer.reset()
-
-  def before_run(self, run_context):  # pylint: disable=unused-argument
-    return tf.train.SessionRunArgs(self._global_step_tensor)
-
-  def _log_and_record(self, elapsed_steps, elapsed_time, global_step):
-    steps_per_sec = elapsed_steps / elapsed_time
-    if self._summary_writer is not None:
-      summary = tf.Summary(value=[
-          tf.Summary.Value(tag=self._summary_tag, simple_value=steps_per_sec)
-      ])
-      self._summary_writer.add_summary(summary, global_step)
-
-  def after_run(self, run_context, run_values):
-    stale_global_step = run_values.results
-    if self._timer.should_trigger_for_step(stale_global_step +
-                                           self._steps_per_run):
-      # Get the real value after train op.
-      global_step = run_context.session.run(self._global_step_tensor)
-      if self._timer.should_trigger_for_step(global_step):
-        elapsed_time, elapsed_steps = self._timer.update_last_triggered_step(
-            global_step)
-        if elapsed_time is not None:
-          with ops.default_session(run_context.session):
-            self._log_and_record(elapsed_steps, elapsed_time, global_step)
-
-    self._last_global_step = stale_global_step
-
-  def end(self, session):
-    if self._summary_writer is not None:
-      with ops.default_session(session):
-        self._summary_writer.flush()
 
 
 class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
@@ -163,6 +85,10 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
       tf.logging.warning(
           "This adanet.TPUEstimator is meant to be used for running on TPU. "
           "If you want to run on CPU/GPU, use adanet.Estimator instead.")
+
+    # TPUEstimator modifies config under the hood. We keep track of it here so
+    # we can use it during the bookkeeping phase and when predict() is called.
+    self._original_config = config or tf.contrib.RunConfig()
     self._train_batch_size = train_batch_size or 0
     self._eval_batch_size = eval_batch_size or train_batch_size or 0
 
@@ -180,7 +106,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         adanet_loss_decay=adanet_loss_decay,
         model_dir=model_dir,
         report_dir=report_dir,
-        config=config if config else tf.contrib.tpu.RunConfig(),
+        config=self._original_config,
         use_tpu=use_tpu,
         eval_on_tpu=use_tpu,
         export_to_tpu=False,
@@ -205,7 +131,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
     tpu_estimator = tf.contrib.tpu.TPUEstimator(
         model_fn=self._adanet_model_fn,
         model_dir=self.model_dir,
-        config=self.config,
+        config=self._original_config,
         params=self.params,
         use_tpu=False)
     return tpu_estimator.predict(
@@ -218,18 +144,17 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
   def _create_temp_estimator(self, temp_model_dir):
     """See the `Estimator` base class for details."""
 
-    config = self.config
     temp_run_config_kwargs = dict(
         model_dir=temp_model_dir,
-        tpu_config=config.tpu_config,
-        evaluation_master=config.evaluation_master,
-        master=config.master,
-        cluster=config.cluster,
-        tf_random_seed=config.tf_random_seed,
-        session_config=config.session_config,
-        device_fn=config.device_fn)
+        tpu_config=self._original_config.tpu_config,
+        evaluation_master=self._original_config.evaluation_master,
+        master=self._original_config.master,
+        cluster=self._original_config.cluster,
+        tf_random_seed=self._original_config.tf_random_seed,
+        session_config=self._original_config.session_config,
+        device_fn=self._original_config.device_fn)
     if LooseVersion(tf.VERSION) >= LooseVersion("1.11.0"):
-      temp_run_config_kwargs["protocol"] = config.protocol
+      temp_run_config_kwargs["protocol"] = self._original_config.protocol
     return tf.contrib.tpu.TPUEstimator(
         model_fn=self._adanet_model_fn,
         params={},
@@ -298,11 +223,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
           hook for hook in training_hooks
           if not isinstance(hook, tf.train.SummarySaverHook)
       ]
-      training_hooks.append(
-          # Use self._log_every_n_steps since TPUEstimator sets it equal to
-          # config.log_step_count_steps and sets the latter to 0.
-          _StepCounterHook(
-              every_n_steps=self._log_every_n_steps, output_dir=self.model_dir))
+
     return training_hooks
 
   def _create_host_call(self, current_iteration, training):
