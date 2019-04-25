@@ -161,6 +161,7 @@ py_library(
     name = "evaluator",
     srcs = ["evaluator.py"],
     deps = [
+        "//adanet/tf_compat",
     ],
 )
 

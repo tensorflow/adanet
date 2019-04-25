@@ -85,13 +85,14 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
     mock.patch.object(self._optimizer, 'minimize', autospec=True).start()
 
     mock.patch.object(
-        tf.contrib.framework, 'load_variable', autospec=True).start()
+        tf.train, 'load_variable', autospec=True).start()
 
     def load_variable(checkpoint_dir, name):
       self.assertEqual(checkpoint_dir, 'fake_checkpoint_dir')
-      return tf.Variable(initial_value=1., name='fake_loaded_variable_' + name)
+      return tf_compat.v1.get_variable(name='fake_loaded_variable_' + name,
+                                       initializer=1.)
 
-    tf.contrib.framework.load_variable.side_effect = load_variable
+    tf.train.load_variable.side_effect = load_variable
 
     self.summary = _FakeSummary()
 
@@ -110,7 +111,7 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
   def _build_subnetwork(self, multi_head=False):
 
     last_layer = tf.Variable(
-        tf.random.normal(shape=(2, 3)), trainable=False).read_value()
+        tf_compat.random_normal(shape=(2, 3)), trainable=False).read_value()
 
     def new_logits():
       return tf_compat.v1.layers.dense(

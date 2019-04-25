@@ -592,8 +592,8 @@ class Estimator(tf.estimator.Estimator):
     latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
     if latest_checkpoint is None:
       return 0
-    return tf.contrib.framework.load_variable(latest_checkpoint,
-                                              self._Keys.CURRENT_ITERATION)
+    return tf.train.load_variable(latest_checkpoint,
+                                  self._Keys.CURRENT_ITERATION)
 
   def _latest_checkpoint_global_step(self):
     """Returns the global step from the latest checkpoint."""
@@ -601,8 +601,7 @@ class Estimator(tf.estimator.Estimator):
     latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
     if latest_checkpoint is None:
       return 0
-    return tf.contrib.framework.load_variable(latest_checkpoint,
-                                              tf.GraphKeys.GLOBAL_STEP)
+    return tf.train.load_variable(latest_checkpoint, tf.GraphKeys.GLOBAL_STEP)
 
   @contextlib.contextmanager
   def _train_loop_context(self):
@@ -1354,7 +1353,7 @@ class Estimator(tf.estimator.Estimator):
     # variable values to avoid any race conditions between the first and second
     # checkpoint reads.
     if mode == tf.estimator.ModeKeys.EVAL and self._evaluation_checkpoint_path:
-      iteration_number = tf.contrib.framework.load_variable(
+      iteration_number = tf.train.load_variable(
           self._evaluation_checkpoint_path, self._Keys.CURRENT_ITERATION)
 
     if self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:

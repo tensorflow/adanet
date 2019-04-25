@@ -472,8 +472,8 @@ class _TPUScopedSummary(Summary):
       # e.g. "foo/bar/baz/scalar" will become "baz/scalar" when
       # additional_scope is "foo/bar".
       # TODO: Figure out a cleaner way to handle this.
-      assert not tf.get_default_graph().get_name_scope()
-      with tf.name_scope(name_scope):
+      assert not tf_compat.v1.get_default_graph().get_name_scope()
+      with tf_compat.v1.name_scope(name_scope):
         with self._strip_tag_scope(additional_scope):
           # TODO: Do summaries need to be reduced before writing?
           # Presumably each tensor core creates its own summary so we may be
@@ -696,23 +696,28 @@ def monkey_patched_summaries(summary):
   setattr(summary_v2_lib, "image", wrapped_summary.image_v2)
   setattr(summary_v2_lib, "histogram", wrapped_summary.histogram_v2)
   setattr(summary_v2_lib, "audio", wrapped_summary.audio_v2)
-  if not tf_compat.version_greater_or_equal("2.0.0"):
+  try:
     # TF 2.0 eliminates tf.contrib.
     setattr(tf.contrib.summary, "scalar", wrapped_summary.scalar_v2)
     setattr(tf.contrib.summary, "image", wrapped_summary.image_v2)
     setattr(tf.contrib.summary, "histogram", wrapped_summary.histogram_v2)
     setattr(tf.contrib.summary, "audio", wrapped_summary.audio_v2)
+  except AttributeError:
+    # TF 2.0 eliminates tf.contrib.
+    pass
 
   try:
     yield
   finally:
     # Revert monkey-patches.
-    if not tf_compat.version_greater_or_equal("2.0.0"):
-      # TF 2.0 eliminates tf.contrib.
+    try:
       setattr(tf.contrib.summary, "audio", old_summary_v2_audio)
       setattr(tf.contrib.summary, "histogram", old_summary_v2_histogram)
       setattr(tf.contrib.summary, "image", old_summary_v2_image)
       setattr(tf.contrib.summary, "scalar", old_summary_v2_scalar)
+    except AttributeError:
+      # TF 2.0 eliminates tf.contrib.
+      pass
     setattr(summary_v2_lib, "audio", old_summary_v2_audio)
     setattr(summary_v2_lib, "histogram", old_summary_v2_histogram)
     setattr(summary_v2_lib, "image", old_summary_v2_image)

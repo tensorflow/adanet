@@ -21,6 +21,8 @@ from __future__ import print_function
 
 import math
 
+from absl import logging
+from adanet import tf_compat
 import tensorflow as tf
 
 
@@ -77,9 +79,9 @@ class Evaluator(object):
       logging_frequency = math.floor(self.steps / 10.)
 
     adanet_losses = [
-        tf.metrics.mean(adanet_loss) for adanet_loss in adanet_losses
+        tf_compat.v1.metrics.mean(adanet_loss) for adanet_loss in adanet_losses
     ]
-    sess.run(tf.local_variables_initializer())
+    sess.run(tf_compat.v1.local_variables_initializer())
     while True:
       if self.steps is not None and evals_completed == self.steps:
         break
@@ -87,12 +89,12 @@ class Evaluator(object):
         evals_completed += 1
         if (evals_completed % logging_frequency == 0 or
             self.steps == evals_completed):
-          tf.logging.info("Ensemble evaluation [%d/%s]", evals_completed,
-                          self.steps or "??")
+          logging.info("Ensemble evaluation [%d/%s]", evals_completed,
+                       self.steps or "??")
         sess.run(adanet_losses)
       except tf.errors.OutOfRangeError:
-        tf.logging.info("Encountered end of input after %d evaluations",
-                        evals_completed)
+        logging.info("Encountered end of input after %d evaluations",
+                     evals_completed)
         break
 
     # Losses are metric op tuples. Evaluating the first element is idempotent.

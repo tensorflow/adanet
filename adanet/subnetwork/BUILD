@@ -28,6 +28,7 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":generator",
+        "//adanet/tf_compat",
         "@absl_py//absl/testing:parameterized",
     ],
 )

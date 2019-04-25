@@ -22,6 +22,7 @@ from __future__ import print_function
 import collections
 
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.subnetwork.generator import Builder
 from adanet.subnetwork.generator import Subnetwork
 import tensorflow as tf
@@ -31,7 +32,7 @@ def dummy_tensor(shape=(), random_seed=42):
   """Returns a randomly initialized tensor."""
 
   return tf.Variable(
-      tf.random_normal(shape=shape, seed=random_seed),
+      tf_compat.random_normal(shape=shape, seed=random_seed),
       trainable=False).read_value()
 
 
