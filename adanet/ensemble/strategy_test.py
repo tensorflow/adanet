@@ -24,10 +24,7 @@ from adanet import subnetwork
 import mock
 import tensorflow as tf
 
-tfe = tf.contrib.eager
 
-
-@tf.contrib.eager.run_all_tests_in_graph_and_eager_modes
 class StrategyTest(tf.test.TestCase):
 
   def setUp(self):

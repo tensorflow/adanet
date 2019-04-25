@@ -42,13 +42,14 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
   def tearDown(self):
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
 
-  @parameterized.named_parameters({
-      "testcase_name": "dict_candidate_pool",
-      "list_candidate_pool": False,
-  }, {
-      "testcase_name": "list_candidate_pool",
-      "list_candidate_pool": True,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "dict_candidate_pool",
+          "list_candidate_pool": False,
+      }, {
+          "testcase_name": "list_candidate_pool",
+          "list_candidate_pool": True,
+      })
   def test_auto_ensemble_estimator_lifecycle(self, list_candidate_pool):
     features = {"input_1": [[1., 0.]]}
     labels = [[1.]]
@@ -100,17 +101,17 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     estimator = AutoEnsembleEstimator(
         head=head,
         candidate_pool=candidate_pool,
-        max_iteration_steps=4,
+        max_iteration_steps=10,
         force_grow=True,
         model_dir=self.test_subdirectory,
         config=run_config)
 
-    # Train.
-    estimator.train(input_fn=train_input_fn, max_steps=12)
+    # Train for three iterations.
+    estimator.train(input_fn=train_input_fn, max_steps=30)
 
     # Evaluate.
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
-    self.assertIsNotNone(eval_results["loss"])
+    self.assertAllClose(.209, eval_results["loss"], atol=.05)
 
     # Predict.
     predictions = estimator.predict(input_fn=test_input_fn)

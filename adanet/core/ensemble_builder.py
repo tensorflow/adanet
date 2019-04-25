@@ -31,8 +31,10 @@ from adanet.core.summary import monkey_patched_summaries
 from adanet.ensemble import ComplexityRegularized
 from adanet.subnetwork import TrainOpSpec
 import tensorflow as tf
-
-from tensorflow.python.training import training as train  # pylint: disable=g-direct-tensorflow-import
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.training import training as train
+from tensorflow.python.training import training_util
+# pylint: enable=g-direct-tensorflow-import
 
 _VALID_METRIC_FN_ARGS = {"features", "labels", "predictions"}
 
@@ -136,20 +138,23 @@ def _monkey_patch_context(iteration_step_scope, scoped_summary, trainable_vars):
   old_trainable_vars = tf.trainable_variables()
 
   def iteration_step(graph=None):
-    del graph
-    with tf.variable_scope(iteration_step_scope, reuse=tf.AUTO_REUSE):
-      return tf.get_variable(
-          "iteration_step",
-          shape=[],
-          initializer=tf.zeros_initializer(),
-          trainable=False,
-          dtype=tf.int64)
+    graph = graph or tf.get_default_graph()
+    with graph.as_default() as g, g.name_scope(None):
+      with tf.variable_scope(iteration_step_scope, reuse=tf.AUTO_REUSE):
+        return tf.get_variable(
+            "iteration_step",
+            shape=[],
+            initializer=tf.zeros_initializer(),
+            trainable=False,
+            dtype=tf.int64)
 
   # monkey-patch global attributes.
-  tf.train.get_global_step = iteration_step
-  tf.train.get_or_create_global_step = iteration_step
+  setattr(tf.train, "get_global_step", iteration_step)
+  setattr(tf.train, "get_or_create_global_step", iteration_step)
   setattr(train, "get_global_step", iteration_step)
+  setattr(training_util, "get_global_step", iteration_step)
   setattr(train, "get_or_create_global_step", iteration_step)
+  setattr(training_util, "get_or_create_global_step", iteration_step)
   _set_trainable_variables(trainable_vars)
 
   try:
@@ -159,11 +164,15 @@ def _monkey_patch_context(iteration_step_scope, scoped_summary, trainable_vars):
     # Revert monkey-patches.
     new_trainable_vars = _new_trainable_variables(trainable_vars)
     _set_trainable_variables(old_trainable_vars + new_trainable_vars)
+    setattr(training_util, "get_or_create_global_step",
+            old_get_or_create_global_step_fn)
     setattr(train, "get_or_create_global_step",
             old_get_or_create_global_step_fn)
+    setattr(training_util, "get_global_step", old_get_global_step_fn)
     setattr(train, "get_global_step", old_get_global_step_fn)
-    tf.train.get_or_create_global_step = old_get_or_create_global_step_fn
-    tf.train.get_global_step = old_get_global_step_fn
+    setattr(tf.train, "get_or_create_global_step",
+            old_get_or_create_global_step_fn)
+    setattr(tf.train, "get_global_step", old_get_global_step_fn)
 
 
 def _clear_trainable_variables():

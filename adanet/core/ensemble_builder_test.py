@@ -35,8 +35,10 @@ from adanet.ensemble import MixtureWeightType
 from adanet.subnetwork import Builder
 from adanet.subnetwork import Subnetwork
 import tensorflow as tf
-
-from tensorflow.python.training import training as train  # pylint: disable=g-direct-tensorflow-import
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.training import training as train
+from tensorflow.python.training import training_util
+# pylint: enable=g-direct-tensorflow-import
 
 
 class _Builder(Builder):
@@ -77,8 +79,10 @@ class _Builder(Builder):
     step_name = "subnetwork_test/iteration_step"
     assert step_name == tf.train.get_global_step().op.name
     assert step_name == train.get_global_step().op.name
+    assert step_name == training_util.get_global_step().op.name
     assert step_name == tf.train.get_or_create_global_step().op.name
     assert step_name == train.get_or_create_global_step().op.name
+    assert step_name == training_util.get_or_create_global_step().op.name
 
     # Subnetworks get scoped summaries.
     assert "fake_scalar" == tf.summary.scalar("scalar", 1.)
@@ -404,10 +408,13 @@ class EnsembleBuilderTest(parameterized.TestCase, tf.test.TestCase):
         # Get the real global step outside a subnetwork's context.
         self.assertEqual("global_step", tf.train.get_global_step().op.name)
         self.assertEqual("global_step", train.get_global_step().op.name)
+        self.assertEqual("global_step", training_util.get_global_step().op.name)
         self.assertEqual("global_step",
                          tf.train.get_or_create_global_step().op.name)
         self.assertEqual("global_step",
                          train.get_or_create_global_step().op.name)
+        self.assertEqual("global_step",
+                         training_util.get_or_create_global_step().op.name)
 
         # Get global tf.summary outside a subnetwork's context.
         self.assertNotEqual("fake_scalar", tf.summary.scalar("scalar", 1.))

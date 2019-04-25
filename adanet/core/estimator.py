@@ -297,6 +297,35 @@ def _temp_tf_config(temp_model_dir):
     os.environ["TF_CONFIG"] = actual_tf_config_string
 
 
+def _cleaned_hooks(hooks):
+  """Cleans hooks for b/122795064.
+
+  CheckpointSaverHooks are stateful and will carry a Saver across graphs
+  causing errors. To fix this, we reset the saver between iterations.
+
+  Remove all CheckpointSaverHooks since they are not intended to run between
+  training runs and will cause errors.
+
+  Args:
+    hooks: List of `SessionRunHooks`.
+
+  Returns:
+    Cleans list of hooks.
+  """
+
+  if not hooks:
+    return hooks
+
+  for hook in hooks:
+    if isinstance(hook, tf.train.CheckpointSaverHook):
+      hook._saver = None  # pylint: disable=protected-access
+
+  return [
+      hook for hook in hooks
+      if not isinstance(hook, tf.train.CheckpointSaverHook)
+  ]
+
+
 class Estimator(tf.estimator.Estimator):
   # pyformat: disable
   r"""A :class:`tf.estimator.Estimator` for training, evaluation, and serving.
@@ -627,8 +656,6 @@ class Estimator(tf.estimator.Estimator):
     if steps is not None:
       max_steps = self._latest_checkpoint_global_step() + steps
 
-    hooks = self._decorate_hooks(hooks or [])
-
     # Each iteration of this AdaNet loop represents an `_Iteration`. The
     # current iteration number is stored as a variable in the checkpoint so
     # that training can be stopped and started at anytime.
@@ -641,7 +668,7 @@ class Estimator(tf.estimator.Estimator):
         self._iteration_ended = False
         result = super(Estimator, self).train(
             input_fn=input_fn,
-            hooks=hooks,
+            hooks=self._decorate_hooks(hooks or []),
             max_steps=max_steps,
             saving_listeners=saving_listeners)
 
@@ -665,7 +692,7 @@ class Estimator(tf.estimator.Estimator):
         if self.config.is_chief:
           # As the chief, store the train hooks and make a placeholder input_fn
           # in order to use them when preparing the next iteration.
-          self._train_hooks = hooks or ()
+          self._train_hooks = hooks or []
           self._prepare_next_iteration(input_fn)
 
         # This inner loop serves mainly for synchronizing the workers with the
@@ -820,8 +847,8 @@ class Estimator(tf.estimator.Estimator):
       # estimator.
       temp_estimator.train(
           input_fn=train_input_fn,
-          hooks=self._train_hooks,
           max_steps=1,
+          hooks=self._decorate_hooks(_cleaned_hooks(self._train_hooks)),
           saving_listeners=None)
     tf.gfile.DeleteRecursively(temp_model_dir)
     self._prepare_next_iteration_state = None
