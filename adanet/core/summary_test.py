@@ -39,28 +39,30 @@ def decode(proto_str):
 
 class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_scope(self, scope):
     scoped_summary = _ScopedSummary(scope)
     self.assertEqual(scope, scoped_summary.scope)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  }, {
-      "testcase_name": "skip_summary",
-      "scope": None,
-      "skip_summary": True,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      }, {
+          "testcase_name": "skip_summary",
+          "scope": None,
+          "skip_summary": True,
+      })
   def test_scalar_summary(self, scope, skip_summary=False):
     scoped_summary = _ScopedSummary(scope, skip_summary)
     with self.test_session() as s:
@@ -78,13 +80,14 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     self.assertEqual(values[0].tag, "outer/inner")
     self.assertEqual(values[0].simple_value, 3.0)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_scalar_summary_with_family(self, scope):
     scoped_summary = _ScopedSummary(scope)
     with self.test_session() as s:
@@ -107,13 +110,14 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     self.assertEqual(values[0].tag, "family/outer/family/inner_1")
     self.assertEqual(values[0].simple_value, 7.0)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_summarizing_variable(self, scope):
     scoped_summary = _ScopedSummary(scope)
     with self.test_session() as s:
@@ -130,17 +134,18 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     self.assertEqual(value.tag, "summary")
     self.assertEqual(value.simple_value, 42.0)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  }, {
-      "testcase_name": "skip_summary",
-      "scope": None,
-      "skip_summary": True,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      }, {
+          "testcase_name": "skip_summary",
+          "scope": None,
+          "skip_summary": True,
+      })
   def test_image_summary(self, scope, skip_summary=False):
     scoped_summary = _ScopedSummary(scope, skip_summary)
     with self.test_session() as s:
@@ -159,13 +164,14 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     expected = sorted("outer/inner/image/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_image_summary_with_family(self, scope):
     scoped_summary = _ScopedSummary(scope)
     with self.test_session() as s:
@@ -182,17 +188,18 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
         "family/outer/family/inner/image/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  }, {
-      "testcase_name": "skip_summary",
-      "scope": None,
-      "skip_summary": True,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      }, {
+          "testcase_name": "skip_summary",
+          "scope": None,
+          "skip_summary": True,
+      })
   def test_histogram_summary(self, scope, skip_summary=False):
     scoped_summary = _ScopedSummary(scope, skip_summary)
     with self.test_session() as s:
@@ -208,13 +215,14 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     self.assertLen(summary.value, 1)
     self.assertEqual(summary.value[0].tag, "outer/inner")
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_histogram_summary_with_family(self, scope):
     scoped_summary = _ScopedSummary(scope)
     with self.test_session() as s:
@@ -227,17 +235,18 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     self.assertLen(summary.value, 1)
     self.assertEqual(summary.value[0].tag, "family/outer/family/inner")
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  }, {
-      "testcase_name": "skip_summary",
-      "scope": None,
-      "skip_summary": True,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      }, {
+          "testcase_name": "skip_summary",
+          "scope": None,
+          "skip_summary": True,
+      })
   def test_audio_summary(self, scope, skip_summary=False):
     scoped_summary = _ScopedSummary(scope, skip_summary)
     with self.test_session() as s:
@@ -256,13 +265,14 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     expected = sorted("outer/inner/audio/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_audio_summary_with_family(self, scope):
     scoped_summary = _ScopedSummary(scope)
     with self.test_session() as s:
@@ -280,13 +290,14 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
         "family/outer/family/inner/audio/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_summary_name_conversion(self, scope):
     scoped_summary = _ScopedSummary(scope)
     c = tf.constant(3)
@@ -306,13 +317,14 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
       summary.ParseFromString(sess.run(s3))
       self.assertEqual(summary.value[0].tag, "name/with/leading/slash")
 
-  @parameterized.named_parameters({
-      "testcase_name": "single_graph",
-      "nest_graph": False,
-  }, {
-      "testcase_name": "nested_graph",
-      "nest_graph": True,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "single_graph",
+          "nest_graph": False,
+      }, {
+          "testcase_name": "nested_graph",
+          "nest_graph": True,
+      })
   def test_merge_all(self, nest_graph):
     c0 = tf.constant(0)
     c1 = tf.constant(1)
@@ -393,28 +405,30 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
       sess.run(summary_ops)
       sess.run(writer.flush())
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_scope(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     self.assertEqual(scope, scoped_summary.scope)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  }, {
-      "testcase_name": "skip_summary",
-      "scope": None,
-      "skip_summary": True,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      }, {
+          "testcase_name": "skip_summary",
+          "scope": None,
+          "skip_summary": True,
+      })
   def test_scalar_summary(self, scope, skip_summary=False):
     scoped_summary = _TPUScopedSummary(
         self.test_subdirectory, scope=scope, skip_summary=skip_summary)
@@ -449,21 +463,23 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     self.assertLen(events[0].summary.value, 1)
     self.assertLen(events[1].summary.value, 1)
 
-    self.assertEqual({
-        "family/outer/family/inner": 7.0,
-        "family/outer/family/inner_1": 7.0
-    }, {
-        event.summary.value[0].tag: event.summary.value[0].simple_value
-        for event in events
-    })
+    self.assertEqual(
+        {
+            "family/outer/family/inner": 7.0,
+            "family/outer/family/inner_1": 7.0
+        }, {
+            event.summary.value[0].tag: event.summary.value[0].simple_value
+            for event in events
+        })
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_summarizing_variable(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     c = tf.constant(42.0)
@@ -477,17 +493,18 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     self.assertEqual(value.tag, "summary")
     self.assertEqual(value.simple_value, 42.0)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  }, {
-      "testcase_name": "skip_summary",
-      "scope": None,
-      "skip_summary": True,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      }, {
+          "testcase_name": "skip_summary",
+          "scope": None,
+          "skip_summary": True,
+      })
   def test_image_summary(self, scope, skip_summary=False):
     scoped_summary = _TPUScopedSummary(
         self.test_subdirectory, scope=scope, skip_summary=skip_summary)
@@ -504,13 +521,14 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     expected = sorted("outer/inner/image/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_image_summary_with_family(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     i = tf.ones((5, 2, 3, 1))
@@ -525,17 +543,18 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
         "family/outer/family/inner/image/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  }, {
-      "testcase_name": "skip_summary",
-      "scope": None,
-      "skip_summary": True,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      }, {
+          "testcase_name": "skip_summary",
+          "scope": None,
+          "skip_summary": True,
+      })
   def test_histogram_summary(self, scope, skip_summary=False):
     scoped_summary = _TPUScopedSummary(
         self.test_subdirectory, scope=scope, skip_summary=skip_summary)
@@ -550,13 +569,14 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     self.assertLen(values, 1)
     self.assertEqual(values[0].tag, "outer/inner")
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_histogram_summary_with_family(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     i = tf.ones((5, 4, 4, 3))
@@ -568,17 +588,18 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     self.assertLen(values, 1)
     self.assertEqual(values[0].tag, "family/outer/family/inner")
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  }, {
-      "testcase_name": "skip_summary",
-      "scope": None,
-      "skip_summary": True,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      }, {
+          "testcase_name": "skip_summary",
+          "scope": None,
+          "skip_summary": True,
+      })
   def test_audio_summary(self, scope, skip_summary=False):
     scoped_summary = _TPUScopedSummary(
         self.test_subdirectory, scope=scope, skip_summary=skip_summary)
@@ -595,13 +616,14 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     expected = sorted("outer/inner/audio/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_audio_summary_with_family(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     i = tf.ones((5, 3, 4))
@@ -616,13 +638,14 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
         "family/outer/family/inner/audio/{}".format(i) for i in range(3))
     self.assertEqual(tags, expected)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_summary_name_conversion(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     c = tf.constant(3)
@@ -637,13 +660,14 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     self.assertIn("name_with_many___illegal___characters_", tags)
     self.assertIn("name/with/leading/slash", tags)
 
-  @parameterized.named_parameters({
-      "testcase_name": "without_scope",
-      "scope": None,
-  }, {
-      "testcase_name": "with_scope",
-      "scope": "with_scope",
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "without_scope",
+          "scope": None,
+      }, {
+          "testcase_name": "with_scope",
+          "scope": "with_scope",
+      })
   def test_current_scope(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     i = tf.constant(3)
@@ -677,6 +701,16 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     self.assertLen(summary.summary_tuples(), 4)
 
 
+def _summaries():
+  """Returns all summary functions."""
+
+  return [
+      tf.summary.scalar, tf.summary.audio, tf.summary.histogram,
+      tf.summary.image, tf.contrib.summary.scalar, tf.contrib.summary.audio,
+      tf.contrib.summary.histogram, tf.contrib.summary.image
+  ]
+
+
 class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
 
   def _get_summary_ops(self, summary):
@@ -696,7 +730,9 @@ class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
       })
   def test_monkey_patched_summaries_args(self, summary_maker):
     summary = summary_maker()
+    before = _summaries()
     with monkey_patched_summaries(summary):
+      self.assertNotEqual(before, _summaries())
       tf.summary.scalar("scalar", 1, ["collection"], "family")
       tf.summary.image("image", 1, 3, ["collection"], "family")
       tf.summary.histogram("histogram", 1, ["collection"], "family")
@@ -706,20 +742,24 @@ class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
       tf.contrib.summary.image("image_v2", 1, True, 3, "family", 10)
       tf.contrib.summary.histogram("histogram_v2", 1, "family", 10)
       tf.contrib.summary.audio("audio_v2", 1, 3, 3, "family", 10)
+    self.assertEqual(before, _summaries())
     self.assertLen(self._get_summary_ops(summary), 8)
 
-  @parameterized.named_parameters({
-      "testcase_name": "with_scoped_summary",
-      "summary_maker": _ScopedSummary,
-  }, {
-      "testcase_name":
-          "with_tpu_scoped_summary",
-      "summary_maker":
-          functools.partial(_TPUScopedSummary, logdir="/tmp/fakedir"),
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "with_scoped_summary",
+          "summary_maker": _ScopedSummary,
+      }, {
+          "testcase_name":
+              "with_tpu_scoped_summary",
+          "summary_maker":
+              functools.partial(_TPUScopedSummary, logdir="/tmp/fakedir"),
+      })
   def test_monkey_patched_summaries_kwargs(self, summary_maker):
     summary = summary_maker()
+    before = _summaries()
     with monkey_patched_summaries(summary):
+      self.assertNotEqual(before, _summaries())
       tf.summary.scalar(
           name="scalar", tensor=1, collections=["collection"], family="family")
       tf.summary.image(
@@ -759,6 +799,7 @@ class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
           max_outputs=3,
           family="family",
           step=10)
+    self.assertEqual(before, _summaries())
     self.assertLen(self._get_summary_ops(summary), 8)
 
 

@@ -21,8 +21,11 @@ from __future__ import print_function
 
 import os
 import shutil
+import sys
 
+from absl import flags
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.core.architecture import _Architecture
 from adanet.core.ensemble_builder import _EnsembleSpec
 from adanet.ensemble import ComplexityRegularized
@@ -35,7 +38,7 @@ def dummy_tensor(shape=(), random_seed=42):
   """Returns a randomly initialized tensor."""
 
   return tf.Variable(
-      tf.random_normal(shape=shape, seed=random_seed),
+      tf_compat.random_normal(shape=shape, seed=random_seed),
       trainable=False).read_value()
 
 
@@ -88,7 +91,7 @@ def dummy_ensemble_spec(name,
   if adanet_loss is None:
     adanet_loss = dummy_tensor([], random_seed * 2)
   else:
-    adanet_loss = tf.convert_to_tensor(adanet_loss)
+    adanet_loss = tf.convert_to_tensor(value=adanet_loss)
 
   logits = dummy_tensor([], random_seed * 3)
   if dict_predictions:
@@ -159,9 +162,7 @@ def _dummy_export_outputs(export_output_key, logits, predictions):
   return export_outputs
 
 
-def dummy_estimator_spec(loss=None,
-                         random_seed=42,
-                         eval_metric_ops=None):
+def dummy_estimator_spec(loss=None, random_seed=42, eval_metric_ops=None):
   """Creates a dummy `EstimatorSpec` instance.
 
   Args:
@@ -181,7 +182,9 @@ def dummy_estimator_spec(loss=None,
       mode=tf.estimator.ModeKeys.TRAIN,
       predictions=predictions,
       loss=loss,
-      train_op=tf.no_op(),
+      # Train_op cannot be tf.no_op() for Estimator, because in eager mode
+      # tf.no_op() returns None.
+      train_op=tf.constant(0.),
       eval_metric_ops=eval_metric_ops)
 
 
@@ -206,11 +209,11 @@ def dataset_input_fn(features=8., labels=9.):
 
     del params  # Unused.
 
-    input_features = tf.data.Dataset.from_tensors(
-        [features]).make_one_shot_iterator().get_next()
+    input_features = tf_compat.make_one_shot_iterator(
+        tf.data.Dataset.from_tensors([features])).get_next()
     if labels is not None:
-      input_labels = tf.data.Dataset.from_tensors(
-          [labels]).make_one_shot_iterator().get_next()
+      input_labels = tf_compat.make_one_shot_iterator(
+          tf.data.Dataset.from_tensors([labels])).get_next()
     else:
       input_labels = None
     return {"x": input_features}, input_labels
@@ -220,10 +223,10 @@ def dataset_input_fn(features=8., labels=9.):
 
 def head():
   return tf.contrib.estimator.regression_head(
-      loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
+      loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
 
-class ModifierSessionRunHook(tf.train.SessionRunHook):
+class ModifierSessionRunHook(tf_compat.SessionRunHook):
   """Modifies the graph by adding a variable."""
 
   def __init__(self, var_name="hook_created_variable"):
@@ -240,7 +243,7 @@ class ModifierSessionRunHook(tf.train.SessionRunHook):
     if self._begun:
       raise ValueError("begin called twice without end.")
     self._begun = True
-    _ = tf.get_variable(name=self._var_name, initializer="")
+    _ = tf_compat.v1.get_variable(name=self._var_name, initializer="")
 
   def end(self, session):
     """Adds a variable to the graph.
@@ -264,7 +267,9 @@ class AdanetTestCase(parameterized.TestCase, tf.test.TestCase):
   def setUp(self):
     super(AdanetTestCase, self).setUp()
     # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
+    # Flags are not automatically parsed at this point.
+    flags.FLAGS(sys.argv)
+    self.test_subdirectory = os.path.join(flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
     os.makedirs(self.test_subdirectory)
 

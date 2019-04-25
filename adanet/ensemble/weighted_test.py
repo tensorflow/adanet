@@ -30,8 +30,6 @@ from adanet.core.summary import Summary
 import mock
 import tensorflow as tf
 
-tfe = tf.contrib.eager
-
 
 class _FakeSummary(Summary):
   """A fake adanet.Summary."""
@@ -73,7 +71,6 @@ def _get_complexity_regularization_summary_key():
   return 'complexity_regularization/adanet/adanet_weighted_ensemble'
 
 
-@tf.contrib.eager.run_all_tests_in_graph_and_eager_modes
 class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
                                          tf.test.TestCase):
 

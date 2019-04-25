@@ -22,13 +22,13 @@ from __future__ import print_function
 import collections
 import functools
 
+from adanet import tf_compat
 from adanet.core.estimator import Estimator
 from distutils.version import LooseVersion
 import tensorflow as tf
-from tensorflow.contrib.tpu.python.tpu import tpu_function
 
 
-class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
+class TPUEstimator(Estimator, tf_compat.TPUEstimator):
   """An :class:`adanet.Estimator` capable of training and evaluating on TPU.
 
   Note: Unless :code:`use_tpu=False`, training will run on TPU. However,
@@ -80,6 +80,9 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                debug=False,
                **kwargs):
 
+    if tf_compat.version_greater_or_equal("2.0.0"):
+      raise ValueError("TPUEstimator is not yet supported with TensorFlow 2.0.")
+
     self._use_tpu = use_tpu
     if not self._use_tpu:
       tf.logging.warning(
@@ -122,9 +125,6 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
               checkpoint_path=None,
               yield_single_examples=True):
 
-    # TODO: Required to support predict on CPU for TPUEstimator.
-    # This is the recommended method from TensorFlow TPUEstimator docs:
-    # https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimator#current_limitations
     tf.logging.warning(
         "The adanet.TPUEstimator does not support predicting on TPU. "
         "Instead, all predictions are run on CPU.")
@@ -174,7 +174,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
     # when `_adanet_model_fn` is called directly on CPU during the bookkeeping
     # phase. Since we rebuild the graph each time `_adanet_model_fn` is called,
     # this has no adverse effects.
-    with tpu_function.tpu_shard_context(0):
+    with tf_compat.tpu_function.tpu_shard_context(0):
       # Bind params to input_fn since the parent's input_fn is not expected to
       # have any arguments.
       input_fn = functools.partial(input_fn, self.params)  # A deep copy.
@@ -192,7 +192,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     iteration_estimator_spec = current_iteration.estimator_spec
-    return tf.contrib.tpu.TPUEstimatorSpec(
+    return tf_compat.TPUEstimatorSpec(
         mode=mode,
         predictions=iteration_estimator_spec.predictions,
         loss=iteration_estimator_spec.loss,

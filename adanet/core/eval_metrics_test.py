@@ -20,6 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _Candidate
 from adanet.core.ensemble_builder import _EnsembleSpec
@@ -35,8 +36,17 @@ def _run_metrics(sess, metrics):
   metric_ops = metrics
   if isinstance(metric_ops, tuple):
     metric_ops = call_eval_metrics(metric_ops)
-  sess.run((tf.global_variables_initializer(),
-            tf.local_variables_initializer()))
+  if tf.executing_eagerly():
+    results = {}
+    for k in metric_ops:
+      metric = metric_ops[k]
+      if isinstance(metric, tf.keras.metrics.Metric):
+        results[k] = metric_ops[k].result().numpy()
+      else:
+        results[k] = metric_ops[k][0]
+    return results
+  sess.run((tf_compat.v1.global_variables_initializer(),
+            tf_compat.v1.local_variables_initializer()))
   sess.run(metric_ops)
   return {k: sess.run(metric_ops[k][0]) for k in metric_ops}
 
@@ -53,7 +63,7 @@ class MetricsTest(tu.AdanetTestCase):
     self._labels = {head: labels for head in heads}
     predictions = {(head, "predictions"): labels for head in heads}
     loss = tf.constant(2.)
-    self._estimator_spec = tf.contrib.tpu.TPUEstimatorSpec(
+    self._estimator_spec = tf_compat.TPUEstimatorSpec(
         mode=tf.estimator.ModeKeys.EVAL,
         loss=loss,
         predictions=predictions,
@@ -65,8 +75,9 @@ class MetricsTest(tu.AdanetTestCase):
         }))
 
   def _assert_tensors_equal(self, actual, expected):
-    with self.test_session() as sess:
-      actual, expected = sess.run((actual, expected))
+    if not tf.executing_eagerly():
+      with self.test_session() as sess:
+        actual, expected = sess.run((actual, expected))
     self.assertEqual(actual, expected)
 
   def _spec_metric_fn(self, features, labels, predictions, loss):
@@ -76,21 +87,33 @@ class MetricsTest(tu.AdanetTestCase):
         self._estimator_spec.loss
     ]
     self._assert_tensors_equal(actual, expected)
-    return {"metric_1": tf.metrics.mean(tf.constant(1.))}
+    if tf.executing_eagerly():
+      metric = tf.metrics.Mean("mean_1")
+      metric(tf.constant(1.))
+      return {"metric_1": metric}
+    return {"metric_1": tf_compat.v1.metrics.mean(tf.constant(1.))}
 
   def _metric_fn(self, features, predictions):
     actual = [features, predictions]
     expected = [self._features, self._estimator_spec.predictions]
     self._assert_tensors_equal(actual, expected)
-    return {"metric_2": tf.metrics.mean(tf.constant(2.))}
+    if tf.executing_eagerly():
+      metric = tf.metrics.Mean("mean_2")
+      metric(tf.constant(2.))
+      return {"metric_2": metric}
+    return {"metric_2": tf_compat.v1.metrics.mean(tf.constant(2.))}
 
-  @parameterized.named_parameters({
-      "testcase_name": "use_tpu",
-      "use_tpu": True,
-  }, {
-      "testcase_name": "not_use_tpu",
-      "use_tpu": False,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "use_tpu",
+          "use_tpu": True,
+      },
+      {
+          # TODO: Figure out why this gives error in TF 2.0:
+          # ValueError: Please call update_state(...) on the "mean_1" metric.
+          "testcase_name": "not_use_tpu",
+          "use_tpu": False,
+      })
   def test_subnetwork_metrics(self, use_tpu):
     spec = self._estimator_spec
     if not use_tpu:
@@ -110,7 +133,12 @@ class MetricsTest(tu.AdanetTestCase):
     overridden_value = 100.
 
     def _overriding_metric_fn():
-      return {"metric_1": tf.metrics.mean(tf.constant(overridden_value))}
+      value = tf.constant(overridden_value)
+      if tf.executing_eagerly():
+        metric = tf.metrics.Mean()
+        metric.update_state(value)
+        return {"metric_1": metric}
+      return {"metric_1": tf_compat.v1.metrics.mean(value)}
 
     metrics = _SubnetworkMetrics()
     metrics.create_eval_metrics(self._features, self._labels,
@@ -141,30 +169,35 @@ class MetricsTest(tu.AdanetTestCase):
     expected_arch_string = b"| b_0_0 | b_0_1 | b_1_0 | b_2_0 |"
     self.assertIn(expected_arch_string, serialized_arch_proto)
 
-  @parameterized.named_parameters({
-      "testcase_name": "use_tpu_evaluating",
-      "use_tpu": True,
-      "mode": tf.estimator.ModeKeys.EVAL,
-  }, {
-      "testcase_name": "use_tpu_not_evaluating",
-      "use_tpu": True,
-      "mode": tf.estimator.ModeKeys.TRAIN,
-  }, {
-      "testcase_name": "not_use_tpu_evaluating",
-      "use_tpu": False,
-      "mode": tf.estimator.ModeKeys.EVAL,
-  }, {
-      "testcase_name": "not_use_tpu_not_evaluating",
-      "use_tpu": False,
-      "mode": tf.estimator.ModeKeys.TRAIN,
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "use_tpu_evaluating",
+          "use_tpu": True,
+          "mode": tf.estimator.ModeKeys.EVAL,
+      }, {
+          "testcase_name": "use_tpu_not_evaluating",
+          "use_tpu": True,
+          "mode": tf.estimator.ModeKeys.TRAIN,
+      }, {
+          "testcase_name": "not_use_tpu_evaluating",
+          "use_tpu": False,
+          "mode": tf.estimator.ModeKeys.EVAL,
+      }, {
+          "testcase_name": "not_use_tpu_not_evaluating",
+          "use_tpu": False,
+          "mode": tf.estimator.ModeKeys.TRAIN,
+      })
   def test_iteration_metrics(self, use_tpu, mode):
     best_candidate_index = 3
     candidates = []
     for i in range(10):
 
       def metric_fn(val=i):
-        return {"ensemble_metric": tf.metrics.mean(tf.constant(val))}
+        if tf.executing_eagerly():
+          metric = tf.metrics.Mean()
+          metric(tf.constant(val))
+          return {"ensemble_metric": metric}
+        return {"ensemble_metric": tf_compat.v1.metrics.mean(tf.constant(val))}
 
       spec = _EnsembleSpec(
           name="ensemble_{}".format(i),
@@ -189,6 +222,10 @@ class MetricsTest(tu.AdanetTestCase):
           metrics_fn(tf.constant(best_candidate_index), mode) or {})
 
     if mode == tf.estimator.ModeKeys.EVAL:
+      if tf.executing_eagerly():
+        metric = tf.metrics.Mean()
+        metric(best_candidate_index)
+        return {"ensemble_metric": metric}
       expected = {"ensemble_metric": best_candidate_index}
     else:
       expected = {}

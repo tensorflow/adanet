@@ -86,6 +86,7 @@ py_binary(
         "//adanet/autoensemble",
         "//adanet/distributed",
         "//adanet/subnetwork",
+        "@absl_py//absl:app",
     ],
 )
 

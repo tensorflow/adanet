@@ -27,6 +27,7 @@ from __future__ import print_function
 
 import contextlib
 
+from absl import app
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
 from adanet.core.estimator import Estimator
 from adanet.distributed.placement import RoundRobinStrategy
@@ -267,11 +268,13 @@ def train_and_evaluate_estimator():
   tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
 
 
-def main(unused_argv):
+def main(argv):
+  del argv  # Unused.
+
   # Reduce hard-coded waits, delays, and timeouts for quicker tests.
   with _monkey_patch_distributed_training_times():
     train_and_evaluate_estimator()
 
 
 if __name__ == "__main__":
-  tf.app.run()
+  app.run(main)

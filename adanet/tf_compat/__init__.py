@@ -17,12 +17,55 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from distutils.version import LooseVersion
 import tensorflow as tf
+# pylint: disable=unused-import
+# pylint: disable=g-direct-tensorflow-import
+# pylint: disable=g-import-not-at-top
+try:
+  from tensorflow.python.tpu import tpu_function
+except ImportError:
+  from tensorflow.contrib.tpu.python.tpu import tpu_function
+try:
+  from tensorflow.python.keras.metrics import Metric
+except ImportError:
+  # When Metric is unavailable (TF < 1.13), we need to define Metric so that
+  # we don't raise an exception when defining a custom metric for TF >= 1.13
+  # workflows.
+  Metric = object
+# pylint: enable=g-import-not-at-top
+# pylint: enable=g-direct-tensorflow-import
+# pylint: enable=unused-import
 
 try:
   v1 = tf.compat.v1
 except AttributeError:
   v1 = tf
+
+try:
+  v2 = tf.compat.v2
+except AttributeError:
+  v2 = tf.contrib
+
+try:
+  SessionRunHook = tf.estimator.SessionRunHook
+except AttributeError:
+  SessionRunHook = tf.train.SessionRunHook
+
+try:
+  SummarySaverHook = tf.estimator.SummarySaverHook
+except AttributeError:
+  SummarySaverHook = tf.train.SummarySaverHook
+
+try:
+  TPUEstimatorSpec = tf.contrib.tpu.TPUEstimatorSpec
+except AttributeError:
+  TPUEstimatorSpec = object
+
+try:
+  TPUEstimator = tf.contrib.tpu.TPUEstimator
+except AttributeError:
+  TPUEstimator = object
 
 
 def tensor_name(tensor):
@@ -39,3 +82,31 @@ def tensor_name(tensor):
   """
 
   return tensor.name.split(":")[-2]
+
+
+def version_greater_or_equal(semver):
+  """Returns whether the current TF version is >= to semver string."""
+
+  try:
+    tf_version = tf.version.VERSION
+  except AttributeError:
+    tf_version = tf.VERSION
+  return LooseVersion(tf_version) >= LooseVersion(semver)
+
+
+def make_one_shot_iterator(dataset):
+  """Returns a dataset's one-shot iterator."""
+
+  try:
+    return v1.data.make_one_shot_iterator(dataset)
+  except AttributeError:
+    return dataset.make_one_shot_iterator()
+
+
+def random_normal(*args, **kwargs):
+  """Returns a random normal distribution Tensor."""
+
+  try:
+    return tf.random.normal(*args, **kwargs)
+  except AttributeError:
+    return tf.random_normal(*args, **kwargs)

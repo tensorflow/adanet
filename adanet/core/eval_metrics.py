@@ -22,9 +22,9 @@ from __future__ import print_function
 import collections
 import inspect
 
+from adanet import tf_compat
 import six
 import tensorflow as tf
-
 from tensorflow.python.util import nest  # pylint: disable=g-direct-tensorflow-import
 
 
@@ -104,7 +104,14 @@ class _SubnetworkMetrics(object):
     self._eval_metrics_store.add_eval_metrics(
         self._templatize_metric_fn(spec_fn), spec_args)
 
-    loss_fn = lambda loss: {"loss": tf.metrics.mean(loss)}
+    if tf_compat.version_greater_or_equal("1.13.0") and tf.executing_eagerly():
+      loss_metric = tf.keras.metrics.Mean("mean_loss")
+
+      def loss_fn(loss):
+        loss_metric(loss)
+        return {"loss": loss_metric}
+    else:
+      loss_fn = lambda loss: {"loss": tf_compat.v1.metrics.mean(loss)}
     loss_fn_args = [tf.reshape(estimator_spec.loss, [1])]
     self._eval_metrics_store.add_eval_metrics(
         self._templatize_metric_fn(loss_fn), loss_fn_args)
@@ -137,6 +144,9 @@ class _SubnetworkMetrics(object):
       The original metric_fn wrapped with a template function.
     """
 
+    if tf.executing_eagerly():
+      return metric_fn
+
     def _metric_fn(*args, **kwargs):
       """The wrapping function to be returned."""
 
@@ -147,21 +157,21 @@ class _SubnetworkMetrics(object):
       for i, key in enumerate(sorted(metrics)):
         tensor, op = metrics[key]
         # key cannot be in var name since it may contain illegal chars.
-        var = tf.get_variable(
+        var = tf_compat.v1.get_variable(
             "metric_{}".format(i),
             shape=tensor.shape,
             dtype=tensor.dtype,
             trainable=False,
-            initializer=tf.zeros_initializer(),
-            collections=[tf.GraphKeys.LOCAL_VARIABLES])
+            initializer=tf_compat.v1.zeros_initializer(),
+            collections=[tf_compat.v1.GraphKeys.LOCAL_VARIABLES])
         if isinstance(op, tf.Operation) or op.shape != tensor.shape:
           with tf.control_dependencies([op]):
-            op = tf.assign(var, tensor)
-        metric = (var, tf.assign(var, op))
+            op = tf_compat.v1.assign(var, tensor)
+        metric = (var, tf_compat.v1.assign(var, op))
         wrapped_metrics[key] = metric
       return wrapped_metrics
 
-    return tf.make_template("metric_fn_template", _metric_fn)
+    return tf_compat.v1.make_template("metric_fn_template", _metric_fn)
 
   def eval_metrics_tuple(self):
     """Returns tuple of (metric_fn, tensors) which can be executed on TPU."""
@@ -178,6 +188,24 @@ class _SubnetworkMetrics(object):
       return eval_metric_ops
 
     return _metric_fn, self._eval_metrics_store.flatten_args()
+
+
+class _ArchitectureMetric(tf_compat.Metric):
+  """Tracks the current ensemble architecture as a metric."""
+
+  def __init__(self, name="architecture_metric", **kwargs):
+    # NOTE: This should not be called when Metric is not supported.
+    super(_ArchitectureMetric, self).__init__(name=name, **kwargs)
+    self._value = self.add_weight(
+        name="value",
+        initializer=tf.keras.initializers.Constant(""),
+        dtype=tf.string)
+
+  def update_state(self, value):
+    self._value.assign(value)
+
+  def result(self):
+    return self._value
 
 
 class _EnsembleMetrics(_SubnetworkMetrics):
@@ -210,18 +238,23 @@ class _EnsembleMetrics(_SubnetworkMetrics):
       # included in the ensemble name.
       architecture_ = " | ".join([name for _, name in architecture.subnetworks])
       architecture_ = "| {} |".format(architecture_)
-      summary_metadata = tf.SummaryMetadata(
-          plugin_data=tf.SummaryMetadata.PluginData(plugin_name="text"))
-      summary_proto = tf.summary.Summary()
+      summary_metadata = tf_compat.v1.SummaryMetadata(
+          plugin_data=tf_compat.v1.SummaryMetadata.PluginData(
+              plugin_name="text"))
+      summary_proto = tf_compat.v1.summary.Summary()
       summary_proto.value.add(
           metadata=summary_metadata,
           tag="architecture/adanet",
-          tensor=tf.make_tensor_proto(architecture_, dtype=tf.string))
+          tensor=tf_compat.v1.make_tensor_proto(architecture_, dtype=tf.string))
       architecture_summary = tf.convert_to_tensor(
-          summary_proto.SerializeToString(), name="architecture")
-      return {
-          "architecture/adanet/ensembles": (architecture_summary, tf.no_op())
-      }
+          value=summary_proto.SerializeToString(), name="architecture")
+
+      if tf.executing_eagerly():
+        metric = _ArchitectureMetric()
+        metric(architecture_summary)
+      else:
+        metric = (architecture_summary, tf.no_op())
+      return {"architecture/adanet/ensembles": metric}
 
     return _architecture_metric_fn
 
@@ -283,9 +316,14 @@ class _IterationMetrics(object):
     def _best_eval_metrics_fn(*args):
       """Returns the best eval metrics."""
 
-      with tf.variable_scope("best_eval_metrics"):
+      with tf_compat.v1.variable_scope("best_eval_metrics"):
         args = list(args)
-        idx, idx_update_op = tf.metrics.mean(args.pop())
+        if tf.executing_eagerly():
+          mean = tf.keras.metrics.Mean()
+          idx_update_op = mean.update_state(args.pop())
+          idx = mean.result()
+        else:
+          idx, idx_update_op = tf_compat.v1.metrics.mean(args.pop())
 
         metric_fns = self._candidates_eval_metrics_store.metric_fns
         metric_fn_args = self._candidates_eval_metrics_store.pack_args(
@@ -306,10 +344,15 @@ class _IterationMetrics(object):
             continue
           if metric_name == "loss":
             continue
+          if tf.executing_eagerly():
+            values = [m.result() for m in metric_ops]
+            best_value = tf.stack(values)[tf.cast(idx, tf.int32)]
+            eval_metric_ops[metric_name] = (best_value, None)
+            continue
           values, ops = list(six.moves.zip(*metric_ops))
           best_value = tf.stack(values)[tf.cast(idx, tf.int32)]
           # All tensors in this function have been outfed from the TPU, so we
-          # must update them manually, otherwise the TPU will hang indefinetly
+          # must update them manually, otherwise the TPU will hang indefinitely
           # for the value of idx to update.
           ops = list(ops)
           ops.append(idx_update_op)
