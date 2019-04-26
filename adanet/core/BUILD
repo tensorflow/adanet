@@ -87,6 +87,7 @@ py_binary(
         "//adanet/distributed",
         "//adanet/subnetwork",
         "@absl_py//absl:app",
+        "@absl_py//absl/testing:absltest",
     ],
 )
 

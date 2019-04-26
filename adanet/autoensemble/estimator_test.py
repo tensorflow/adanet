@@ -23,6 +23,7 @@ import os
 import shutil
 
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
 import tensorflow as tf
 
@@ -111,7 +112,13 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
 
     # Evaluate.
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
-    self.assertAllClose(.209, eval_results["loss"], atol=.05)
+
+    want_loss = .209
+    if tf_compat.version_greater_or_equal("1.10.0") and (
+        not tf_compat.version_greater_or_equal("1.12.0")):
+      # Only TF 1.10 and 1.11.
+      want_loss = .079514
+    self.assertAllClose(want_loss, eval_results["loss"], atol=.05)
 
     # Predict.
     predictions = estimator.predict(input_fn=test_input_fn)
