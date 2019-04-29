@@ -24,6 +24,7 @@ py_library(
 py_test(
     name = "adanet_test",
     srcs = ["adanet_test.py"],
+    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":adanet",

@@ -28,6 +28,7 @@ py_library(
 py_test(
     name = "estimator_test",
     srcs = ["estimator_test.py"],
+    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":estimator",
