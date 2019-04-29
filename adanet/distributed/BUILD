@@ -25,7 +25,6 @@ py_library(
 py_test(
     name = "devices_test",
     srcs = ["devices_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":devices",
@@ -41,7 +40,6 @@ py_library(
 py_test(
     name = "placement_test",
     srcs = ["placement_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":placement",

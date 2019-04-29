@@ -33,7 +33,6 @@ py_library(
 py_test(
     name = "strategy_test",
     srcs = ["strategy_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":ensemble",
@@ -54,7 +53,6 @@ py_library(
 py_test(
     name = "weighted_test",
     srcs = ["weighted_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":ensemble",
