@@ -53,9 +53,19 @@ except AttributeError:
   SessionRunHook = tf.train.SessionRunHook
 
 try:
+  SessionRunArgs = tf.estimator.SessionRunArgs
+except AttributeError:
+  SessionRunArgs = tf.train.SessionRunArgs
+
+try:
   SummarySaverHook = tf.estimator.SummarySaverHook
 except AttributeError:
   SummarySaverHook = tf.train.SummarySaverHook
+
+try:
+  CheckpointSaverHook = tf.estimator.CheckpointSaverHook
+except AttributeError:
+  CheckpointSaverHook = tf.train.CheckpointSaverHook
 
 try:
   TPUEstimatorSpec = tf.contrib.tpu.TPUEstimatorSpec

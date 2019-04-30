@@ -23,6 +23,7 @@ import functools
 import os
 
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.core import testing_utils as tu
 from adanet.core.summary import _ScopedSummary
 from adanet.core.summary import _TPUScopedSummary
@@ -707,7 +708,11 @@ def _summaries():
   return [
       tf.summary.scalar, tf.summary.audio, tf.summary.histogram,
       tf.summary.image, tf.contrib.summary.scalar, tf.contrib.summary.audio,
-      tf.contrib.summary.histogram, tf.contrib.summary.image
+      tf.contrib.summary.histogram, tf.contrib.summary.image,
+      tf_compat.v1.summary.scalar, tf_compat.v1.summary.audio,
+      tf_compat.v1.summary.histogram, tf_compat.v1.summary.image,
+      tf_compat.v2.summary.scalar, tf_compat.v2.summary.audio,
+      tf_compat.v2.summary.histogram, tf_compat.v2.summary.image
   ]
 
 
@@ -732,7 +737,8 @@ class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
     summary = summary_maker()
     before = _summaries()
     with monkey_patched_summaries(summary):
-      self.assertNotEqual(before, _summaries())
+      for want, got in zip(before, _summaries()):
+        self.assertNotEqual(want, got)
       tf.summary.scalar("scalar", 1, ["collection"], "family")
       tf.summary.image("image", 1, 3, ["collection"], "family")
       tf.summary.histogram("histogram", 1, ["collection"], "family")
@@ -759,7 +765,8 @@ class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
     summary = summary_maker()
     before = _summaries()
     with monkey_patched_summaries(summary):
-      self.assertNotEqual(before, _summaries())
+      for want, got in zip(before, _summaries()):
+        self.assertNotEqual(want, got)
       tf.summary.scalar(
           name="scalar", tensor=1, collections=["collection"], family="family")
       tf.summary.image(

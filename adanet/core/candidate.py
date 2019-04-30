@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import collections
 
+from adanet import tf_compat
 import tensorflow as tf
 
 from tensorflow.python.training import moving_averages
@@ -125,10 +126,10 @@ class _CandidateBuilder(object):
 
     candidate_scope = "candidate_{}".format(ensemble_spec.name)
 
-    with tf.variable_scope(candidate_scope):
+    with tf_compat.v1.variable_scope(candidate_scope):
       adanet_loss = ensemble_spec.adanet_loss
       if track_moving_average:
-        adanet_loss = tf.get_variable(
+        adanet_loss = tf_compat.v1.get_variable(
             "adanet_loss", initializer=0., trainable=False)
 
       if is_previous_best:

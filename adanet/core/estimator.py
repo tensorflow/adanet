@@ -40,10 +40,13 @@ from adanet.distributed import ReplicationStrategy
 from adanet.distributed.devices import monkey_patch_default_variable_placement_strategy
 from adanet.ensemble import ComplexityRegularizedEnsembler
 from adanet.ensemble import GrowStrategy
-from distutils.version import LooseVersion
 import numpy as np
 import six
 import tensorflow as tf
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.data.ops.dataset_ops import DatasetV1
+from tensorflow.python.data.ops.dataset_ops import DatasetV2
+# pylint: enable=g-direct-tensorflow-import
 
 
 class _StopAfterTrainingHook(tf_compat.SessionRunHook):
@@ -67,7 +70,7 @@ class _StopAfterTrainingHook(tf_compat.SessionRunHook):
     """See `SessionRunHook`."""
 
     del run_context  # Unused
-    return tf.train.SessionRunArgs(self._iteration.is_over_fn())
+    return tf_compat.SessionRunArgs(self._iteration.is_over_fn())
 
   def after_run(self, run_context, run_values):
     """See `SessionRunHook`."""
@@ -112,7 +115,7 @@ class _EvalMetricSaverHook(tf_compat.SessionRunHook):
     # the metric variables. The metrics themselves are computed as a result of
     # being returned in the EstimatorSpec by _adanet_model_fn.
     metric_fn, tensors = self._eval_metrics
-    tensors = [tf.placeholder(t.dtype, t.shape) for t in tensors]
+    tensors = [tf_compat.v1.placeholder(t.dtype, t.shape) for t in tensors]
     eval_metric_ops = metric_fn(*tensors)
     self._eval_metric_tensors = {k: v[0] for k, v in eval_metric_ops.items()}
 
@@ -133,20 +136,20 @@ class _EvalMetricSaverHook(tf_compat.SessionRunHook):
 
     # Forked from tensorflow/python/estimator/estimator.py function called
     # _write_dict_to_summary.
-    current_global_step = tf.train.get_global_step()
+    current_global_step = tf_compat.v1.train.get_global_step()
     eval_dict, current_global_step = session.run(
         (self._eval_metric_tensors, current_global_step))
 
     logging.info("Saving %s '%s' dict for global step %d: %s", self._kind,
                  self._name, current_global_step, self._dict_to_str(eval_dict))
-    summary_writer = tf.summary.FileWriterCache.get(self._output_dir)
-    summary_proto = tf.summary.Summary()
+    summary_writer = tf_compat.v1.summary.FileWriterCache.get(self._output_dir)
+    summary_proto = tf_compat.v1.summary.Summary()
     for key in eval_dict:
       value = eval_dict[key]
       if isinstance(value, (np.float32, float)):
         summary_proto.value.add(tag=key, simple_value=float(value))
       elif isinstance(value, six.binary_type):
-        summ = tf.summary.Summary.FromString(value)
+        summ = tf_compat.v1.summary.Summary.FromString(value)
         for i, _ in enumerate(summ.value):
           summ.value[i].tag = "{}/{}".format(key, i)
         summary_proto.value.extend(summ.value)
@@ -193,14 +196,14 @@ class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
     actually overwrite the checkpoint.
     """
 
-    self._restore_saver = tf.train.Saver(
+    self._restore_saver = tf_compat.v1.train.Saver(
         sharded=True, var_list=self._previous_iteration_vars)
     # Note: self._iteration_number already contains the value of the next
     # iteration since _OverwriteCheckpointHook should only execute during the
     # graph growing phase.
-    self._update_op = tf.assign(self._iteration_number_tensor,
-                                self._iteration_number)
-    self._overwrite_saver = tf.train.Saver(
+    self._update_op = self._iteration_number_tensor.assign(
+        self._iteration_number)
+    self._overwrite_saver = tf_compat.v1.train.Saver(
         sharded=True, max_to_keep=self._keep_checkpoint_max)
     self._overwrite_saver.recover_last_checkpoints(
         self._checkpoint_state.all_model_checkpoint_paths)
@@ -317,12 +320,12 @@ def _cleaned_hooks(hooks):
     return hooks
 
   for hook in hooks:
-    if isinstance(hook, tf.train.CheckpointSaverHook):
+    if isinstance(hook, tf_compat.CheckpointSaverHook):
       hook._saver = None  # pylint: disable=protected-access
 
   return [
       hook for hook in hooks
-      if not isinstance(hook, tf.train.CheckpointSaverHook)
+      if not isinstance(hook, tf_compat.CheckpointSaverHook)
   ]
 
 
@@ -630,7 +633,8 @@ class Estimator(tf.estimator.Estimator):
     latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
     if latest_checkpoint is None:
       return 0
-    return tf.train.load_variable(latest_checkpoint, tf.GraphKeys.GLOBAL_STEP)
+    return tf.train.load_variable(latest_checkpoint,
+                                  tf_compat.v1.GraphKeys.GLOBAL_STEP)
 
   @contextlib.contextmanager
   def _train_loop_context(self):
@@ -771,13 +775,13 @@ class Estimator(tf.estimator.Estimator):
     """Calls model_fn with the given mode and parameters."""
 
     with tf.Graph().as_default():
-      tf.set_random_seed(self.config.tf_random_seed)
+      tf_compat.v1.set_random_seed(self.config.tf_random_seed)
       # Create global step before calling model_fn as does superclass.
-      tf.train.get_or_create_global_step()
+      tf_compat.v1.train.get_or_create_global_step()
       inputs = input_fn()
       # TODO: Consider tensorflow_estimator/python/estimator/util.py.
-      if isinstance(inputs, tf.data.Dataset):
-        features, labels = inputs.make_one_shot_iterator().get_next()
+      if isinstance(inputs, (DatasetV1, DatasetV2)):
+        features, labels = tf_compat.make_one_shot_iterator(inputs).get_next()
       else:
         features, labels = inputs
       self.model_fn(features, labels, mode, self.config)
@@ -791,7 +795,7 @@ class Estimator(tf.estimator.Estimator):
         tf_random_seed=config.tf_random_seed,
         session_config=config.session_config,
         device_fn=config.device_fn)
-    if LooseVersion(tf.VERSION) >= LooseVersion("1.11.0"):
+    if tf_compat.version_greater_or_equal("1.11.0"):
       temp_run_config_kwargs["protocol"] = config.protocol
     return tf.estimator.Estimator(
         model_fn=self._adanet_model_fn,
@@ -839,8 +843,8 @@ class Estimator(tf.estimator.Estimator):
     logging.info("Adapting graph and incrementing iteration number...")
     self._prepare_next_iteration_state = self._Keys.INCREMENT_ITERATION
     temp_model_dir = os.path.join(self.model_dir, "temp_model_dir")
-    if tf.gfile.Exists(temp_model_dir):
-      tf.gfile.DeleteRecursively(temp_model_dir)
+    if tf.io.gfile.exists(temp_model_dir):
+      tf.io.gfile.rmtree(temp_model_dir)
     with _temp_tf_config(temp_model_dir):
       temp_estimator = self._create_temp_estimator(temp_model_dir)
       # Do not train with any saving_listeners since this is just a temporary
@@ -850,7 +854,7 @@ class Estimator(tf.estimator.Estimator):
           max_steps=1,
           hooks=self._decorate_hooks(_cleaned_hooks(self._train_hooks)),
           saving_listeners=None)
-    tf.gfile.DeleteRecursively(temp_model_dir)
+    tf.io.gfile.rmtree(temp_model_dir)
     self._prepare_next_iteration_state = None
     logging.info("Done adapting graph and incrementing iteration number.")
 
@@ -909,14 +913,15 @@ class Estimator(tf.estimator.Estimator):
     latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
     logging.info("Starting ensemble evaluation for iteration %s",
                  current_iteration.number)
-    with tf.Session() as sess:
-      init = tf.group(tf.global_variables_initializer(),
-                      tf.local_variables_initializer(), tf.tables_initializer())
+    with tf_compat.v1.Session() as sess:
+      init = tf.group(tf_compat.v1.global_variables_initializer(),
+                      tf_compat.v1.local_variables_initializer(),
+                      tf_compat.v1.tables_initializer())
       sess.run(init)
-      saver = tf.train.Saver(sharded=True)
+      saver = tf_compat.v1.train.Saver(sharded=True)
       saver.restore(sess, latest_checkpoint)
       coord = tf.train.Coordinator()
-      tf.train.start_queue_runners(sess=sess, coord=coord)
+      tf_compat.v1.train.start_queue_runners(sess=sess, coord=coord)
       if self._evaluator:
         adanet_losses = [
             c.ensemble_spec.adanet_loss for c in current_iteration.candidates
@@ -971,14 +976,15 @@ class Estimator(tf.estimator.Estimator):
         name for i, name in best_architecture.subnetworks
         if i == current_iteration.number
     ]
-    with tf.Session() as sess:
-      init = tf.group(tf.global_variables_initializer(),
-                      tf.local_variables_initializer(), tf.tables_initializer())
+    with tf_compat.v1.Session() as sess:
+      init = tf.group(tf_compat.v1.global_variables_initializer(),
+                      tf_compat.v1.local_variables_initializer(),
+                      tf_compat.v1.tables_initializer())
       sess.run(init)
-      saver = tf.train.Saver(sharded=True)
+      saver = tf_compat.v1.train.Saver(sharded=True)
       saver.restore(sess, latest_checkpoint)
       coord = tf.train.Coordinator()
-      tf.train.start_queue_runners(sess=sess, coord=coord)
+      tf_compat.v1.train.start_queue_runners(sess=sess, coord=coord)
       materialized_reports = (
           self._report_materializer.materialize_subnetwork_reports(
               sess, current_iteration.number,
@@ -1118,8 +1124,8 @@ class Estimator(tf.estimator.Estimator):
     """
 
     # Make directories since model_dir may not have been created yet.
-    tf.gfile.MakeDirs(os.path.dirname(filename))
-    with tf.gfile.GFile(filename, "w") as record_file:
+    tf.io.gfile.makedirs(os.path.dirname(filename))
+    with tf.io.gfile.GFile(filename, "w") as record_file:
       record_file.write(architecture.serialize())
 
   def _read_architecture(self, filename):
@@ -1137,10 +1143,10 @@ class Estimator(tf.estimator.Estimator):
       OSError: When file not found at `filename`.
     """
 
-    if not tf.gfile.Exists(filename):
+    if not tf.io.gfile.exists(filename):
       raise OSError(errno.ENOENT, os.strerror(errno.ENOENT), filename)
 
-    with tf.gfile.GFile(filename, "rb") as gfile:
+    with tf.io.gfile.GFile(filename, "rb") as gfile:
       return _Architecture.deserialize(gfile.read())
 
   def _find_ensemble_candidate(self, ensemble_candidate_name,
@@ -1305,7 +1311,7 @@ class Estimator(tf.estimator.Estimator):
 
     train_op = iteration_estimator_spec.train_op
     if self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
-      train_op = tf.assign_add(tf.train.get_global_step(), 1)
+      train_op = tf_compat.v1.train.get_global_step().assign_add(1)
       # NOTE: some version of TensorFlow check that train_op is an Op or Tensor
       # and crash if train_op is a Variable.
       train_op = tf.identity(train_op)
@@ -1330,7 +1336,7 @@ class Estimator(tf.estimator.Estimator):
                                  iteration_number_tensor,
                                  previous_iteration_vars)),
         evaluation_hooks=self._evaluation_hooks(current_iteration, training),
-        scaffold=tf.train.Scaffold(summary_op=tf.constant("")),
+        scaffold=tf_compat.v1.train.Scaffold(summary_op=tf.constant("")),
         export_outputs=iteration_estimator_spec.export_outputs)
 
   def _adanet_model_fn(self, features, labels, mode, params):
@@ -1390,7 +1396,7 @@ class Estimator(tf.estimator.Estimator):
     skip_summaries = (
         mode != tf.estimator.ModeKeys.TRAIN or
         self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION)
-    with tf.variable_scope("adanet"):
+    with tf_compat.v1.variable_scope("adanet"):
       previous_ensemble_spec = None
       previous_ensemble = None
       previous_ensemble_summary = None
@@ -1398,7 +1404,7 @@ class Estimator(tf.estimator.Estimator):
       architecture = None
       for i in range(iteration_number):
         architecture_filename = self._architecture_filename(i)
-        if not tf.gfile.Exists(architecture_filename):
+        if not tf.io.gfile.exists(architecture_filename):
           continue
         architecture = self._read_architecture(architecture_filename)
         logging.info(
@@ -1427,8 +1433,9 @@ class Estimator(tf.estimator.Estimator):
         # this code is also run on TPU, which does not support creating Savers
         # inside model_fn.
         previous_iteration_vars = (
-            tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) +
-            tf.get_collection(tf.GraphKeys.SAVEABLE_OBJECTS))
+            tf_compat.v1.get_collection(tf_compat.v1.GraphKeys.GLOBAL_VARIABLES)
+            + tf_compat.v1.get_collection(
+                tf_compat.v1.GraphKeys.SAVEABLE_OBJECTS))
       previous_ensemble_reports, all_reports = [], []
       if self._report_materializer:
         previous_ensemble_reports, all_reports = (
@@ -1456,11 +1463,11 @@ class Estimator(tf.estimator.Estimator):
     # Variable which allows us to read the current iteration from a checkpoint.
     # This must be created here so it is available when calling
     # _prepare_next_iteration after the first iteration.
-    iteration_number_tensor = tf.get_variable(
+    iteration_number_tensor = tf_compat.v1.get_variable(
         self._Keys.CURRENT_ITERATION,
         shape=[],
         dtype=tf.int64,
-        initializer=tf.zeros_initializer(),
+        initializer=tf_compat.v1.zeros_initializer(),
         trainable=False)
 
     if self._prepare_next_iteration_state == self._Keys.EVALUATE_ENSEMBLES:

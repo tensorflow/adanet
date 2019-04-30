@@ -22,6 +22,7 @@ from __future__ import print_function
 import functools
 
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.core.candidate import _Candidate
 from adanet.core.ensemble_builder import _EnsembleSpec
 from adanet.core.ensemble_builder import _SubnetworkSpec
@@ -36,6 +37,8 @@ from adanet.subnetwork import Report as SubnetworkReport
 from adanet.subnetwork import Subnetwork
 from adanet.subnetwork import TrainOpSpec
 import tensorflow as tf
+from tensorflow_estimator.python.estimator.head import binary_class_head
+from tensorflow_estimator.python.estimator.head import regression_head
 
 
 def _dummy_candidate():
@@ -354,7 +357,7 @@ def _export_output_tensors(export_outputs):
     if isinstance(export_output, tf.estimator.export.ClassificationOutput):
       result = ()
       if export_output.classes is not None:
-        result += (tf.string_to_number(export_output.classes),)
+        result += (tf.strings.to_number(export_output.classes),)
       if export_output.scores is not None:
         result += (export_output.scores,)
       outputs[key] = result
@@ -718,7 +721,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                            mode=tf.estimator.ModeKeys.TRAIN,
                            summary_maker=_ScopedSummary,
                            want_chief_hooks=False):
-    global_step = tf.train.create_global_step()
+    global_step = tf_compat.v1.train.create_global_step()
     builder = _IterationBuilder(
         _FakeCandidateBuilder(),
         _FakeSubnetworkManager(),
@@ -736,8 +739,8 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
         mode=mode,
         previous_ensemble_spec=previous_ensemble_spec())
     with self.test_session() as sess:
-      init = tf.group(tf.global_variables_initializer(),
-                      tf.local_variables_initializer())
+      init = tf.group(tf_compat.v1.global_variables_initializer(),
+                      tf_compat.v1.local_variables_initializer())
       sess.run(init)
       estimator_spec = iteration.estimator_spec
       if want_chief_hooks:
@@ -879,10 +882,10 @@ class IterationExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
 
   @parameterized.named_parameters({
       "testcase_name": "regression_head",
-      "head": tf.contrib.estimator.regression_head(),
+      "head": regression_head.RegressionHead(),
   }, {
       "testcase_name": "binary_classification_head",
-      "head": tf.contrib.estimator.binary_classification_head(),
+      "head": binary_class_head.BinaryClassHead(),
   })
   def test_head_export_outputs(self, head):
     ensemble_builder = _HeadEnsembleBuilder(head)

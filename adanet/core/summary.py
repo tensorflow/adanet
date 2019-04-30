@@ -677,6 +677,10 @@ def monkey_patched_summaries(summary):
   old_summary_v2_image = summary_v2_lib.image
   old_summary_v2_histogram = summary_v2_lib.histogram
   old_summary_v2_audio = summary_v2_lib.audio
+  old_summary_compat_v2_scalar = tf_compat.v2.summary.scalar
+  old_summary_compat_v2_image = tf_compat.v2.summary.image
+  old_summary_compat_v2_histogram = tf_compat.v2.summary.histogram
+  old_summary_compat_v2_audio = tf_compat.v2.summary.audio
 
   # Monkey-patch global attributes.
   wrapped_summary = _SummaryWrapper(summary)
@@ -684,6 +688,10 @@ def monkey_patched_summaries(summary):
   setattr(tf.summary, "image", wrapped_summary.image)
   setattr(tf.summary, "histogram", wrapped_summary.histogram)
   setattr(tf.summary, "audio", wrapped_summary.audio)
+  setattr(tf_compat.v1.summary, "scalar", wrapped_summary.scalar)
+  setattr(tf_compat.v1.summary, "image", wrapped_summary.image)
+  setattr(tf_compat.v1.summary, "histogram", wrapped_summary.histogram)
+  setattr(tf_compat.v1.summary, "audio", wrapped_summary.audio)
   setattr(summary_lib, "scalar", wrapped_summary.scalar)
   setattr(summary_lib, "image", wrapped_summary.image)
   setattr(summary_lib, "histogram", wrapped_summary.histogram)
@@ -722,14 +730,18 @@ def monkey_patched_summaries(summary):
     setattr(summary_v2_lib, "histogram", old_summary_v2_histogram)
     setattr(summary_v2_lib, "image", old_summary_v2_image)
     setattr(summary_v2_lib, "scalar", old_summary_v2_scalar)
-    setattr(tf_compat.v2.summary, "audio", old_summary_v2_audio)
-    setattr(tf_compat.v2.summary, "histogram", old_summary_v2_histogram)
-    setattr(tf_compat.v2.summary, "image", old_summary_v2_image)
-    setattr(tf_compat.v2.summary, "scalar", old_summary_v2_scalar)
+    setattr(tf_compat.v2.summary, "audio", old_summary_compat_v2_audio)
+    setattr(tf_compat.v2.summary, "histogram", old_summary_compat_v2_histogram)
+    setattr(tf_compat.v2.summary, "image", old_summary_compat_v2_image)
+    setattr(tf_compat.v2.summary, "scalar", old_summary_compat_v2_scalar)
     setattr(summary_lib, "audio", old_summary_audio)
     setattr(summary_lib, "histogram", old_summary_histogram)
     setattr(summary_lib, "image", old_summary_image)
     setattr(summary_lib, "scalar", old_summary_scalar)
+    setattr(tf_compat.v1.summary, "audio", old_summary_audio)
+    setattr(tf_compat.v1.summary, "histogram", old_summary_histogram)
+    setattr(tf_compat.v1.summary, "image", old_summary_image)
+    setattr(tf_compat.v1.summary, "scalar", old_summary_scalar)
     setattr(tf.summary, "audio", old_summary_audio)
     setattr(tf.summary, "histogram", old_summary_histogram)
     setattr(tf.summary, "image", old_summary_image)

@@ -24,6 +24,8 @@ import contextlib
 import functools
 import inspect
 
+from absl import logging
+from adanet import tf_compat
 from adanet.core.architecture import _Architecture
 from adanet.core.eval_metrics import _EnsembleMetrics
 from adanet.core.eval_metrics import _SubnetworkMetrics
@@ -133,22 +135,25 @@ def _to_train_op_spec(train_op):
 def _monkey_patch_context(iteration_step_scope, scoped_summary, trainable_vars):
   """Monkey-patches global attributes with subnetwork-specifics ones."""
 
-  old_get_global_step_fn = tf.train.get_global_step
-  old_get_or_create_global_step_fn = tf.train.get_or_create_global_step
-  old_trainable_vars = tf.trainable_variables()
+  old_get_global_step_fn = tf_compat.v1.train.get_global_step
+  old_get_or_create_global_step_fn = tf_compat.v1.train.get_or_create_global_step
+  old_trainable_vars = tf_compat.v1.trainable_variables()
 
   def iteration_step(graph=None):
-    graph = graph or tf.get_default_graph()
+    graph = graph or tf_compat.v1.get_default_graph()
     with graph.as_default() as g, g.name_scope(None):
-      with tf.variable_scope(iteration_step_scope, reuse=tf.AUTO_REUSE):
-        return tf.get_variable(
+      with tf_compat.v1.variable_scope(
+          iteration_step_scope, reuse=tf_compat.v1.AUTO_REUSE):
+        return tf_compat.v1.get_variable(
             "iteration_step",
             shape=[],
-            initializer=tf.zeros_initializer(),
+            initializer=tf_compat.v1.zeros_initializer(),
             trainable=False,
             dtype=tf.int64)
 
   # monkey-patch global attributes.
+  setattr(tf_compat.v1.train, "get_global_step", iteration_step)
+  setattr(tf_compat.v1.train, "get_or_create_global_step", iteration_step)
   setattr(tf.train, "get_global_step", iteration_step)
   setattr(tf.train, "get_or_create_global_step", iteration_step)
   setattr(train, "get_global_step", iteration_step)
@@ -173,22 +178,27 @@ def _monkey_patch_context(iteration_step_scope, scoped_summary, trainable_vars):
     setattr(tf.train, "get_or_create_global_step",
             old_get_or_create_global_step_fn)
     setattr(tf.train, "get_global_step", old_get_global_step_fn)
+    setattr(tf_compat.v1.train, "get_or_create_global_step",
+            old_get_or_create_global_step_fn)
+    setattr(tf_compat.v1.train, "get_global_step", old_get_global_step_fn)
 
 
 def _clear_trainable_variables():
-  del tf.get_collection_ref(tf.GraphKeys.TRAINABLE_VARIABLES)[:]
+  del tf_compat.v1.get_collection_ref(
+      tf_compat.v1.GraphKeys.TRAINABLE_VARIABLES)[:]
 
 
 def _set_trainable_variables(var_list):
   _clear_trainable_variables()
   for var in var_list:
     assert isinstance(var, tf.Variable)
-    tf.add_to_collections(tf.GraphKeys.TRAINABLE_VARIABLES, var)
+    tf_compat.v1.add_to_collections(tf_compat.v1.GraphKeys.TRAINABLE_VARIABLES,
+                                    var)
 
 
 def _new_trainable_variables(old_vars):
   # Assumes that new trainable variables are always appended to the collection.
-  return tf.trainable_variables()[len(old_vars):]
+  return tf_compat.v1.trainable_variables()[len(old_vars):]
 
 
 class _EnsembleBuilder(object):
@@ -258,7 +268,7 @@ class _EnsembleBuilder(object):
       An `_EnsembleSpec` instance.
     """
 
-    with tf.variable_scope("ensemble_{}".format(name)):
+    with tf_compat.v1.variable_scope("ensemble_{}".format(name)):
       architecture = _Architecture(candidate.name)
       previous_subnetworks = []
       subnetwork_builders = []
@@ -270,7 +280,7 @@ class _EnsembleBuilder(object):
         if len(candidate.subnetwork_builders) == 1 and previous_ensemble:
           # Prune previous ensemble according to the subnetwork.Builder for
           # backwards compatibility.
-          tf.logging.warn(
+          logging.warn(
               "Using an `adanet.subnetwork.Builder#prune_previous_ensemble` "
               "is deprecated. Please use a custom `adanet.ensemble.Strategy` "
               "instead.")
@@ -292,8 +302,8 @@ class _EnsembleBuilder(object):
       subnetworks = [
           subnetwork_map[s.name] for s in candidate.subnetwork_builders
       ]
-      ensemble_scope = tf.get_variable_scope()
-      before_var_list = tf.trainable_variables()
+      ensemble_scope = tf_compat.v1.get_variable_scope()
+      before_var_list = tf_compat.v1.trainable_variables()
       with summary.current_scope(), _monkey_patch_context(
           iteration_step_scope=ensemble_scope,
           scoped_summary=summary,
@@ -310,8 +320,9 @@ class _EnsembleBuilder(object):
             previous_ensemble=previous_ensemble)
       ensemble_var_list = _new_trainable_variables(before_var_list)
 
-      estimator_spec = _create_estimator_spec(
-          self._head, features, labels, mode, ensemble.logits, self._use_tpu)
+      estimator_spec = _create_estimator_spec(self._head, features, labels,
+                                              mode, ensemble.logits,
+                                              self._use_tpu)
 
       ensemble_loss = estimator_spec.loss
       adanet_loss = None
@@ -342,8 +353,8 @@ class _EnsembleBuilder(object):
         # Note that these mixture weights are on top of the last_layer of the
         # subnetwork constructed in TRAIN mode, which means that dropout is
         # still applied when the mixture weights are being trained.
-        ensemble_scope = tf.get_variable_scope()
-        with tf.variable_scope("train_mixture_weights"):
+        ensemble_scope = tf_compat.v1.get_variable_scope()
+        with tf_compat.v1.variable_scope("train_mixture_weights"):
           with summary.current_scope(), _monkey_patch_context(
               iteration_step_scope=ensemble_scope,
               scoped_summary=summary,
@@ -353,7 +364,7 @@ class _EnsembleBuilder(object):
             old_train_op_fn = getattr(subnetwork_builder,
                                       "build_mixture_weights_train_op", None)
             if callable(old_train_op_fn):
-              tf.logging.warn(
+              logging.warn(
                   "The `build_mixture_weights_train_op` method is deprecated. "
                   "Please use the `Ensembler#build_train_op` instead.")
               train_op = _to_train_op_spec(
@@ -515,8 +526,8 @@ class _SubnetworkManager(object):
       An new `EnsembleSpec` instance with the `Subnetwork` appended.
     """
 
-    before_var_list = tf.trainable_variables()
-    with tf.variable_scope("subnetwork_{}".format(name)):
+    before_var_list = tf_compat.v1.trainable_variables()
+    with tf_compat.v1.variable_scope("subnetwork_{}".format(name)):
       build_subnetwork = functools.partial(
           subnetwork_builder.build_subnetwork,
           features=features,
@@ -531,7 +542,7 @@ class _SubnetworkManager(object):
           subnetwork_builder.build_subnetwork).args
       if "labels" in defined_args:
         build_subnetwork = functools.partial(build_subnetwork, labels=labels)
-      subnetwork_scope = tf.get_variable_scope()
+      subnetwork_scope = tf_compat.v1.get_variable_scope()
       with summary.current_scope(), _monkey_patch_context(
           iteration_step_scope=subnetwork_scope,
           scoped_summary=summary,
@@ -539,8 +550,9 @@ class _SubnetworkManager(object):
         subnetwork = build_subnetwork()
       subnetwork_var_list = _new_trainable_variables(before_var_list)
 
-      estimator_spec = _create_estimator_spec(
-          self._head, features, labels, mode, subnetwork.logits, self._use_tpu)
+      estimator_spec = _create_estimator_spec(self._head, features, labels,
+                                              mode, subnetwork.logits,
+                                              self._use_tpu)
 
       subnetwork_metrics = _SubnetworkMetrics()
       if mode == tf.estimator.ModeKeys.EVAL:

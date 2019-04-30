@@ -21,8 +21,10 @@ from __future__ import print_function
 
 import collections
 
+from absl import logging
 from adanet import distributed
 from adanet import subnetwork
+from adanet import tf_compat
 from adanet.core import ensemble_builder as ensemble_builder_lib
 from adanet.core.eval_metrics import _IterationMetrics
 from adanet.core.eval_metrics import call_eval_metrics
@@ -102,10 +104,10 @@ class _Iteration(
 
 
 def _is_over_var():
-  var = tf.get_variable(
+  var = tf_compat.v1.get_variable(
       "is_over_var",
       shape=[],
-      initializer=tf.zeros_initializer(),
+      initializer=tf_compat.v1.zeros_initializer(),
       trainable=False,
       dtype=tf.bool)
   return var
@@ -182,23 +184,23 @@ class _IterationBuilder(object):
       return features, labels
 
     checked_features, checked_labels = {}, {}
-    tf.logging.info("DEBUG: Checking numerics of float features.")
+    logging.info("DEBUG: Checking numerics of float features.")
     for name in sorted(features):
       if not _is_numeric(features[name]):
         continue
-      tf.logging.info("DEBUG: Checking numerics of float feature '%s'.", name)
-      checked_features[name] = tf.check_numerics(features[name],
-                                                 "features '{}'".format(name))
+      logging.info("DEBUG: Checking numerics of float feature '%s'.", name)
+      checked_features[name] = tf.debugging.check_numerics(
+          features[name], "features '{}'".format(name))
     if isinstance(labels, dict):
       for name in sorted(labels):
         if not _is_numeric(labels[name]):
           continue
-        tf.logging.info("DEBUG: Checking numerics of float label '%s'.", name)
-        checked_labels[name] = tf.check_numerics(labels[name],
-                                                 "labels '{}'".format(name))
+        logging.info("DEBUG: Checking numerics of float label '%s'.", name)
+        checked_labels[name] = tf.debugging.check_numerics(
+            labels[name], "labels '{}'".format(name))
     elif labels is not None and _is_numeric(labels):
-      tf.logging.info("DEBUG: Checking numerics of labels.")
-      checked_labels = tf.check_numerics(labels, "'labels'")
+      logging.info("DEBUG: Checking numerics of labels.")
+      checked_labels = tf.debugging.check_numerics(labels, "'labels'")
     return checked_features, checked_labels
 
   def build_iteration(self,
@@ -231,8 +233,8 @@ class _IterationBuilder(object):
       labels: `Tensor` of labels. Can be `None`.
       previous_ensemble_summary: The `adanet.Summary` for the previous ensemble.
       previous_ensemble_spec: Optional `_EnsembleSpec` for iteration t-1.
-      skip_summaries: Whether to skip creating the summary ops when building
-        the `_Iteration`.
+      skip_summaries: Whether to skip creating the summary ops when building the
+        `_Iteration`.
       rebuilding: Boolean whether the iteration is being rebuilt only to restore
         the previous best subnetworks and ensembles.
 
@@ -245,9 +247,8 @@ class _IterationBuilder(object):
       ValueError: If two ensembles share the same name.
     """
 
-    tf.logging.info("%s iteration %s",
-                    "Rebuilding" if rebuilding else "Building",
-                    iteration_number)
+    logging.info("%s iteration %s", "Rebuilding" if rebuilding else "Building",
+                 iteration_number)
 
     if not subnetwork_builders:
       raise ValueError("Each iteration must have at least one Builder.")
@@ -270,17 +271,17 @@ class _IterationBuilder(object):
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
-    with tf.variable_scope("iteration_{}".format(iteration_number)):
+    with tf_compat.v1.variable_scope("iteration_{}".format(iteration_number)):
       # Iteration step to use instead of global step.
-      iteration_step = tf.get_variable(
+      iteration_step = tf_compat.v1.get_variable(
           "step",
           shape=[],
-          initializer=tf.zeros_initializer(),
+          initializer=tf_compat.v1.zeros_initializer(),
           trainable=False,
           dtype=tf.int64)
 
       # Convert to tensor so that users cannot mutate it.
-      iteration_step_tensor = tf.convert_to_tensor(iteration_step)
+      iteration_step_tensor = tf.convert_to_tensor(value=iteration_step)
 
       seen_builder_names = {}
       candidates = []
@@ -310,7 +311,7 @@ class _IterationBuilder(object):
               attributes={},
               metrics=metrics,
           )
-          subnetwork_report.metrics["adanet_loss"] = tf.metrics.mean(
+          subnetwork_report.metrics["adanet_loss"] = tf_compat.v1.metrics.mean(
               previous_ensemble_spec.adanet_loss)
           subnetwork_reports["previous_ensemble"] = subnetwork_report
 
@@ -332,9 +333,9 @@ class _IterationBuilder(object):
             scope=subnetwork_name,
             skip_summary=skip_summaries or rebuilding)
         summaries.append(subnetwork_summary)
-        tf.logging.info("%s subnetwork '%s'",
-                        "Rebuilding" if rebuilding else "Building",
-                        subnetwork_builder.name)
+        logging.info("%s subnetwork '%s'",
+                     "Rebuilding" if rebuilding else "Building",
+                     subnetwork_builder.name)
         subnetwork_spec = self._subnetwork_manager.build_subnetwork_spec(
             name=subnetwork_name,
             subnetwork_builder=subnetwork_builder,
@@ -389,8 +390,9 @@ class _IterationBuilder(object):
           if not self._placement_strategy.should_build_ensemble(
               num_subnetworks) and not rebuilding:
             continue
-          ensemble_name = "t{}_{}_{}".format(
-              iteration_number, ensemble_candidate.name, ensembler.name)
+          ensemble_name = "t{}_{}_{}".format(iteration_number,
+                                             ensemble_candidate.name,
+                                             ensembler.name)
           if ensemble_name in seen_ensemble_names:
             raise ValueError(
                 "Two ensembles have the same name '{}'".format(ensemble_name))
@@ -433,20 +435,22 @@ class _IterationBuilder(object):
             continue
           builder_name = ensemble_candidate.subnetwork_builders[0].name
           subnetwork_reports[builder_name].metrics[
-              "adanet_loss"] = tf.metrics.mean(ensemble_spec.adanet_loss)
+              "adanet_loss"] = tf_compat.v1.metrics.mean(
+                  ensemble_spec.adanet_loss)
 
       # Dynamically select the outputs of best candidate.
       best_candidate_index = self._best_candidate_index(candidates)
       best_predictions = self._best_predictions(candidates,
                                                 best_candidate_index)
       best_loss = self._best_loss(candidates, best_candidate_index, mode)
-      best_export_outputs = self._best_export_outputs(
-          candidates, best_candidate_index, mode, best_predictions)
+      best_export_outputs = self._best_export_outputs(candidates,
+                                                      best_candidate_index,
+                                                      mode, best_predictions)
       # Hooks on TPU cannot depend on any graph `Tensors`. Instead the value of
       # `is_over` is stored in a `Variable` that can later be retrieved from
       # inside a training hook.
-      is_over_var_template = tf.make_template("is_over_var_template",
-                                              _is_over_var)
+      is_over_var_template = tf_compat.v1.make_template("is_over_var_template",
+                                                        _is_over_var)
       training_chief_hooks, training_hooks = (), ()
       for subnetwork_spec in subnetwork_specs:
         if not self._placement_strategy.should_train_subnetworks(
@@ -476,7 +480,7 @@ class _IterationBuilder(object):
                                        num_subnetworks)
       iteration_metrics = _IterationMetrics(candidates, subnetwork_specs)
       if self._use_tpu:
-        estimator_spec = tf.contrib.tpu.TPUEstimatorSpec(
+        estimator_spec = tf_compat.v1.estimator.tpu.TPUEstimatorSpec(
             mode=mode,
             predictions=best_predictions,
             loss=best_loss,
@@ -526,14 +530,15 @@ class _IterationBuilder(object):
       An op which assigns whether the iteration is over to the is_over_var.
     """
 
-    with tf.variable_scope("is_over"):
+    with tf_compat.v1.variable_scope("is_over"):
       is_over = True
       for candidate in candidates:
         is_over = tf.logical_and(is_over, tf.logical_not(candidate.is_training))
       is_over_var = is_over_var_template()
       return tf.cond(
-          is_over, lambda: tf.assign(is_over_var, True, name="assign_is_over"),
-          lambda: tf.no_op("noassign_is_over"))
+          pred=is_over,
+          true_fn=lambda: is_over_var.assign(True, name="assign_is_over"),
+          false_fn=lambda: tf.no_op("noassign_is_over"))
 
   def _create_train_op(self, subnetwork_specs, candidates, mode, step,
                        is_over_var_template, num_subnetworks):
@@ -561,7 +566,7 @@ class _IterationBuilder(object):
 
     if mode != tf.estimator.ModeKeys.TRAIN:
       return tf.no_op()
-    with tf.variable_scope("train_op"):
+    with tf_compat.v1.variable_scope("train_op"):
       train_ops = []
       if self._placement_strategy.should_train_subnetworks(num_subnetworks):
         for subnetwork_spec in subnetwork_specs:
@@ -577,8 +582,8 @@ class _IterationBuilder(object):
         # candidates it trains. Incrementing the global step and iteration step
         # is the final action performed in the train op.
         return tf.group(
-            tf.assign_add(tf.train.get_global_step(), 1),
-            tf.assign_add(step, 1),
+            tf_compat.v1.assign_add(tf_compat.v1.train.get_global_step(), 1),
+            tf_compat.v1.assign_add(step, 1),
         )
 
   def _best_candidate_index(self, candidates):
@@ -593,11 +598,11 @@ class _IterationBuilder(object):
       An integer `Tensor` representing the index of the best candidate.
     """
 
-    with tf.variable_scope("best_candidate_index"):
+    with tf_compat.v1.variable_scope("best_candidate_index"):
       if len(candidates) == 1:
         return tf.constant(0)
       adanet_losses = [candidate.adanet_loss for candidate in candidates]
-      return tf.argmin(adanet_losses, axis=0)
+      return tf.argmin(input=adanet_losses, axis=0)
 
   def _best_predictions(self, candidates, best_candidate_index):
     """Returns the best predictions from a set of candidates.
@@ -614,7 +619,7 @@ class _IterationBuilder(object):
     if len(candidates) == 1:
       return candidates[0].ensemble_spec.predictions
 
-    with tf.variable_scope("best_predictions"):
+    with tf_compat.v1.variable_scope("best_predictions"):
       predictions = None
       for candidate in candidates:
         ensemble_spec = candidate.ensemble_spec
@@ -658,7 +663,7 @@ class _IterationBuilder(object):
       return None
     if len(candidates) == 1:
       return candidates[0].ensemble_spec.loss
-    with tf.variable_scope("best_loss"):
+    with tf_compat.v1.variable_scope("best_loss"):
       losses = [c.ensemble_spec.loss for c in candidates]
       loss = tf.slice(tf.stack(losses), [best_candidate_index], [1])
       return tf.reshape(loss, [])
@@ -689,7 +694,7 @@ class _IterationBuilder(object):
       return None
     if len(candidates) == 1:
       return candidates[0].ensemble_spec.export_outputs
-    with tf.variable_scope("best_export_outputs"):
+    with tf_compat.v1.variable_scope("best_export_outputs"):
       # Group tensors by export output key and ExportOutput type.
       export_outputs = {}
       for candidate in candidates:

@@ -22,6 +22,7 @@ from __future__ import print_function
 import contextlib
 
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.core.candidate import _Candidate
 from adanet.core.candidate import _CandidateBuilder
 import adanet.core.testing_utils as tu
@@ -151,7 +152,7 @@ class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
                            is_previous_best=False):
     # A fake adanet_loss that halves at each train step: 1.0, 0.5, 0.25, ...
     fake_adanet_loss = tf.Variable(1.)
-    fake_train_op = tf.assign(fake_adanet_loss, fake_adanet_loss / 2)
+    fake_train_op = fake_adanet_loss.assign(fake_adanet_loss / 2)
     fake_ensemble_spec = tu.dummy_ensemble_spec(
         "new", adanet_loss=fake_adanet_loss, train_op=fake_train_op)
 
@@ -164,14 +165,14 @@ class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
         summary=_FakeSummary(),
         is_previous_best=is_previous_best)
     with self.test_session() as sess:
-      sess.run(tf.global_variables_initializer())
+      sess.run(tf_compat.v1.global_variables_initializer())
       adanet_losses = []
       is_training = True
       for _ in range(len(want_adanet_losses)):
         is_training, adanet_loss = sess.run((candidate.is_training,
                                              candidate.adanet_loss))
         adanet_losses.append(adanet_loss)
-        sess.run((fake_train_op, tf.assign_add(iteration_step, 1)))
+        sess.run((fake_train_op, iteration_step.assign_add(1)))
 
     # Verify that adanet_loss moving average works.
     self.assertAllClose(want_adanet_losses, adanet_losses, atol=1e-3)
