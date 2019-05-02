@@ -1065,10 +1065,10 @@ class EstimatorMultiHeadTest(tu.AdanetTestCase):
         head=multi_head_lib.MultiHead(heads=[
             regression_head.RegressionHead(
                 name="head1",
-                loss_reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE),
+                loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
             regression_head.RegressionHead(
                 name="head2",
-                loss_reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE),
+                loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
         ]),
         subnetwork_generator=SimpleGenerator(builders),
         max_iteration_steps=3,
@@ -1379,7 +1379,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
               "regression_head",
           "head":
               regression_head.RegressionHead(
-                  loss_reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE),
+                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
           "want_summaries": ["average_loss"],
           "want_loss":
               .96453667,
@@ -1389,7 +1389,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
               "binary_classification_head",
           "head":
               binary_class_head.BinaryClassHead(
-                  loss_reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE),
+                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
           "want_summaries": ["average_loss"],
           "want_loss":
               0.6909014,
@@ -2451,7 +2451,7 @@ class EstimatorDebugTest(tu.AdanetTestCase):
           "head":
               regression_head.RegressionHead(
                   name="y",
-                  loss_reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE),
+                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
           "input_fn":
               lambda: ({
                   "x": tf.math.log([[1., 0.]])
@@ -2462,7 +2462,7 @@ class EstimatorDebugTest(tu.AdanetTestCase):
           "head":
               regression_head.RegressionHead(
                   name="y",
-                  loss_reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE),
+                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
           "input_fn":
               lambda: ({
                   "x": tf.ones([1, 2])
@@ -2474,7 +2474,7 @@ class EstimatorDebugTest(tu.AdanetTestCase):
               multi_head_lib.MultiHead(heads=[
                   regression_head.RegressionHead(
                       name="y",
-                      loss_reduction=tf.keras.losses.Reduction
+                      loss_reduction=tf.losses.Reduction
                       .SUM_OVER_BATCH_SIZE),
               ]),
           "input_fn":
