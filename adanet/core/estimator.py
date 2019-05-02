@@ -531,7 +531,7 @@ class Estimator(tf.estimator.Estimator):
         k: v for k, v in kwargs.items() if k in default_ensembler_args
     }
     if default_ensembler_kwargs:
-      logging.warn(
+      logging.warning(
           "The following arguments have been moved to "
           "`adanet.ensemble.ComplexityRegularizedEnsembler` which can be "
           "specified in the `ensemblers` argument: %s",

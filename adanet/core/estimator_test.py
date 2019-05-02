@@ -1334,7 +1334,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
           "testcase_name": "none_metrics",
           "head": _EvalMetricsHead(None),
           "want_summaries": [],
-          "want_loss": .9910,
+          "want_loss": -1.791,
       },
       {
           "testcase_name":
@@ -1349,13 +1349,13 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
           # pylint: enable=g-long-lambda
           "want_summaries": ["avg"],
           "want_loss":
-              .9910,
+              -1.791,
       },
       {
           "testcase_name": "empty_metrics",
           "head": _EvalMetricsHead({}),
           "want_summaries": [],
-          "want_loss": .9910,
+          "want_loss": -1.791,
       },
       {
           "testcase_name":
@@ -1366,13 +1366,13 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
               "continuous",
           "want_summaries": [],
           "want_loss":
-              .9910,
+              -1.791,
           "global_subdir":
               "eval_continuous",
           "subnetwork_subdir":
-              "subnetwork/t0_linear/eval_continuous",
+              "subnetwork/t0_dnn/eval_continuous",
           "ensemble_subdir":
-              "ensemble/t0_linear_grow_complexity_regularized/eval_continuous",
+              "ensemble/t0_dnn_grow_complexity_regularized/eval_continuous",
       },
       {
           "testcase_name":
@@ -1382,7 +1382,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
                   loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
           "want_summaries": ["average_loss"],
           "want_loss":
-              .96453667,
+              .256,
       },
       {
           "testcase_name":
@@ -1390,9 +1390,11 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
           "head":
               binary_class_head.BinaryClassHead(
                   loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
-          "want_summaries": ["average_loss"],
+          "learning_rate":
+              .6,
+          "want_summaries": ["average_loss", "accuracy", "recall"],
           "want_loss":
-              0.6909014,
+              0.122,
       },
       {
           "testcase_name":
@@ -1416,7 +1418,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
               "serialized_summary/0",
           ],
           "want_loss":
-              .9910,
+              -1.791,
       })
   def test_eval_metrics(
       self,
@@ -1425,59 +1427,43 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
       want_summaries,
       evaluation_name=None,
       metric_fn=None,
+      learning_rate=.01,
       global_subdir="eval",
-      subnetwork_subdir="subnetwork/t0_linear/eval",
-      ensemble_subdir="ensemble/t0_linear_grow_complexity_regularized/eval"):
+      subnetwork_subdir="subnetwork/t0_dnn/eval",
+      ensemble_subdir="ensemble/t0_dnn_grow_complexity_regularized/eval"):
     """Test that AdaNet evaluation metrics get persisted correctly."""
 
     seed = 42
     run_config = tf.estimator.RunConfig(tf_random_seed=seed)
     subnetwork_generator = SimpleGenerator([
-        _LinearBuilder("linear", mixture_weight_learning_rate=.001, seed=seed)
+        _DNNBuilder(
+            "dnn",
+            learning_rate=learning_rate,
+            mixture_weight_learning_rate=0.,
+            layer_size=8,
+            seed=seed)
     ])
-    report_materializer = ReportMaterializer(
-        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     estimator = Estimator(
         head=head,
         subnetwork_generator=subnetwork_generator,
-        report_materializer=report_materializer,
-        mixture_weight_type=MixtureWeightType.MATRIX,
-        mixture_weight_initializer=tf_compat.v1.zeros_initializer(),
-        warm_start_mixture_weights=True,
-        max_iteration_steps=6,
-        use_bias=True,
+        max_iteration_steps=100,
         metric_fn=metric_fn,
         config=run_config,
         model_dir=self.test_subdirectory)
-    train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
-    estimator.train(input_fn=train_input_fn, max_steps=3)
-
-    eval_set_size = 5
-
-    def eval_input_fn():
-      """Generates a stream of random features."""
-      # pylint: disable=g-long-lambda
-      feature_dataset = tf.data.Dataset.range(
-          eval_set_size).map(lambda i: tf.stack(
-              [tf.cast(i, dtype=tf.float32),
-               tf.cast(i, dtype=tf.float32)]))
-      # pylint: enable=g-long-lambda
-      label_dataset = tf.data.Dataset.range(
-          eval_set_size).map(lambda _: tf.constant(1.))
-      dataset = tf.data.Dataset.zip((feature_dataset, label_dataset))
-      iterator = tf_compat.v1.data.make_one_shot_iterator(dataset.batch(1))
-      features, labels = iterator.get_next()
-      return {"x": features}, labels
+    train_input_fn = tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS)
+    estimator.train(input_fn=train_input_fn, max_steps=100)
 
     metrics = estimator.evaluate(
-        input_fn=eval_input_fn, steps=eval_set_size, name=evaluation_name)
+        input_fn=train_input_fn, steps=1, name=evaluation_name)
     self.assertAlmostEqual(want_loss, metrics["loss"], places=3)
 
     global_subdir = os.path.join(self.test_subdirectory, global_subdir)
     subnetwork_subdir = os.path.join(self.test_subdirectory, subnetwork_subdir)
     ensemble_subdir = os.path.join(self.test_subdirectory, ensemble_subdir)
-    self.assertTrue(
-        _check_eventfile_for_keyword("loss", subnetwork_subdir) > 0.)
+    self.assertAlmostEqual(
+        want_loss,
+        _check_eventfile_for_keyword("loss", subnetwork_subdir),
+        places=3)
     for metric in want_summaries:
       self.assertIsNotNone(
           _check_eventfile_for_keyword(metric, subnetwork_subdir),
@@ -1485,12 +1471,12 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
     for dir_ in [global_subdir, ensemble_subdir]:
       self.assertAlmostEqual(metrics["loss"],
                              _check_eventfile_for_keyword("loss", dir_))
-      self.assertEqual([b"| linear |"],
+      self.assertEqual([b"| dnn |"],
                        _check_eventfile_for_keyword(
                            "architecture/adanet/ensembles/0", dir_))
       for metric in want_summaries:
-        self.assertIsNotNone(
-            _check_eventfile_for_keyword(metric, dir_),
+        self.assertTrue(
+            _check_eventfile_for_keyword(metric, dir_) > 0.,
             msg="{} should be under 'eval'.".format(metric))
 
 
@@ -1699,38 +1685,33 @@ class EstimatorExportSavedModelForEvalTest(tu.AdanetTestCase):
                     "supported before TF v1.10.0.")
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
-    subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
-    report_materializer = ReportMaterializer(
-        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
+    subnetwork_generator = SimpleGenerator(
+        [_DNNBuilder("dnn", layer_size=8, learning_rate=1.)])
     estimator = Estimator(
-        head=tu.head(),
+        head=binary_class_head.BinaryClassHead(),
         subnetwork_generator=subnetwork_generator,
-        report_materializer=report_materializer,
-        mixture_weight_type=MixtureWeightType.MATRIX,
-        mixture_weight_initializer=tf_compat.v1.zeros_initializer(),
-        warm_start_mixture_weights=True,
-        max_iteration_steps=1,
-        use_bias=True,
+        max_iteration_steps=100,
         model_dir=self.test_subdirectory,
         config=run_config)
 
-    features = {"x": [[1., 0.]]}
-    labels = [[1.]]
-    train_input_fn = _dummy_feature_dict_input_fn(features, labels)
+    train_input_fn = tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS)
 
     # Train.
-    estimator.train(input_fn=train_input_fn, max_steps=2)
+    estimator.train(input_fn=train_input_fn, max_steps=300)
+
+    metrics = estimator.evaluate(input_fn=train_input_fn, steps=1)
+    self.assertAlmostEqual(.067, metrics["average_loss"], places=3)
+    self.assertAlmostEqual(1., metrics["recall"], places=3)
+    self.assertAlmostEqual(1., metrics["accuracy"], places=3)
 
     # Export SavedModel.
     def serving_input_fn():
       """Input fn for serving export, starting from serialized example."""
       serialized_example = tf_compat.v1.placeholder(
           dtype=tf.string, shape=(None), name="serialized_example")
-      for key, value in features.items():
-        features[key] = tf.constant(value)
       return export.SupervisedInputReceiver(
-          features=features,
-          labels=tf.constant(labels),
+          features={"x": tf.constant(XOR_FEATURES)},
+          labels=tf.constant(XOR_LABELS),
           receiver_tensors=serialized_example)
 
     export_dir_base = os.path.join(self.test_subdirectory, "export")
@@ -1767,16 +1748,32 @@ class EstimatorExportSavedModelForEvalTest(tu.AdanetTestCase):
           places=3)
 
       # Run metric update op.
-      sess.run(
-          tf_compat.v1.saved_model.utils.get_tensor_from_tensor_info(
-              signature_def.outputs["metrics/average_loss/update_op"]))
+      sess.run((tf_compat.v1.saved_model.utils.get_tensor_from_tensor_info(
+          signature_def.outputs["metrics/average_loss/update_op"]),
+                tf_compat.v1.saved_model.utils.get_tensor_from_tensor_info(
+                    signature_def.outputs["metrics/accuracy/update_op"]),
+                tf_compat.v1.saved_model.utils.get_tensor_from_tensor_info(
+                    signature_def.outputs["metrics/recall/update_op"])))
 
       # Read metric again; it should no longer be zero.
       self.assertAlmostEqual(
-          0.996,
+          0.067,
           sess.run(
               tf_compat.v1.saved_model.utils.get_tensor_from_tensor_info(
                   signature_def.outputs["metrics/average_loss/value"])),
+          places=3)
+      self.assertAlmostEqual(
+          1.,
+          sess.run(
+              tf_compat.v1.saved_model.utils.get_tensor_from_tensor_info(
+                  signature_def.outputs["metrics/recall/value"])),
+          places=3)
+
+      self.assertAlmostEqual(
+          1.,
+          sess.run(
+              tf_compat.v1.saved_model.utils.get_tensor_from_tensor_info(
+                  signature_def.outputs["metrics/accuracy/value"])),
           places=3)
 
 
@@ -2474,8 +2471,7 @@ class EstimatorDebugTest(tu.AdanetTestCase):
               multi_head_lib.MultiHead(heads=[
                   regression_head.RegressionHead(
                       name="y",
-                      loss_reduction=tf.losses.Reduction
-                      .SUM_OVER_BATCH_SIZE),
+                      loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
               ]),
           "input_fn":
               lambda: ({

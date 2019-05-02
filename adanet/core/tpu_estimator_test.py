@@ -24,6 +24,7 @@ import json
 import os
 
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.core import testing_utils as tu
 from adanet.core.tpu_estimator import TPUEstimator
 from adanet.subnetwork import Builder
@@ -41,14 +42,12 @@ class _DNNBuilder(Builder):
 
   def __init__(self,
                name,
-               learning_rate=.001,
-               mixture_weight_learning_rate=.001,
-               layer_size=1,
+               learning_rate=.01,
+               layer_size=16,
                seed=13,
                use_tpu=False):
     self._name = name
     self._learning_rate = learning_rate
-    self._mixture_weight_learning_rate = mixture_weight_learning_rate
     self._layer_size = layer_size
     self._seed = seed
     self._use_tpu = use_tpu
@@ -114,12 +113,6 @@ class _DNNBuilder(Builder):
                                 iteration_step, summary, previous_ensemble):
     optimizer = tf.train.GradientDescentOptimizer(
         learning_rate=self._learning_rate)
-    return optimizer.minimize(loss, var_list=var_list)
-
-  def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
-                                     iteration_step, summary):
-    optimizer = tf.train.GradientDescentOptimizer(
-        learning_rate=self._mixture_weight_learning_rate)
     if self._use_tpu:
       optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
     return optimizer.minimize(loss, var_list=var_list)
@@ -129,8 +122,8 @@ class _DNNBuilder(Builder):
         hparams={"layer_size": self._layer_size},
         attributes={"complexity": tf.constant(3, dtype=tf.int32)},
         metrics={
-            "moo": (tf.constant(3, dtype=tf.int32),
-                    tf.constant(3, dtype=tf.int32))
+            "moo": (tf.constant(3,
+                                dtype=tf.int32), tf.constant(3, dtype=tf.int32))
         })
 
 
@@ -190,17 +183,16 @@ class TPUEstimatorTest(tu.AdanetTestCase):
       {
           "testcase_name": "not_use_tpu",
           "use_tpu": False,
+          "want_loss": .27357,
       },
   )
-  def test_tpu_estimator_simple_lifecycle(self, use_tpu):
+  def test_tpu_estimator_simple_lifecycle(self, use_tpu, want_loss):
     config = tf.contrib.tpu.RunConfig(master="", tf_random_seed=42)
     estimator = TPUEstimator(
         head=tu.head(),
         subnetwork_generator=SimpleGenerator(
             [_DNNBuilder("dnn", use_tpu=use_tpu)]),
-        max_iteration_steps=200,
-        mixture_weight_initializer=tf.zeros_initializer(),
-        use_bias=True,
+        max_iteration_steps=100,
         model_dir=self.test_subdirectory,
         config=config,
         use_tpu=use_tpu,
@@ -217,8 +209,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
 
     # Evaluate.
     eval_results = estimator.evaluate(
-        input_fn=train_input_fn, steps=10, hooks=None)
-    tf.logging.info("%s", eval_results)
+        input_fn=train_input_fn, steps=1, hooks=None)
 
     # Predict.
     # TODO: skip predictions on TF versions 1.11 and 1.12 since
@@ -246,7 +237,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
         export_dir_base=estimator.model_dir,
         serving_input_receiver_fn=serving_input_fn)
 
-    self.assertAlmostEqual(0.36, eval_results["loss"], places=2)
+    self.assertAlmostEqual(want_loss, eval_results["loss"], places=2)
     self.assertEqual(max_steps, eval_results["global_step"])
     for prediction in predictions:
       self.assertIsNotNone(prediction["predictions"])
@@ -255,18 +246,30 @@ class TPUEstimatorTest(tu.AdanetTestCase):
       {
           "testcase_name": "not_use_tpu",
           "use_tpu": False,
+          "want_loss": .31239,
+          "want_adanet_loss": .64416,
+          "want_eval_summary_loss": .31239,
+          "want_predictions": .45473,
       },
   )
-  def test_tpu_estimator_summaries(self, use_tpu):
+  def test_tpu_estimator_summaries(self, use_tpu, want_loss, want_adanet_loss,
+                                   want_eval_summary_loss, want_predictions):
     config = tf.contrib.tpu.RunConfig(
-        tf_random_seed=42, save_summary_steps=2, log_step_count_steps=1)
+        tf_random_seed=42, save_summary_steps=100, log_step_count_steps=100)
     assert config.log_step_count_steps
+
+    def metric_fn(predictions):
+      return {
+          "predictions": tf_compat.v1.metrics.mean(predictions["predictions"])
+      }
+
     estimator = TPUEstimator(
         head=tu.head(),
         subnetwork_generator=SimpleGenerator(
             [_DNNBuilder("dnn", use_tpu=use_tpu)]),
-        max_iteration_steps=200,
+        max_iteration_steps=100,
         model_dir=self.test_subdirectory,
+        metric_fn=metric_fn,
         config=config,
         use_tpu=use_tpu,
         train_batch_size=64 if use_tpu else 0)
@@ -274,18 +277,19 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     xor_labels = [[1.], [0.], [1.], [0.]]
     train_input_fn = tu.dummy_input_fn(xor_features, xor_labels)
 
-    estimator.train(input_fn=train_input_fn, max_steps=3)
-    estimator.evaluate(input_fn=train_input_fn, steps=3)
+    estimator.train(input_fn=train_input_fn, max_steps=100)
+    eval_results = estimator.evaluate(input_fn=train_input_fn, steps=1)
+    self.assertAlmostEqual(want_loss, eval_results["loss"], places=2)
 
     subnetwork_subdir = os.path.join(self.test_subdirectory,
                                      "subnetwork/t0_dnn")
 
-    ensemble_loss = .5
     ensemble_subdir = os.path.join(
         self.test_subdirectory, "ensemble/t0_dnn_grow_complexity_regularized")
 
+    # TODO: Why is the adanet_loss written to 'loss'?
     self.assertAlmostEqual(
-        ensemble_loss,
+        want_adanet_loss,
         _get_summary_value("loss", self.test_subdirectory),
         places=1)
     self.assertEqual(
@@ -299,7 +303,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     self.assertAlmostEqual(
         5., _get_summary_value("nested/scalar", subnetwork_subdir), places=3)
     self.assertAlmostEqual(
-        ensemble_loss,
+        want_adanet_loss,
         _get_summary_value("adanet_loss/adanet/adanet_weighted_ensemble",
                            ensemble_subdir),
         places=1)
@@ -318,16 +322,18 @@ class TPUEstimatorTest(tu.AdanetTestCase):
 
     # Eval metric summaries are always written out during eval.
     subnetwork_eval_subdir = os.path.join(subnetwork_subdir, "eval")
-    if use_tpu:
-      # TODO: Why is subnetwork eval loss 0.0 when use_tpu=False?
-      self.assertAlmostEqual(
-          ensemble_loss,
-          _get_summary_value("loss", subnetwork_eval_subdir),
-          places=1)
     self.assertAlmostEqual(
-        ensemble_loss,
+        want_eval_summary_loss,
+        _get_summary_value("loss", subnetwork_eval_subdir),
+        places=1)
+    self.assertAlmostEqual(
+        want_eval_summary_loss,
         _get_summary_value("average_loss", subnetwork_eval_subdir),
         places=1)
+    self.assertAlmostEqual(
+        want_predictions,
+        _get_summary_value("predictions", subnetwork_eval_subdir),
+        places=3)
 
     eval_subdir = os.path.join(self.test_subdirectory, "eval")
     ensemble_eval_subdir = os.path.join(ensemble_subdir, "eval")
@@ -337,9 +343,11 @@ class TPUEstimatorTest(tu.AdanetTestCase):
                                           subdir))
       if subdir == eval_subdir:
         self.assertAlmostEqual(
-            ensemble_loss, _get_summary_value("loss", subdir), places=1)
+            want_loss, _get_summary_value("loss", subdir), places=1)
       self.assertAlmostEqual(
-          ensemble_loss, _get_summary_value("average_loss", subdir), places=1)
+          want_eval_summary_loss,
+          _get_summary_value("average_loss", subdir),
+          places=1)
 
 
 if __name__ == "__main__":

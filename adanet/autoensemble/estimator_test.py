@@ -111,7 +111,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     estimator.train(input_fn=train_input_fn, max_steps=30)
 
     # Evaluate.
-    eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
+    eval_results = estimator.evaluate(input_fn=train_input_fn, steps=1)
 
     want_loss = .209
     if tf_compat.version_greater_or_equal("1.10.0") and (

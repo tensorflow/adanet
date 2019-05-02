@@ -334,7 +334,7 @@ class _EnsembleBuilder(object):
               "Only ComplexityRegularized ensembles are supported.")
         adanet_loss = estimator_spec.loss + ensemble.complexity_regularization
 
-      ensemble_metrics = _EnsembleMetrics()
+      ensemble_metrics = _EnsembleMetrics(use_tpu=self._use_tpu)
       if mode == tf.estimator.ModeKeys.EVAL:
         ensemble_metrics.create_eval_metrics(
             features=features,
@@ -554,7 +554,7 @@ class _SubnetworkManager(object):
                                               mode, subnetwork.logits,
                                               self._use_tpu)
 
-      subnetwork_metrics = _SubnetworkMetrics()
+      subnetwork_metrics = _SubnetworkMetrics(self._use_tpu)
       if mode == tf.estimator.ModeKeys.EVAL:
         subnetwork_metrics.create_eval_metrics(
             features=features,

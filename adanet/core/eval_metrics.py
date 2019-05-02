@@ -22,6 +22,7 @@ from __future__ import print_function
 import collections
 import inspect
 
+from absl import logging
 from adanet import tf_compat
 import six
 import tensorflow as tf
@@ -69,7 +70,18 @@ class _EvalMetricsStore(object):
 class _SubnetworkMetrics(object):
   """A object which creates evaluation metrics for Subnetworks."""
 
-  def __init__(self):
+  def __init__(self, use_tpu=False):
+    """Creates a _SubnetworkMetrics.
+
+    Args:
+      use_tpu: Whether to use TPU-specific variable sharing logic. This ensures
+        that eval metrics created on TPU can be written to disk on the host CPU.
+
+    Returns:
+      A `_SubnetworkMetrics` instance.
+    """
+
+    self._use_tpu = use_tpu
     self._eval_metrics_store = _EvalMetricsStore()
 
   def create_eval_metrics(self, features, labels, estimator_spec, metric_fn):
@@ -95,6 +107,8 @@ class _SubnetworkMetrics(object):
         function, namely a `(metric_tensor, update_op)` tuple.
     """
 
+    # TODO: Create CPU eval metrics non-lazily, similar to summaries.py.
+
     # If estimator_spec is not a TPUEstimatorSpec we create dummy metric_fn
     # and args.
     if isinstance(estimator_spec, tf.estimator.EstimatorSpec):
@@ -105,13 +119,16 @@ class _SubnetworkMetrics(object):
         self._templatize_metric_fn(spec_fn), spec_args)
 
     if tf_compat.version_greater_or_equal("1.13.0") and tf.executing_eagerly():
-      loss_metric = tf.keras.metrics.Mean("mean_loss")
-
-      def loss_fn(loss):
-        loss_metric(loss)
-        return {"loss": loss_metric}
+      loss_metrics = tf.keras.metrics.Mean("mean_loss")
+      loss_metrics(estimator_spec.loss)
     else:
-      loss_fn = lambda loss: {"loss": tf_compat.v1.metrics.mean(loss)}
+      loss_metrics = tf_compat.v1.metrics.mean(estimator_spec.loss)
+
+    def loss_fn(loss):
+      if self._use_tpu:
+        return {"loss": tf_compat.v1.metrics.mean(loss)}
+      return {"loss": loss_metrics}
+
     loss_fn_args = [tf.reshape(estimator_spec.loss, [1])]
     self._eval_metrics_store.add_eval_metrics(
         self._templatize_metric_fn(loss_fn), loss_fn_args)
@@ -127,8 +144,15 @@ class _SubnetworkMetrics(object):
         metric_fn_args["labels"] = labels
       if "predictions" in argspec:
         metric_fn_args["predictions"] = estimator_spec.predictions
+      additional_metrics = call_eval_metrics((metric_fn, metric_fn_args))
+
+      def additional_metrics_fn(**kwargs):
+        if self._use_tpu:
+          return call_eval_metrics((metric_fn, kwargs))
+        return additional_metrics
+
       self._eval_metrics_store.add_eval_metrics(
-          self._templatize_metric_fn(metric_fn), metric_fn_args)
+          self._templatize_metric_fn(additional_metrics_fn), metric_fn_args)
 
   def _templatize_metric_fn(self, metric_fn):
     """Wraps the given metric_fn with a template so it's Variables are shared.
@@ -153,6 +177,11 @@ class _SubnetworkMetrics(object):
       # We can only be passed in either a dict or a list of tensors.
       args = args if args else kwargs
       metrics = call_eval_metrics((metric_fn, args))
+      if not self._use_tpu:
+        return metrics
+
+      logging.log_first_n(logging.INFO,
+                          "Writing eval metrics to variables for TPU", 1)
       wrapped_metrics = {}
       for i, key in enumerate(sorted(metrics)):
         tensor, op = metrics[key]
@@ -166,8 +195,8 @@ class _SubnetworkMetrics(object):
             collections=[tf_compat.v1.GraphKeys.LOCAL_VARIABLES])
         if isinstance(op, tf.Operation) or op.shape != tensor.shape:
           with tf.control_dependencies([op]):
-            op = tf_compat.v1.assign(var, tensor)
-        metric = (var, tf_compat.v1.assign(var, op))
+            op = var.assign(tensor)
+        metric = (var, var.assign(op))
         wrapped_metrics[key] = metric
       return wrapped_metrics
 
