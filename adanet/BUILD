@@ -13,7 +13,6 @@ py_library(
         "__init__.py",
         "version.py",
     ],
-    srcs_version = "PY2AND3",
     visibility = ["//visibility:public"],
     deps = [
         "//adanet/autoensemble",
@@ -24,7 +23,6 @@ py_library(
 py_test(
     name = "adanet_test",
     srcs = ["adanet_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":adanet",
         "//adanet/examples",

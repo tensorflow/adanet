@@ -25,7 +25,6 @@ py_library(
 py_test(
     name = "devices_test",
     srcs = ["devices_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":devices",
         "@absl_py//absl/testing:parameterized",
@@ -40,7 +39,6 @@ py_library(
 py_test(
     name = "placement_test",
     srcs = ["placement_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":placement",
         "@absl_py//absl/testing:parameterized",

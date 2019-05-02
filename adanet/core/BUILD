@@ -45,7 +45,6 @@ py_test(
     size = "large",
     srcs = ["estimator_test.py"],
     shard_count = 40,
-    srcs_version = "PY2AND3",
     deps = [
         ":ensemble_builder",
         ":estimator",
@@ -67,7 +66,6 @@ py_test(
     ],
     flaky = 1,
     shard_count = 10,
-    srcs_version = "PY2AND3",
     deps = [
         ":estimator",
         ":timer",
@@ -105,7 +103,6 @@ py_library(
 py_test(
     name = "tpu_estimator_test",
     srcs = ["tpu_estimator_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":testing_utils",
         ":tpu_estimator",
@@ -124,7 +121,6 @@ py_library(
 py_test(
     name = "candidate_test",
     srcs = ["candidate_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":candidate",
         ":testing_utils",
@@ -147,7 +143,6 @@ py_library(
 py_test(
     name = "iteration_test",
     srcs = ["iteration_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":candidate",
         ":ensemble_builder",
@@ -170,7 +165,6 @@ py_library(
 py_test(
     name = "evaluator_test",
     srcs = ["evaluator_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":evaluator",
         ":testing_utils",
@@ -192,7 +186,6 @@ py_library(
 py_test(
     name = "ensemble_builder_test",
     srcs = ["ensemble_builder_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":ensemble_builder",
         ":summary",
@@ -214,7 +207,6 @@ py_library(
 py_test(
     name = "eval_metrics_test",
     srcs = ["eval_metrics_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":architecture",
         ":candidate",
@@ -235,7 +227,6 @@ py_library(
 py_test(
     name = "summary_test",
     srcs = ["summary_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":summary",
         ":testing_utils",
@@ -252,7 +243,6 @@ py_library(
 py_test(
     name = "timer_test",
     srcs = ["timer_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":timer",
     ],
@@ -301,7 +291,6 @@ py_library(
 py_test(
     name = "report_accessor_test",
     srcs = ["report_accessor_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":report_accessor",
         "//adanet/subnetwork",
@@ -320,7 +309,6 @@ py_library(
 py_test(
     name = "report_materializer_test",
     srcs = ["report_materializer_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":report_materializer",
         ":testing_utils",
@@ -337,7 +325,6 @@ py_library(
 py_test(
     name = "architecture_test",
     srcs = ["architecture_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":architecture",
         "@absl_py//absl/testing:parameterized",

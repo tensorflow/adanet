@@ -24,7 +24,6 @@ py_library(
 py_test(
     name = "simple_dnn_test",
     srcs = ["simple_dnn_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":simple_dnn",
         "@absl_py//absl/testing:parameterized",

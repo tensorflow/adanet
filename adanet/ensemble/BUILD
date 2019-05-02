@@ -33,7 +33,6 @@ py_library(
 py_test(
     name = "strategy_test",
     srcs = ["strategy_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":ensemble",
         "//adanet/subnetwork",
@@ -53,7 +52,6 @@ py_library(
 py_test(
     name = "weighted_test",
     srcs = ["weighted_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":ensemble",
         "//adanet/core",

@@ -25,7 +25,6 @@ py_library(
 py_test(
     name = "generator_test",
     srcs = ["generator_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":generator",
         "//adanet/tf_compat",
@@ -44,7 +43,6 @@ py_library(
 py_test(
     name = "report_test",
     srcs = ["report_test.py"],
-    srcs_version = "PY2AND3",
     deps = [
         ":report",
         "@absl_py//absl/testing:parameterized",
