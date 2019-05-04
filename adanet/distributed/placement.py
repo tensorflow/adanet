@@ -19,7 +19,7 @@ from __future__ import print_function
 
 import abc
 
-import tensorflow as tf
+from absl import logging
 
 
 class PlacementStrategy(object):
@@ -230,8 +230,8 @@ class RoundRobinStrategy(PlacementStrategy):
 
     if self._drop_remainder and self._num_workers > 1 and (num_subnetworks >
                                                            self._num_workers):
-      tf.logging.log_first_n(
-          tf.logging.WARN,
+      logging.log_first_n(
+          logging.WARNING,
           "With drop_remainer=True, %s workers and %s subnetworks, the last %s "
           "subnetworks will be dropped and will not be trained", 1,
           self._num_workers, num_subnetworks,

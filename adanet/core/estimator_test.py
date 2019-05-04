@@ -1065,10 +1065,12 @@ class EstimatorMultiHeadTest(tu.AdanetTestCase):
         head=multi_head_lib.MultiHead(heads=[
             regression_head.RegressionHead(
                 name="head1",
-                loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+                loss_reduction=tf_compat.v2.losses.Reduction.SUM_OVER_BATCH_SIZE
+            ),
             regression_head.RegressionHead(
                 name="head2",
-                loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+                loss_reduction=tf_compat.v2.losses.Reduction.SUM_OVER_BATCH_SIZE
+            ),
         ]),
         subnetwork_generator=SimpleGenerator(builders),
         max_iteration_steps=3,
@@ -1378,8 +1380,8 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
           "testcase_name":
               "regression_head",
           "head":
-              regression_head.RegressionHead(
-                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+              regression_head.RegressionHead(loss_reduction=tf_compat.v2.losses
+                                             .Reduction.SUM_OVER_BATCH_SIZE),
           "want_summaries": ["average_loss"],
           "want_loss":
               .256,
@@ -1389,7 +1391,8 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
               "binary_classification_head",
           "head":
               binary_class_head.BinaryClassHead(
-                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+                  loss_reduction=tf_compat.v2.losses.Reduction
+                  .SUM_OVER_BATCH_SIZE),
           "learning_rate":
               .6,
           "want_summaries": ["average_loss", "accuracy", "recall"],
@@ -1656,22 +1659,10 @@ class EstimatorExportSavedModelForPredictTest(tu.AdanetTestCase):
       return tf.estimator.export.ServingInputReceiver(
           features=features, receiver_tensors=serialized_example)
 
-    try:
-      estimator.export_saved_model(
-          export_dir_base=self.test_subdirectory,
-          serving_input_receiver_fn=serving_input_fn,
-          experimental_mode=tf.estimator.ModeKeys.PREDICT)
-    except AttributeError:
-      pass
-
-    try:
-      tf.contrib.estimator.export_saved_model_for_mode(
-          estimator,
-          export_dir_base=self.test_subdirectory,
-          input_receiver_fn=serving_input_fn,
-          mode=tf.estimator.ModeKeys.PREDICT)
-    except AttributeError:
-      pass
+    estimator.export_saved_model(
+        export_dir_base=self.test_subdirectory,
+        serving_input_receiver_fn=serving_input_fn,
+        experimental_mode=tf.estimator.ModeKeys.PREDICT)
 
 
 class EstimatorExportSavedModelForEvalTest(tu.AdanetTestCase):
@@ -2448,7 +2439,8 @@ class EstimatorDebugTest(tu.AdanetTestCase):
           "head":
               regression_head.RegressionHead(
                   name="y",
-                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+                  loss_reduction=tf_compat.v2.losses.Reduction
+                  .SUM_OVER_BATCH_SIZE),
           "input_fn":
               lambda: ({
                   "x": tf.math.log([[1., 0.]])
@@ -2459,7 +2451,8 @@ class EstimatorDebugTest(tu.AdanetTestCase):
           "head":
               regression_head.RegressionHead(
                   name="y",
-                  loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+                  loss_reduction=tf_compat.v2.losses.Reduction
+                  .SUM_OVER_BATCH_SIZE),
           "input_fn":
               lambda: ({
                   "x": tf.ones([1, 2])
@@ -2471,7 +2464,8 @@ class EstimatorDebugTest(tu.AdanetTestCase):
               multi_head_lib.MultiHead(heads=[
                   regression_head.RegressionHead(
                       name="y",
-                      loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE),
+                      loss_reduction=tf_compat.v2.losses.Reduction
+                      .SUM_OVER_BATCH_SIZE),
               ]),
           "input_fn":
               lambda: ({

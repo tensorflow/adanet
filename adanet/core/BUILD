@@ -284,6 +284,7 @@ py_library(
     deps = [
         ":report_pb2",
         "//adanet/subnetwork",
+        "//adanet/tf_compat",
         "@six_archive//:six",
     ],
 )

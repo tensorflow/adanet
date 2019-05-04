@@ -19,9 +19,10 @@ set -e  # fail and exit on any command erroring
 
 : "${TF_VERSION:?}"
 
-if [[ "$TF_VERSION" == "tf-nightly"  ]]
-then
+if [[ "$TF_VERSION" == "tf-nightly"  ]]; then
   pip install tf-nightly;
+elif [[ "$TF_VERSION" == "tf-nightly-2.0-preview"  ]]; then
+  pip install tf-nightly-2.0-preview;
 else
   pip install -q "tensorflow==$TF_VERSION"
 fi

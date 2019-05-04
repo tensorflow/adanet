@@ -33,6 +33,15 @@ except ImportError:
   # we don't raise an exception when defining a custom metric for TF >= 1.13
   # workflows.
   Metric = object
+
+try:
+  from tensorflow.python.data.ops.dataset_ops import DatasetV1
+except AttributeError:
+  DatasetV1 = tf.data.Dataset
+try:
+  from tensorflow.python.data.ops.dataset_ops import DatasetV2
+except AttributeError:
+  DatasetV2 = tf.data.Dataset
 # pylint: enable=g-import-not-at-top
 # pylint: enable=g-direct-tensorflow-import
 # pylint: enable=unused-import

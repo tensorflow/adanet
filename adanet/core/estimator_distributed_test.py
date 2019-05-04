@@ -29,6 +29,8 @@ import socket
 import subprocess
 import time
 
+from absl import flags
+from absl import logging
 from absl.testing import parameterized
 from adanet.core.timer import _CountDownTimer
 import tensorflow as tf
@@ -62,16 +64,15 @@ def _create_task_process(task_type, task_index, estimator_type,
   """
 
   process_name = "%s_%s" % (task_type, task_index)
-  runner_binary = "bazel-bin/adanet/core/estimator_distributed_test_runner"
-  args = [os.path.join(tf.flags.FLAGS.test_srcdir, runner_binary)]
+  args = ["python", "adanet/core/estimator_distributed_test_runner.py"]
   args.append("--estimator_type={}".format(estimator_type))
   args.append("--placement_strategy={}".format(placement_strategy))
   # Log everything to stderr.
   args.append("--stderrthreshold=info")
   args.append("--model_dir={}".format(model_dir))
-  tf.logging.info("Spawning %s process: %s" % (process_name, " ".join(args)))
+  logging.info("Spawning %s process: %s", process_name, " ".join(args))
   stderr_filename = os.path.join(model_dir, "%s_stderr.txt" % process_name)
-  tf.logging.info("Logging to %s", model_dir)
+  logging.info("Logging to %s", model_dir)
   stderr_file = open(stderr_filename, "w+")
   tf_config = copy.deepcopy(tf_config)
   tf_config["task"]["type"] = task_type
@@ -111,7 +112,7 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
   def setUp(self):
     super(EstimatorDistributedTrainingTest, self).setUp()
     # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
+    self.test_subdirectory = os.path.join(flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
     os.makedirs(self.test_subdirectory)
 
@@ -141,16 +142,15 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
     finished_wait_processes = set()
     while len(finished_wait_processes) < len(wait_processes):
       if timer.secs_remaining() == 0:
-        tf.logging.error("Timed out! Outputting logs of unfinished processes:")
+        logging.error("Timed out! Outputting logs of unfinished processes:")
         for i, wait_process in enumerate(wait_processes):
           if i in finished_wait_processes:
             continue
           wait_process.stderr.seek(0)
           wait_process_stderrs[i] = wait_process.stderr.read()
-          tf.logging.info(
-              "stderr for incomplete {} (last {} chars): {}\n".format(
-                  wait_process.name, MAX_OUTPUT_CHARS,
-                  wait_process.stderr.read()[-MAX_OUTPUT_CHARS:]))
+          logging.info("stderr for incomplete %s (last %d chars): %s\n",
+                       wait_process.name, MAX_OUTPUT_CHARS,
+                       wait_process.stderr.read()[-MAX_OUTPUT_CHARS:])
         raise Exception("Timed out waiting for tasks to complete.")
       for i, wait_process in enumerate(wait_processes):
         if i in finished_wait_processes:
@@ -158,12 +158,12 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
         ret_code = wait_process.popen.poll()
         if ret_code is None:
           continue
-        tf.logging.info("{} finished".format(wait_process.name))
+        logging.info("%s finished", wait_process.name)
         wait_process.stderr.seek(0)
         wait_process_stderrs[i] = wait_process.stderr.read()
-        tf.logging.info("stderr for {} (last {} chars): {}\n".format(
-            wait_process.name, MAX_OUTPUT_CHARS,
-            wait_process_stderrs[i][-MAX_OUTPUT_CHARS:]))
+        logging.info("stderr for %s (last %d chars): %s\n", wait_process.name,
+                     MAX_OUTPUT_CHARS,
+                     wait_process_stderrs[i][-MAX_OUTPUT_CHARS:])
         self.assertEqual(0, ret_code)
         finished_wait_processes.add(i)
       for kill_process in kill_processes:
@@ -173,15 +173,15 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
         self.assertIsNone(ret_code)
       # Delay between polling loops.
       time.sleep(0.25)
-    tf.logging.info("All wait processes finished")
+    logging.info("All wait processes finished")
     for i, kill_process in enumerate(kill_processes):
       # Kill each kill process.
       kill_process.popen.kill()
       kill_process.popen.wait()
       kill_process.stderr.seek(0)
-      tf.logging.info("stderr for {} (last {} chars): {}\n".format(
-          kill_process.name, MAX_OUTPUT_CHARS,
-          kill_process.stderr.read()[-MAX_OUTPUT_CHARS:]))
+      logging.info("stderr for %s (last %d chars): %s\n", kill_process.name,
+                   MAX_OUTPUT_CHARS,
+                   kill_process.stderr.read()[-MAX_OUTPUT_CHARS:])
     return wait_process_stderrs
 
   # pylint: disable=g-complex-comprehension

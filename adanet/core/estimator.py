@@ -43,10 +43,6 @@ from adanet.ensemble import GrowStrategy
 import numpy as np
 import six
 import tensorflow as tf
-# pylint: disable=g-direct-tensorflow-import
-from tensorflow.python.data.ops.dataset_ops import DatasetV1
-from tensorflow.python.data.ops.dataset_ops import DatasetV2
-# pylint: enable=g-direct-tensorflow-import
 
 
 class _StopAfterTrainingHook(tf_compat.SessionRunHook):
@@ -780,7 +776,7 @@ class Estimator(tf.estimator.Estimator):
       tf_compat.v1.train.get_or_create_global_step()
       inputs = input_fn()
       # TODO: Consider tensorflow_estimator/python/estimator/util.py.
-      if isinstance(inputs, (DatasetV1, DatasetV2)):
+      if isinstance(inputs, (tf_compat.DatasetV1, tf_compat.DatasetV2)):
         features, labels = tf_compat.make_one_shot_iterator(inputs).get_next()
       else:
         features, labels = inputs

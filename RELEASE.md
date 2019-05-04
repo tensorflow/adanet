@@ -16,6 +16,8 @@ limitations under the License.
 # Current version (0.7.0.dev)
  * Under development.
  * TODO: Add official Keras Model support, including Keras layers, Sequential, and Model subclasses for defining subnetworks.
+ * **BREAKING CHANGE**: Only support TensorFlow >= 1.13 to better support TensorFlow 2.0. Drop support for versions < 1.13.
+ * Correct eval metric computations on CPU and GPU.
 
 # Release 0.6.2
  * Fix n+1 global-step increment bug in `adanet.AutoEnsembleEstimator`. This bug incremented the global_step by n+1 for n canned `Estimators` like `DNNEstimator`.

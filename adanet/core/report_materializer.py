@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import math
 
+from absl import logging
 from adanet import subnetwork
 import tensorflow as tf
 
@@ -124,17 +125,16 @@ class ReportMaterializer(object):
         steps_completed += 1
         if (steps_completed % logging_frequency == 0 or
             self.steps == steps_completed):
-          tf.logging.info("Report materialization [%d/%s]", steps_completed,
-                          self.steps or "??")
+          logging.info("Report materialization [%d/%s]", steps_completed,
+                       self.steps or "??")
 
         sess.run(metric_update_ops)
       except tf.errors.OutOfRangeError:
-        tf.logging.info(
-            "Encountered end of input during report materialization")
+        logging.info("Encountered end of input during report materialization")
         break
 
     materialized_tensors_dict = sess.run(tensors_to_materialize)
-    tf.logging.info("Materialized subnetwork_reports.")
+    logging.info("Materialized subnetwork_reports.")
 
     # Convert scalar ndarrays into python primitives, then place them into
     # subnetwork.MaterializedReports.

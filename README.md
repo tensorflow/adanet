@@ -54,7 +54,7 @@ import adanet
 import tensorflow as tf
 
 # Define the model head for computing loss and evaluation metrics.
-head = tf.contrib.estimator.multi_class_head(n_classes=10)
+head = MultiClassHead(n_classes=10)
 
 # Feature columns define how to process examples.
 feature_columns = ...
@@ -67,12 +67,12 @@ estimator = adanet.AutoEnsembleEstimator(
             tf.estimator.LinearEstimator(
                 head=head,
                 feature_columns=feature_columns,
-                optimizer=tf.train.FtrlOptimizer(...)),
+                optimizer=...),
         "dnn":
             tf.estimator.DNNEstimator(
                 head=head,
                 feature_columns=feature_columns,
-                optimizer=tf.train.ProximalAdagradOptimizer(...),
+                optimizer=...,
                 hidden_units=[1000, 500, 100])},
     max_iteration_steps=50)
 
@@ -92,10 +92,10 @@ To get you started:
 
 Requires [Python](https://www.python.org/) 2.7, 3.4, 3.5, or 3.6.
 
-`adanet` depends on bug fixes and enhancements not present in TensorFlow releases prior to 1.9. You must install or upgrade your TensorFlow package to at least 1.9:
+`adanet` depends on bug fixes and enhancements not present in TensorFlow releases prior to 1.13. You must install or upgrade your TensorFlow package to at least 1.13:
 
 ```shell
-$ pip install "tensorflow>=1.9.0"
+$ pip install "tensorflow>=1.13,<2.0"
 ```
 
 ## Installing with Pip

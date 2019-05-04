@@ -21,7 +21,9 @@ from __future__ import print_function
 
 import os
 
+from absl import logging
 from adanet import subnetwork
+from adanet import tf_compat
 import six
 import tensorflow as tf
 
@@ -31,8 +33,7 @@ import tensorflow as tf
 try:
   from adanet.core import report_pb2 as report_proto
 except ImportError:
-  tf.logging.warn(
-      "Failed to import report_pb2. ReportMaterializer will not work.")
+  logging.warn("Failed to import report_pb2. ReportMaterializer will not work.")
 # pylint: enable=g-import-not-at-top
 
 
@@ -181,7 +182,7 @@ class _ReportAccessor(object):
       A `_ReportAccessor` instance.
     """
 
-    tf.gfile.MakeDirs(report_dir)
+    tf.io.gfile.makedirs(report_dir)
     self._full_filepath = os.path.join(report_dir, filename)
 
   def write_iteration_report(self, iteration_number, materialized_reports):
@@ -205,8 +206,8 @@ class _ReportAccessor(object):
                                       materialized_reports),
     )
     self._append_iteration_report_pb(iteration_report_pb)
-    tf.logging.info("Wrote IterationReport for iteration %s to %s",
-                    iteration_number, self._full_filepath)
+    logging.info("Wrote IterationReport for iteration %s to %s",
+                 iteration_number, self._full_filepath)
 
   def _append_iteration_report_pb(self, iteration_pb):
     """Appends an adanet.IterationReport proto to the end of the file."""
@@ -217,14 +218,14 @@ class _ReportAccessor(object):
     #
     # https://github.com/tensorflow/tensorflow/blob/r1.7/tensorflow/python/lib/io/tf_record.py#L96
     previous_iterations = []
-    if tf.gfile.Exists(self._full_filepath):
+    if tf.io.gfile.exists(self._full_filepath):
       try:
-        tf_record_iterator = tf.compat.v1.io.tf_record_iterator
+        tf_record_iterator = tf_compat.v1.io.tf_record_iterator
       except AttributeError:
-        tf_record_iterator = tf.python_io.tf_record_iterator
+        tf_record_iterator = tf_compat.v1.python_io.tf_record_iterator
 
       previous_iterations = list(tf_record_iterator(self._full_filepath))
-    with tf.python_io.TFRecordWriter(self._full_filepath) as writer:
+    with tf.io.TFRecordWriter(self._full_filepath) as writer:
       for prev_iteration_pb_string in previous_iterations:
         writer.write(prev_iteration_pb_string)
       writer.write(iteration_pb.SerializeToString())
@@ -246,11 +247,11 @@ class _ReportAccessor(object):
   def _read_iteration_report_pb_list(self):
     """Returns an Iterable of adanet.IterationReport protos."""
 
-    if tf.gfile.Exists(self._full_filepath):
+    if tf.io.gfile.exists(self._full_filepath):
       try:
-        tf_record_iterator = tf.compat.v1.io.tf_record_iterator
+        tf_record_iterator = tf_compat.v1.io.tf_record_iterator
       except AttributeError:
-        tf_record_iterator = tf.python_io.tf_record_iterator
+        tf_record_iterator = tf_compat.v1.python_io.tf_record_iterator
       return map(_parse_iteration_report_proto,
                  tf_record_iterator(self._full_filepath))
     return []

@@ -16,22 +16,16 @@ env:
     # We test against recent versions of TensorFlow and tf-nightly.
 
     # Quick test suite.
-    - TF_VERSION="1.9.*" SUITE="quick"
-    - TF_VERSION="1.10.*" SUITE="quick"
-    - TF_VERSION="1.11.*" SUITE="quick"
-    - TF_VERSION="1.12.*" SUITE="quick"
     - TF_VERSION="1.13.*" SUITE="quick"
     - TF_VERSION="tf-nightly" SUITE="quick"
     - TF_VERSION="2.0.0-alpha0" SUITE="quick"
+    - TF_VERSION="tf-nightly-2.0-preview" SUITE="quick"
 
     # E2E Tests.
-    - TF_VERSION="1.9.*" SUITE="e2e"
-    - TF_VERSION="1.10.*" SUITE="e2e"
-    - TF_VERSION="1.11.*" SUITE="e2e"
-    - TF_VERSION="1.12.*" SUITE="e2e"
     - TF_VERSION="1.13.*" SUITE="e2e"
     - TF_VERSION="tf-nightly" SUITE="e2e"
     - TF_VERSION="2.0.0-alpha0" SUITE="e2e"
+    - TF_VERSION="tf-nightly-2.0-preview" SUITE="e2e"
 
 matrix:
   allow_failures:
@@ -43,6 +37,14 @@ matrix:
       env: TF_VERSION="2.0.0-alpha0" SUITE="quick"
     - python: "3.6"
       env: TF_VERSION="2.0.0-alpha0" SUITE="e2e"
+    - python: "2.7"
+      env: TF_VERSION="tf-nightly-2.0-preview" SUITE="quick"
+    - python: "2.7"
+      env: TF_VERSION="tf-nightly-2.0-preview" SUITE="e2e"
+    - python: "3.6"
+      env: TF_VERSION="tf-nightly-2.0-preview" SUITE="quick"
+    - python: "3.6"
+      env: TF_VERSION="tf-nightly-2.0-preview" SUITE="e2e"
 
 before_install:
   - sudo apt-get -y install pkg-config zip g++ zlib1g-dev unzip

@@ -301,13 +301,13 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
     if multi_head:
       head = multi_head_lib.MultiHead(heads=[
           binary_class_head.BinaryClassHead(
-              name="head1", loss_reduction=tf.losses.Reduction.SUM),
+              name="head1", loss_reduction=tf_compat.v2.losses.Reduction.SUM),
           binary_class_head.BinaryClassHead(
-              name="head2", loss_reduction=tf.losses.Reduction.SUM)
+              name="head2", loss_reduction=tf_compat.v2.losses.Reduction.SUM)
       ])
     else:
       head = binary_class_head.BinaryClassHead(
-          loss_reduction=tf.losses.Reduction.SUM)
+          loss_reduction=tf_compat.v2.losses.Reduction.SUM)
     builder = _EnsembleBuilder(head=head)
 
     def _subnetwork_train_op_fn(loss, var_list):
@@ -481,14 +481,14 @@ def _make_metrics(sess,
   if multi_head:
     head = multi_head_lib.MultiHead(heads=[
         binary_class_head.BinaryClassHead(
-            name="head1", loss_reduction=tf.losses.Reduction.SUM),
+            name="head1", loss_reduction=tf_compat.v2.losses.Reduction.SUM),
         binary_class_head.BinaryClassHead(
-            name="head2", loss_reduction=tf.losses.Reduction.SUM)
+            name="head2", loss_reduction=tf_compat.v2.losses.Reduction.SUM)
     ])
     labels = {"head1": tf.constant([0, 1]), "head2": tf.constant([0, 1])}
   else:
     head = binary_class_head.BinaryClassHead(
-        loss_reduction=tf.losses.Reduction.SUM)
+        loss_reduction=tf_compat.v2.losses.Reduction.SUM)
     labels = tf.constant([0, 1])
   features = {"x": tf.constant([[1.], [2.]])}
   builder = _EnsembleBuilder(head, metric_fn=metric_fn)
@@ -572,8 +572,8 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
       self.assertEqual(1.5, subnetwork_metrics["mean_x"])
       self.assertEqual(1.5, ensemble_metrics["mean_x"])
       # assert that it keeps original head metrics
-      self.assertIn("auc", subnetwork_metrics)
-      self.assertIn("auc", ensemble_metrics)
+      self.assertIn("average_loss", subnetwork_metrics)
+      self.assertIn("average_loss", ensemble_metrics)
 
     def metric_fn_1(features):
       return {"mean_x": tf_compat.v1.metrics.mean(features["x"])}
@@ -583,7 +583,7 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
 
   def test_should_error_out_for_not_recognized_args(self):
     head = binary_class_head.BinaryClassHead(
-        loss_reduction=tf.losses.Reduction.SUM)
+        loss_reduction=tf_compat.v2.losses.Reduction.SUM)
 
     def metric_fn(features, not_recognized):
       _, _ = features, not_recognized
@@ -634,17 +634,17 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
       with self.test_session() as sess:
         subnetwork_metrics, ensemble_metrics = _make_metrics(
             sess, metric_fn=None)
-      self.assertNotEqual(2., subnetwork_metrics["auc"])
-      self.assertNotEqual(2., ensemble_metrics["auc"])
+      self.assertNotEqual(2., subnetwork_metrics["average_loss"])
+      self.assertNotEqual(2., ensemble_metrics["average_loss"])
 
       with tf.Graph().as_default() as g, self.test_session(g) as sess:
         subnetwork_metrics, ensemble_metrics = _make_metrics(
             sess, metric_fn=metric_fn)
-      self.assertEqual(2., subnetwork_metrics["auc"])
-      self.assertEqual(2., ensemble_metrics["auc"])
+      self.assertEqual(2., subnetwork_metrics["average_loss"])
+      self.assertEqual(2., ensemble_metrics["average_loss"])
 
     def metric_fn_1():
-      return {"auc": tf_compat.v1.metrics.mean(tf.constant([2.]))}
+      return {"average_loss": tf_compat.v1.metrics.mean(tf.constant([2.]))}
 
     # TODO: Add support for tf.keras.metrics.Mean like `add_metrics`.
     _test_metric_fn(metric_fn_1)

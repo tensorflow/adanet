@@ -132,7 +132,7 @@ class AutoEnsembleEstimator(Estimator):
 
       feature_columns = ...
 
-      head = tf.contrib.estimator.multi_class_head(n_classes=3)
+      head = MultiClassHead(n_classes=10)
 
       # Learn to ensemble linear and DNN models.
       estimator = adanet.AutoEnsembleEstimator(
@@ -142,12 +142,12 @@ class AutoEnsembleEstimator(Estimator):
                   tf.estimator.LinearEstimator(
                       head=head,
                       feature_columns=feature_columns,
-                      optimizer=tf.train.FtrlOptimizer(...)),
+                      optimizer=...),
               "dnn":
                   tf.estimator.DNNEstimator(
                       head=head,
                       feature_columns=feature_columns,
-                      optimizer=tf.train.ProximalAdagradOptimizer(...),
+                      optimizer=...,
                       hidden_units=[1000, 500, 100])},
           max_iteration_steps=50)
 
