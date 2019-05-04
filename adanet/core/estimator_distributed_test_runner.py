@@ -193,8 +193,8 @@ def train_and_evaluate_estimator():
           # Ignore other workers; only talk to parameter servers.
           # Otherwise, when a chief/worker terminates, the others will hang.
           device_filters=["/job:ps"]))
-  head = regression_head.RegressionHead(
-      loss_reduction=tf_compat.v2.losses.Reduction.SUM_OVER_BATCH_SIZE)
+  head = regression_head.RegressionHead(loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
+
 
   kwargs = {
       "max_iteration_steps": 100,

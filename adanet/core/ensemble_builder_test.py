@@ -301,13 +301,13 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
     if multi_head:
       head = multi_head_lib.MultiHead(heads=[
           binary_class_head.BinaryClassHead(
-              name="head1", loss_reduction=tf_compat.v2.losses.Reduction.SUM),
+              name="head1", loss_reduction=tf_compat.SUM),
           binary_class_head.BinaryClassHead(
-              name="head2", loss_reduction=tf_compat.v2.losses.Reduction.SUM)
+              name="head2", loss_reduction=tf_compat.SUM)
       ])
     else:
       head = binary_class_head.BinaryClassHead(
-          loss_reduction=tf_compat.v2.losses.Reduction.SUM)
+          loss_reduction=tf_compat.SUM)
     builder = _EnsembleBuilder(head=head)
 
     def _subnetwork_train_op_fn(loss, var_list):
@@ -481,14 +481,14 @@ def _make_metrics(sess,
   if multi_head:
     head = multi_head_lib.MultiHead(heads=[
         binary_class_head.BinaryClassHead(
-            name="head1", loss_reduction=tf_compat.v2.losses.Reduction.SUM),
+            name="head1", loss_reduction=tf_compat.SUM),
         binary_class_head.BinaryClassHead(
-            name="head2", loss_reduction=tf_compat.v2.losses.Reduction.SUM)
+            name="head2", loss_reduction=tf_compat.SUM)
     ])
     labels = {"head1": tf.constant([0, 1]), "head2": tf.constant([0, 1])}
   else:
     head = binary_class_head.BinaryClassHead(
-        loss_reduction=tf_compat.v2.losses.Reduction.SUM)
+        loss_reduction=tf_compat.SUM)
     labels = tf.constant([0, 1])
   features = {"x": tf.constant([[1.], [2.]])}
   builder = _EnsembleBuilder(head, metric_fn=metric_fn)
@@ -583,7 +583,7 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
 
   def test_should_error_out_for_not_recognized_args(self):
     head = binary_class_head.BinaryClassHead(
-        loss_reduction=tf_compat.v2.losses.Reduction.SUM)
+        loss_reduction=tf_compat.SUM)
 
     def metric_fn(features, not_recognized):
       _, _ = features, not_recognized
