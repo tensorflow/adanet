@@ -42,6 +42,8 @@ try:
   from tensorflow.python.data.ops.dataset_ops import DatasetV2
 except AttributeError:
   DatasetV2 = tf.data.Dataset
+
+from tensorflow_estimator.python.estimator.head import regression_head
 # pylint: enable=g-import-not-at-top
 # pylint: enable=g-direct-tensorflow-import
 # pylint: enable=unused-import
@@ -81,10 +83,22 @@ try:
 except AttributeError:
   TPUEstimatorSpec = object
 
+# TODO: Figure out TPU strategy for TF 2.0.
 try:
   TPUEstimator = tf.contrib.tpu.TPUEstimator
 except AttributeError:
   TPUEstimator = object
+
+try:
+  # Loss reduction strings change between TF 1.13 and TF 1.14, which causes
+  # Heads to raise errors.
+  regression_head.RegressionHead(
+      loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
+  SUM_OVER_BATCH_SIZE = tf.losses.Reduction.SUM_OVER_BATCH_SIZE
+  SUM = tf.losses.Reduction.SUM
+except ValueError:
+  SUM_OVER_BATCH_SIZE = "sum_over_batch_size"
+  SUM = "sum"
 
 
 def tensor_name(tensor):

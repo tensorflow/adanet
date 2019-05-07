@@ -27,6 +27,7 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 import time
 
 from absl import flags
@@ -111,6 +112,7 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
 
   def setUp(self):
     super(EstimatorDistributedTrainingTest, self).setUp()
+    flags.FLAGS(sys.argv)
     # Setup and cleanup test directory.
     self.test_subdirectory = os.path.join(flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
