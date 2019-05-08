@@ -261,22 +261,6 @@ class Builder(object):
 
     return None
 
-  def prune_previous_ensemble(self, previous_ensemble):
-    """Specifies which subnetworks from the previous ensemble to keep.
-
-    The selected subnetworks from the previous ensemble will be kept in the
-    candidate ensemble that includes this subnetwork.
-
-    By default, none of the previous ensemble subnetworks are pruned.
-
-    Args:
-      previous_ensemble: :class:`adanet.Ensemble` object.
-
-    Returns:
-      List of integer indices of `weighted_subnetworks` to keep.
-    """
-    return range(len(previous_ensemble.weighted_subnetworks))
-
 
 class Generator(object):
   """Interface for a candidate subnetwork generator.

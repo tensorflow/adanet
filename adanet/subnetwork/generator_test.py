@@ -19,8 +19,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import collections
-
 from absl.testing import parameterized
 from adanet import tf_compat
 from adanet.subnetwork.generator import Builder
@@ -63,74 +61,75 @@ class FakeSubnetwork(Builder):
 
 class SubnetworkTest(parameterized.TestCase, tf.test.TestCase):
 
-  @parameterized.named_parameters({
-      "testcase_name": "no_persisted_tensors_nor_shared",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-  }, {
-      "testcase_name": "empty_persisted_tensors",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "persisted_tensors": {},
-  }, {
-      "testcase_name": "dict_logits_and_last_layer",
-      "last_layer": {
-          "head1": dummy_tensor()
-      },
-      "logits": {
-          "head1": dummy_tensor()
-      },
-      "complexity": dummy_tensor(),
-      "persisted_tensors": {},
-  }, {
-      "testcase_name": "persisted_tensors",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "persisted_tensors": {
-          "hidden_layer": dummy_tensor(),
-      },
-  }, {
-      "testcase_name": "nested_persisted_tensors",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "persisted_tensors": {
-          "hidden_layer": dummy_tensor(),
-          "nested": {
-              "foo": dummy_tensor(),
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "no_persisted_tensors_nor_shared",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+      }, {
+          "testcase_name": "empty_persisted_tensors",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "persisted_tensors": {},
+      }, {
+          "testcase_name": "dict_logits_and_last_layer",
+          "last_layer": {
+              "head1": dummy_tensor()
+          },
+          "logits": {
+              "head1": dummy_tensor()
+          },
+          "complexity": dummy_tensor(),
+          "persisted_tensors": {},
+      }, {
+          "testcase_name": "persisted_tensors",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "persisted_tensors": {
+              "hidden_layer": dummy_tensor(),
+          },
+      }, {
+          "testcase_name": "nested_persisted_tensors",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "persisted_tensors": {
+              "hidden_layer": dummy_tensor(),
               "nested": {
                   "foo": dummy_tensor(),
+                  "nested": {
+                      "foo": dummy_tensor(),
+                  },
               },
           },
-      },
-  }, {
-      "testcase_name": "shared_primitive",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "shared": 1,
-  }, {
-      "testcase_name": "shared_dict",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "shared": {},
-  }, {
-      "testcase_name": "shared_lambda",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "shared": lambda x: x,
-  }, {
-      "testcase_name": "shared_object",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "shared": dummy_tensor(),
-  })
+      }, {
+          "testcase_name": "shared_primitive",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "shared": 1,
+      }, {
+          "testcase_name": "shared_dict",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "shared": {},
+      }, {
+          "testcase_name": "shared_lambda",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "shared": lambda x: x,
+      }, {
+          "testcase_name": "shared_object",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "shared": dummy_tensor(),
+      })
   def test_new(self,
                last_layer,
                logits,
@@ -146,110 +145,82 @@ class SubnetworkTest(parameterized.TestCase, tf.test.TestCase):
       self.assertEqual(got.persisted_tensors, persisted_tensors)
       self.assertEqual(got.shared, shared)
 
-  @parameterized.named_parameters({
-      "testcase_name": "none_last_layer",
-      "last_layer": None,
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "persisted_tensors": {},
-  }, {
-      "testcase_name": "none_logits",
-      "last_layer": dummy_tensor(),
-      "logits": None,
-      "complexity": dummy_tensor(),
-      "persisted_tensors": {},
-  }, {
-      "testcase_name": "none_complexity",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": None,
-      "persisted_tensors": {},
-  }, {
-      "testcase_name": "empty_list_persisted_tensors",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "persisted_tensors": [],
-  }, {
-      "testcase_name": "list_persisted_tensors",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "persisted_tensors": [1.],
-  }, {
-      "testcase_name": "empty_nested_persisted_tensors",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "persisted_tensors": {
-          "value": dummy_tensor(),
-          "nested": {},
-      },
-  }, {
-      "testcase_name": "empty_nested_persisted_tensors_recursive",
-      "last_layer": dummy_tensor(),
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "persisted_tensors": {
-          "value": dummy_tensor(),
-          "nested": {
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "none_last_layer",
+          "last_layer": None,
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "persisted_tensors": {},
+      }, {
+          "testcase_name": "none_logits",
+          "last_layer": dummy_tensor(),
+          "logits": None,
+          "complexity": dummy_tensor(),
+          "persisted_tensors": {},
+      }, {
+          "testcase_name": "none_complexity",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": None,
+          "persisted_tensors": {},
+      }, {
+          "testcase_name": "empty_list_persisted_tensors",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "persisted_tensors": [],
+      }, {
+          "testcase_name": "list_persisted_tensors",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "persisted_tensors": [1.],
+      }, {
+          "testcase_name": "empty_nested_persisted_tensors",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "persisted_tensors": {
+              "value": dummy_tensor(),
+              "nested": {},
+          },
+      }, {
+          "testcase_name": "empty_nested_persisted_tensors_recursive",
+          "last_layer": dummy_tensor(),
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "persisted_tensors": {
               "value": dummy_tensor(),
               "nested": {
                   "value": dummy_tensor(),
-                  "nested": {},
+                  "nested": {
+                      "value": dummy_tensor(),
+                      "nested": {},
+                  },
               },
           },
-      },
-  }, {
-      "testcase_name": "only_dict_logits",
-      "last_layer": dummy_tensor(),
-      "logits": {
-          "head": dummy_tensor()
-      },
-      "complexity": dummy_tensor(),
-      "persisted_tensors": {},
-  }, {
-      "testcase_name": "only_dict_last_layer",
-      "last_layer": {
-          "head": dummy_tensor()
-      },
-      "logits": dummy_tensor(),
-      "complexity": dummy_tensor(),
-      "persisted_tensors": {},
-  })
+      }, {
+          "testcase_name": "only_dict_logits",
+          "last_layer": dummy_tensor(),
+          "logits": {
+              "head": dummy_tensor()
+          },
+          "complexity": dummy_tensor(),
+          "persisted_tensors": {},
+      }, {
+          "testcase_name": "only_dict_last_layer",
+          "last_layer": {
+              "head": dummy_tensor()
+          },
+          "logits": dummy_tensor(),
+          "complexity": dummy_tensor(),
+          "persisted_tensors": {},
+      })
   def test_new_errors(self, last_layer, logits, complexity, persisted_tensors):
     with self.test_session():
       with self.assertRaises(ValueError):
         Subnetwork(last_layer, logits, complexity, persisted_tensors)
-
-  @parameterized.named_parameters({
-      "testcase_name": "empty_previous",
-      "previous_ensemble_size": 0,
-      "expected_ensemble_size": 0,
-      "expected_chosen_indices": []
-  }, {
-      "testcase_name": "one_subnetwork",
-      "previous_ensemble_size": 1,
-      "expected_ensemble_size": 1,
-      "expected_chosen_indices": range(0, 1)
-  }, {
-      "testcase_name": "three_subnetwork",
-      "previous_ensemble_size": 3,
-      "expected_ensemble_size": 3,
-      "expected_chosen_indices": range(0, 3)
-  })
-  def test_prune_previous_ensemble(self, previous_ensemble_size,
-                                   expected_ensemble_size,
-                                   expected_chosen_indices):
-    builder = FakeSubnetwork()
-    fake_ensemble = collections.namedtuple("ensemble", ["weighted_subnetworks"])
-    previous_ensemble = fake_ensemble(
-        weighted_subnetworks=[1] * previous_ensemble_size)
-    self.assertEqual(expected_ensemble_size,
-                     len(builder.prune_previous_ensemble(previous_ensemble)))
-    if expected_chosen_indices:
-      self.assertEqual(expected_chosen_indices,
-                       builder.prune_previous_ensemble(previous_ensemble))
 
 
 if __name__ == "__main__":

@@ -280,13 +280,15 @@ class _EnsembleBuilder(object):
         if len(candidate.subnetwork_builders) == 1 and previous_ensemble:
           # Prune previous ensemble according to the subnetwork.Builder for
           # backwards compatibility.
-          logging.warn(
-              "Using an `adanet.subnetwork.Builder#prune_previous_ensemble` "
-              "is deprecated. Please use a custom `adanet.ensemble.Strategy` "
-              "instead.")
           subnetwork_builder = candidate.subnetwork_builders[0]
-          keep_indices = subnetwork_builder.prune_previous_ensemble(
-              previous_ensemble)
+          prune_previous_ensemble = getattr(subnetwork_builder,
+                                            "prune_previous_ensemble", None)
+          if callable(prune_previous_ensemble):
+            logging.warn(
+                "Using an `adanet.subnetwork.Builder#prune_previous_ensemble` "
+                "is deprecated. Please use a custom `adanet.ensemble.Strategy` "
+                "instead.")
+            keep_indices = prune_previous_ensemble(previous_ensemble)
         for i, builder in enumerate(previous_ensemble_spec.subnetwork_builders):
           if i not in keep_indices:
             continue
