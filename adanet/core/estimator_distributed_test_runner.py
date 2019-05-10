@@ -210,31 +210,23 @@ def train_and_evaluate_estimator():
     kwargs["experimental_placement_strategy"] = RoundRobinStrategy()
   if FLAGS.estimator_type == "autoensemble":
     feature_columns = [tf.feature_column.numeric_column("x", shape=[2])]
-    if hasattr(tf.estimator, "LinearEstimator"):
-      linear_estimator_fn = tf_compat.v1.estimator.LinearEstimator
-    else:
-      linear_estimator_fn = tf.contrib.estimator.LinearEstimator
-    if hasattr(tf.estimator, "DNNEstimator"):
-      dnn_estimator_fn = tf_compat.v1.estimator.DNNEstimator
-    else:
-      dnn_estimator_fn = tf.contrib.estimator.DNNEstimator
     candidate_pool = {
         "linear":
-            linear_estimator_fn(
+            tf.estimator.LinearEstimator(
                 head=head,
                 feature_columns=feature_columns,
-                optimizer=tf_compat.v1.train.AdamOptimizer(learning_rate=.001)),
+                optimizer=lambda: tf.keras.optimizers.Adam(lr=.001)),
         "dnn":
-            dnn_estimator_fn(
+            tf.estimator.DNNEstimator(
                 head=head,
                 feature_columns=feature_columns,
-                optimizer=tf_compat.v1.train.AdamOptimizer(learning_rate=.001),
+                optimizer=lambda: tf.keras.optimizers.Adam(lr=.001),
                 hidden_units=[3]),
         "dnn2":
-            dnn_estimator_fn(
+            tf.estimator.DNNEstimator(
                 head=head,
                 feature_columns=feature_columns,
-                optimizer=tf_compat.v1.train.AdamOptimizer(learning_rate=.001),
+                optimizer=lambda: tf.keras.optimizers.Adam(lr=.001),
                 hidden_units=[5]),
     }
 
@@ -258,13 +250,9 @@ def train_and_evaluate_estimator():
     input_labels = tf.constant(xor_labels, name="y")
     return input_features, input_labels
 
-  train_hooks = []
-  # ProfilerHook raises the following error in older TensorFlow versions:
-  # ValueError: The provided tag was already used for this event type.
-  if tf_compat.version_greater_or_equal("1.13.0"):
-    train_hooks = [
-        tf.estimator.ProfilerHook(save_steps=50, output_dir=FLAGS.model_dir)
-    ]
+  train_hooks = [
+      tf.estimator.ProfilerHook(save_steps=50, output_dir=FLAGS.model_dir)
+  ]
   # Train for three iterations.
   train_spec = tf.estimator.TrainSpec(
       input_fn=input_fn, max_steps=300, hooks=train_hooks)
