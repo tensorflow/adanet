@@ -1143,7 +1143,7 @@ class Estimator(tf.estimator.Estimator):
       raise OSError(errno.ENOENT, os.strerror(errno.ENOENT), filename)
 
     with tf.io.gfile.GFile(filename, "rb") as gfile:
-      return _Architecture.deserialize(gfile.read())
+      return _Architecture.deserialize(gfile.read().decode())
 
   def _find_ensemble_candidate(self, ensemble_candidate_name,
                                ensemble_candidates):
