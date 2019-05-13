@@ -16,6 +16,8 @@ limitations under the License.
 # Current version (0.7.0.dev)
  * Under development.
  * TODO: Add official Keras Model support, including Keras layers, Sequential, and Model subclasses for defining subnetworks.
+ * Fix bug when using Gradient Boosted Decision Tree Estimators with `AutoEnsembleEstimator` during distributed training.
+ * Allow `AutoEnsembleEstimator's` `candidate_pool` argument to be a `lambda` in order to create `Estimators` lazily.
  * Remove `adanet.subnetwork.Builder#prune_previous_ensemble` for abstract class. This behavior is now specified using `adanet.ensemble.Strategy` subclasses.
  * **BREAKING CHANGE**: Only support TensorFlow >= 1.13 to better support TensorFlow 2.0. Drop support for versions < 1.13.
  * Correct eval metric computations on CPU and GPU.

@@ -98,16 +98,21 @@ class _GeneratorFromCandidatePool(Generator):
     self._logits_fn = logits_fn
 
   def generate_candidates(self, previous_ensemble, iteration_number,
-                          previous_ensemble_reports, all_reports):
+                          previous_ensemble_reports, all_reports, config):
+    assert config
     builders = []
-    if isinstance(self._candidate_pool, dict):
-      for name in sorted(self._candidate_pool):
+    candidate_pool = self._candidate_pool
+    if callable(candidate_pool):
+      # candidate_pool can be a function.
+      candidate_pool = candidate_pool(config=config)
+    if isinstance(candidate_pool, dict):
+      for name in sorted(candidate_pool):
         builders.append(
             _BuilderFromEstimator(
-                name, self._candidate_pool[name], logits_fn=self._logits_fn))
+                name, candidate_pool[name], logits_fn=self._logits_fn))
       return builders
 
-    for i, estimator in enumerate(self._candidate_pool):
+    for i, estimator in enumerate(candidate_pool):
       name = "{class_name}{index}".format(
           class_name=estimator.__class__.__name__, index=i)
       builders.append(
@@ -137,16 +142,18 @@ class AutoEnsembleEstimator(Estimator):
       # Learn to ensemble linear and DNN models.
       estimator = adanet.AutoEnsembleEstimator(
           head=head,
-          candidate_pool={
+          candidate_pool=lambda config: {
               "linear":
                   tf.estimator.LinearEstimator(
                       head=head,
                       feature_columns=feature_columns,
+                      config=config,
                       optimizer=...),
               "dnn":
                   tf.estimator.DNNEstimator(
                       head=head,
                       feature_columns=feature_columns,
+                      config=config,
                       optimizer=...,
                       hidden_units=[1000, 500, 100])},
           max_iteration_steps=50)
@@ -176,6 +183,9 @@ class AutoEnsembleEstimator(Estimator):
       candidates will be included in the final ensemble, but will affect the
       name of the candidate. When using a dict, the string key will be used as
       the name of the candidate.
+      Alternatively, this argument can be a function that takes a `config`
+      argument and returns the aforementioned values in case the
+      :code:`Estimators` need to be instantiated at each adanet iteration.
     max_iteration_steps: Total number of steps for which to train candidates per
       iteration. If `OutOfRange` or `StopIteration` occurs in the middle,
       training stops before `max_iteration_steps` steps.

@@ -23,7 +23,6 @@ import os
 import shutil
 
 from absl.testing import parameterized
-from adanet import tf_compat
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
 import tensorflow as tf
 
@@ -35,23 +34,78 @@ tf.logging.set_verbosity(tf.logging.INFO)
 class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
+    super(AutoEnsembleEstimatorTest, self).setUp()
     # Setup and cleanup test directory.
     self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
     os.makedirs(self.test_subdirectory)
 
   def tearDown(self):
+    super(AutoEnsembleEstimatorTest, self).tearDown()
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
 
+  # pylint: disable=g-long-lambda
   @parameterized.named_parameters(
       {
-          "testcase_name": "dict_candidate_pool",
-          "list_candidate_pool": False,
+          "testcase_name":
+              "dict_candidate_pool",
+          "candidate_pool":
+              lambda head, feature_columns, optimizer: {
+                  "dnn":
+                      tf.estimator.DNNEstimator(
+                          head=head,
+                          feature_columns=feature_columns,
+                          optimizer=optimizer,
+                          hidden_units=[3]),
+                  "linear":
+                      tf.estimator.LinearEstimator(
+                          head=head,
+                          feature_columns=feature_columns,
+                          optimizer=optimizer),
+              },
+          "want_loss":
+              .209,
       }, {
-          "testcase_name": "list_candidate_pool",
-          "list_candidate_pool": True,
+          "testcase_name":
+              "list_candidate_pool",
+          "candidate_pool":
+              lambda head, feature_columns, optimizer: [
+                  tf.estimator.DNNEstimator(
+                      head=head,
+                      feature_columns=feature_columns,
+                      optimizer=optimizer,
+                      hidden_units=[3]),
+                  tf.estimator.LinearEstimator(
+                      head=head,
+                      feature_columns=feature_columns,
+                      optimizer=optimizer),
+              ],
+          "want_loss":
+              .209,
+      }, {
+          "testcase_name":
+              "candidate_pool_lambda",
+          "candidate_pool":
+              lambda head, feature_columns, optimizer: lambda config: {
+                  "dnn":
+                      tf.estimator.DNNEstimator(
+                          head=head,
+                          feature_columns=feature_columns,
+                          optimizer=optimizer,
+                          hidden_units=[3],
+                          config=config),
+                  "linear":
+                      tf.estimator.LinearEstimator(
+                          head=head,
+                          feature_columns=feature_columns,
+                          optimizer=optimizer,
+                          config=config),
+              },
+          "want_loss":
+              .209,
       })
-  def test_auto_ensemble_estimator_lifecycle(self, list_candidate_pool):
+  # pylint: enable=g-long-lambda
+  def test_auto_ensemble_estimator_lifecycle(self, candidate_pool, want_loss):
     features = {"input_1": [[1., 0.]]}
     labels = [[1.]]
 
@@ -75,33 +129,9 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
       ]).make_one_shot_iterator().get_next()
       return {"input_1": input_features}, None
 
-    if hasattr(tf.estimator, "LinearEstimator"):
-      linear_estimator_fn = tf.estimator.LinearEstimator
-    else:
-      linear_estimator_fn = tf.contrib.estimator.LinearEstimator
-    if hasattr(tf.estimator, "DNNEstimator"):
-      dnn_estimator_fn = tf.estimator.DNNEstimator
-    else:
-      dnn_estimator_fn = tf.contrib.estimator.DNNEstimator
-
-    candidate_pool = {
-        "linear":
-            linear_estimator_fn(
-                head=head, feature_columns=feature_columns,
-                optimizer=optimizer),
-        "dnn":
-            dnn_estimator_fn(
-                head=head,
-                feature_columns=feature_columns,
-                optimizer=optimizer,
-                hidden_units=[3])
-    }
-    if list_candidate_pool:
-      candidate_pool = [candidate_pool[k] for k in sorted(candidate_pool)]
-
     estimator = AutoEnsembleEstimator(
         head=head,
-        candidate_pool=candidate_pool,
+        candidate_pool=candidate_pool(head, feature_columns, optimizer),
         max_iteration_steps=10,
         force_grow=True,
         model_dir=self.test_subdirectory,
@@ -113,12 +143,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     # Evaluate.
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=1)
 
-    want_loss = .209
-    if tf_compat.version_greater_or_equal("1.10.0") and (
-        not tf_compat.version_greater_or_equal("1.12.0")):
-      # Only TF 1.10 and 1.11.
-      want_loss = .079514
-    self.assertAllClose(want_loss, eval_results["loss"], atol=.05)
+    self.assertAllClose(want_loss, eval_results["loss"], atol=.2)
 
     # Predict.
     predictions = estimator.predict(input_fn=test_input_fn)

@@ -274,7 +274,7 @@ class Generator(object):
 
   @abc.abstractmethod
   def generate_candidates(self, previous_ensemble, iteration_number,
-                          previous_ensemble_reports, all_reports):
+                          previous_ensemble_reports, all_reports, config):
     # pyformat: disable
     """Generates :class:`adanet.subnetwork.Builder` instances for an iteration.
 
@@ -304,6 +304,8 @@ class Generator(object):
         List containing all the :class:`adanet.subnetwork.MaterializedReport`
         instances in an AdaNet iteration, starting from iteration 0, and
         ending at iteration t-1.
+      config: The current :class:`tf.estimator.RunConfig` object to configure
+        the runtime settings.
 
     Returns:
       A list of :class:`adanet.subnetwork.Builder` instances.

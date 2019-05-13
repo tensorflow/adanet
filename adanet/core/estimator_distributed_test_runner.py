@@ -46,7 +46,14 @@ from adanet.subnetwork import Subnetwork
 import tensorflow as tf
 
 # pylint: disable=g-direct-tensorflow-import
+
+# Contrib
+from tensorflow.contrib.boosted_trees.estimator_batch.estimator import CoreGradientBoostedDecisionTreeEstimator
+from tensorflow.contrib.boosted_trees.proto import learner_pb2
+from tensorflow.contrib.boosted_trees.python.utils import losses as bt_losses
+
 from tensorflow.python.training import session_manager as session_manager_lib
+from tensorflow_estimator.python.estimator.head import multi_class_head
 from tensorflow_estimator.python.estimator.head import regression_head
 
 # Module path changed. Try importing from new and old location to maintain
@@ -61,6 +68,7 @@ except ImportError:
 flags.DEFINE_enum("estimator_type", "estimator", [
     "estimator",
     "autoensemble",
+    "autoensemble_trees_multiclass",
 ], "The estimator type to train.")
 
 flags.DEFINE_enum("placement_strategy", "replication", [
@@ -193,8 +201,6 @@ def train_and_evaluate_estimator():
           # Ignore other workers; only talk to parameter servers.
           # Otherwise, when a chief/worker terminates, the others will hang.
           device_filters=["/job:ps"]))
-  head = regression_head.RegressionHead(
-      loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
 
   kwargs = {
       "max_iteration_steps": 100,
@@ -206,6 +212,10 @@ def train_and_evaluate_estimator():
       "worker_wait_timeout_secs": 60,
       "config": config
   }
+  head = regression_head.RegressionHead(
+      loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
+  features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
+  labels = [[1.], [0.], [1.], [0.]]
   if FLAGS.placement_strategy == "round_robin":
     kwargs["experimental_placement_strategy"] = RoundRobinStrategy()
   if FLAGS.estimator_type == "autoensemble":
@@ -232,7 +242,6 @@ def train_and_evaluate_estimator():
 
     estimator = AutoEnsembleEstimator(
         head=head, candidate_pool=candidate_pool, **kwargs)
-
   elif FLAGS.estimator_type == "estimator":
     subnetwork_generator = SimpleGenerator([
         _DNNBuilder("dnn1", config, layer_size=3),
@@ -242,12 +251,46 @@ def train_and_evaluate_estimator():
 
     estimator = Estimator(
         head=head, subnetwork_generator=subnetwork_generator, **kwargs)
+  elif FLAGS.estimator_type == "autoensemble_trees_multiclass":
+    n_classes = 3
+    head = multi_class_head.MultiClassHead(
+        n_classes=n_classes, loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
+
+    def tree_loss_fn(labels, logits):
+      result = bt_losses.per_example_maxent_loss(
+          labels=labels, logits=logits, num_classes=n_classes, weights=None)
+      return result[0]
+
+    tree_head = multi_class_head.MultiClassHead(
+        loss_fn=tree_loss_fn,
+        n_classes=n_classes,
+        loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
+    labels = [[1], [0], [1], [2]]
+    feature_columns = [tf.feature_column.numeric_column("x", shape=[2])]
+    candidate_pool = lambda config: {  # pylint: disable=g-long-lambda
+        "linear":
+            tf.estimator.LinearEstimator(
+                head=head,
+                feature_columns=feature_columns,
+                optimizer=tf.keras.optimizers.Adam(lr=.001),
+                config=config),
+        "gbdt":
+            CoreGradientBoostedDecisionTreeEstimator(
+                head=tree_head,
+                learner_config=learner_pb2.LearnerConfig(num_classes=n_classes),
+                examples_per_layer=8,
+                num_trees=None,
+                center_bias=False,  # Required for multi-class.
+                feature_columns=feature_columns,
+                config=config),
+    }
+
+    estimator = AutoEnsembleEstimator(
+        head=head, candidate_pool=candidate_pool, **kwargs)
 
   def input_fn():
-    xor_features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
-    xor_labels = [[1.], [0.], [1.], [0.]]
-    input_features = {"x": tf.constant(xor_features, name="x")}
-    input_labels = tf.constant(xor_labels, name="y")
+    input_features = {"x": tf.constant(features, name="x")}
+    input_labels = tf.constant(labels, name="y")
     return input_features, input_labels
 
   train_hooks = [

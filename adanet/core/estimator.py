@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import contextlib
 import errno
+import inspect
 import json
 import os
 import time
@@ -1160,7 +1161,7 @@ class Estimator(tf.estimator.Estimator):
   # TODO: Refactor architecture building logic to its own module.
   def _architecture_ensemble_spec(self, architecture, iteration_number,
                                   features, mode, labels,
-                                  previous_ensemble_spec):
+                                  previous_ensemble_spec, config):
     """Returns an `_EnsembleSpec` with the given architecture.
 
     Creates the ensemble architecture by calling `generate_subnetworks` on
@@ -1178,6 +1179,7 @@ class Estimator(tf.estimator.Estimator):
         (for multi-head). Can be `None`.
       previous_ensemble_spec: The `_EnsembleSpec` for the previous iteration.
         Will be `None` for the first iteration.
+      config: The current `tf.estimator.RunConfig`.
 
     Returns:
       An `EnsembleSpec` instance for the given architecture.
@@ -1199,11 +1201,12 @@ class Estimator(tf.estimator.Estimator):
         previous_ensemble_reports, all_reports = (
             self._collate_subnetwork_reports(iteration_number))
       generated_subnetwork_builders = (
-          self._subnetwork_generator.generate_candidates(
+          self._call_generate_candidates(
               previous_ensemble=previous_ensemble,
               iteration_number=iteration_number,
               previous_ensemble_reports=previous_ensemble_reports,
-              all_reports=all_reports))
+              all_reports=all_reports,
+              config=config))
       subnetwork_builder_names = {
           b.name: b for b in generated_subnetwork_builders
       }
@@ -1335,7 +1338,20 @@ class Estimator(tf.estimator.Estimator):
         scaffold=tf_compat.v1.train.Scaffold(summary_op=tf.constant("")),
         export_outputs=iteration_estimator_spec.export_outputs)
 
-  def _adanet_model_fn(self, features, labels, mode, params):
+  def _call_generate_candidates(self, previous_ensemble, iteration_number,
+                                previous_ensemble_reports, all_reports, config):
+    defined_args = inspect.getargspec(
+        self._subnetwork_generator.generate_candidates).args
+    generate_args = dict(
+        previous_ensemble=previous_ensemble,
+        iteration_number=iteration_number,
+        previous_ensemble_reports=previous_ensemble_reports,
+        all_reports=all_reports)
+    if "config" in defined_args:
+      generate_args["config"] = config
+    return self._subnetwork_generator.generate_candidates(**generate_args)
+
+  def _adanet_model_fn(self, features, labels, mode, params, config):
     """AdaNet model_fn.
 
     This model_fn is called at least three times per iteration:
@@ -1359,6 +1375,7 @@ class Estimator(tf.estimator.Estimator):
       mode: Defines whether this is training, evaluation or prediction. See
         `ModeKeys`.
       params: A dict of parameters.
+      config: The current `tf.estimator.RunConfig`.
 
     Returns:
       A `EstimatorSpec` instance.
@@ -1411,7 +1428,8 @@ class Estimator(tf.estimator.Estimator):
                     for t, n in architecture.subnetworks_grouped_by_iteration
                 ])))
         previous_ensemble_spec = self._architecture_ensemble_spec(
-            architecture, i, features, mode, labels, previous_ensemble_spec)
+            architecture, i, features, mode, labels, previous_ensemble_spec,
+            config)
         previous_ensemble = previous_ensemble_spec.ensemble
         previous_ensemble_summary = self._summary_maker(
             namespace="ensemble",
@@ -1436,11 +1454,13 @@ class Estimator(tf.estimator.Estimator):
       if self._report_materializer:
         previous_ensemble_reports, all_reports = (
             self._collate_subnetwork_reports(iteration_number))
-      subnetwork_builders = self._subnetwork_generator.generate_candidates(
+
+      subnetwork_builders = self._call_generate_candidates(
           previous_ensemble=previous_ensemble,
           iteration_number=iteration_number,
           previous_ensemble_reports=previous_ensemble_reports,
-          all_reports=all_reports)
+          all_reports=all_reports,
+          config=config)
       ensemble_candidates = []
       for ensemble_strategy in self._ensemble_strategies:
         ensemble_candidates += ensemble_strategy.generate_ensemble_candidates(
