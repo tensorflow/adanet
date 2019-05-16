@@ -16,6 +16,7 @@ limitations under the License.
 # Current version (0.7.0.dev)
  * Under development.
  * TODO: Add official Keras Model support, including Keras layers, Sequential, and Model subclasses for defining subnetworks.
+ * Introduce `adanet.AutoEnsembleSubestimator` for training subestimators on different training data partitions and implement ensemble methods like bootstrap aggregating (a.k.a bagging).
  * Fix bug when using Gradient Boosted Decision Tree Estimators with `AutoEnsembleEstimator` during distributed training.
  * Allow `AutoEnsembleEstimator's` `candidate_pool` argument to be a `lambda` in order to create `Estimators` lazily.
  * Remove `adanet.subnetwork.Builder#prune_previous_ensemble` for abstract class. This behavior is now specified using `adanet.ensemble.Strategy` subclasses.

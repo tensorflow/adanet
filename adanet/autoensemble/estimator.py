@@ -19,6 +19,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
+
+from adanet import tf_compat
 from adanet.core import Estimator
 from adanet.subnetwork import Builder
 from adanet.subnetwork import Generator
@@ -39,41 +42,80 @@ def _default_logits(estimator_spec):
   return estimator_spec.predictions
 
 
-class _BuilderFromEstimator(Builder):
+class AutoEnsembleSubestimator(
+    collections.namedtuple("AutoEnsembleSubestimator",
+                           ["estimator", "train_input_fn"])):
+  """A subestimator to train and consider for ensembling.
+
+  Args:
+    estimator: A `tf.estimator.Estimator` instance to consider for ensembling.
+    train_input_fn: A function that provides input data for training as
+      minibatches. It can be used to implement ensemble methods like bootstrap
+      aggregating (a.k.a bagging) where each subnetwork trains on different
+      slices of the training data. The function should construct and return one
+      of the following:
+       * A `tf.data.Dataset` object: Outputs of `Dataset` object must be a tuple
+         `(features, labels)` with same constraints as below.
+       * A tuple `(features, labels)`: Where `features` is a `tf.Tensor` or a
+         dictionary of string feature name to `Tensor` and `labels` is a
+         `Tensor` or a dictionary of string label name to `Tensor`. Both
+         `features` and `labels` are consumed by `estimator#model_fn`. They
+         should satisfy the expectation of `estimator#model_fn` from inputs.
+
+  Returns:
+    An `AutoEnsembleSubestimator` instance to be auto-ensembled.
+  """
+
+  def __new__(cls, estimator, train_input_fn=None):
+    return super(AutoEnsembleSubestimator, cls).__new__(cls, estimator,
+                                                        train_input_fn)
+
+
+class _BuilderFromSubestimator(Builder):
   """An `adanet.Builder` from a :class:`tf.estimator.Estimator`."""
 
-  def __init__(self, name, estimator, logits_fn):
-    if not isinstance(estimator, tf.estimator.Estimator):
-      raise ValueError("Values in candidate_pool must have type "
-                       "tf.estimator.Estimator but got {}".format(
-                           estimator.__class__))
+  def __init__(self, name, subestimator, logits_fn, config):
     self._name = name
-    self._estimator = estimator
+    self._subestimator = subestimator
     self._logits_fn = logits_fn
+    self._config = config
 
   @property
   def name(self):
     return self._name
 
+  def _call_model_fn(self, features, labels, mode):
+    model_fn = self._subestimator.estimator.model_fn
+    estimator_spec = model_fn(
+        features=features, labels=labels, mode=mode, config=self._config)
+    logits = self._logits_fn(estimator_spec=estimator_spec)
+    train_op = TrainOpSpec(
+        estimator_spec.train_op,
+        chief_hooks=estimator_spec.training_chief_hooks,
+        hooks=estimator_spec.training_hooks)
+    return logits, train_op
+
   def build_subnetwork(self, features, labels, logits_dimension, training,
                        iteration_step, summary, previous_ensemble):
-    model_fn = self._estimator.model_fn
-
     # We don't need an EVAL mode since AdaNet takes care of evaluation for us.
     mode = tf.estimator.ModeKeys.PREDICT
     if training:
       mode = tf.estimator.ModeKeys.TRAIN
-    estimator_spec = model_fn(
-        features=features,
-        labels=labels,
-        mode=mode,
-        config=self._estimator.config)
-    logits = self._logits_fn(estimator_spec=estimator_spec)
 
-    self._subnetwork_train_op = TrainOpSpec(
-        estimator_spec.train_op,
-        chief_hooks=estimator_spec.training_chief_hooks,
-        hooks=estimator_spec.training_hooks)
+    # Call in template to ensure that variables are created once and reused.
+    call_model_fn_template = tf.make_template("model_fn", self._call_model_fn)
+    logits, train_op = call_model_fn_template(features, labels, mode)
+    if training and self._subestimator.train_input_fn:
+      # TODO: Consider tensorflow_estimator/python/estimator/util.py.
+      inputs = self._subestimator.train_input_fn()
+      if isinstance(inputs, (tf_compat.DatasetV1, tf_compat.DatasetV2)):
+        features, labels = tf_compat.make_one_shot_iterator(inputs).get_next()
+      else:
+        features, labels = inputs
+      # Use different training set for train op only.
+      _, train_op = call_model_fn_template(features, labels, mode)
+
+    self._subnetwork_train_op = train_op
 
     # TODO: Replace with variance complexity measure.
     complexity = tf.constant(0.)
@@ -86,6 +128,16 @@ class _BuilderFromEstimator(Builder):
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
     return self._subnetwork_train_op
+
+
+def _convert_to_subestimator(candidate):
+  if isinstance(candidate, AutoEnsembleSubestimator):
+    return candidate
+  if isinstance(candidate, tf.estimator.Estimator):
+    return AutoEnsembleSubestimator(candidate)
+  raise ValueError(
+      "subestimator in candidate_pool must have type tf.estimator.Estimator or "
+      "adanet.AutoEnsembleSubestimator but got {}".format(candidate.__class__))
 
 
 class _GeneratorFromCandidatePool(Generator):
@@ -108,15 +160,22 @@ class _GeneratorFromCandidatePool(Generator):
     if isinstance(candidate_pool, dict):
       for name in sorted(candidate_pool):
         builders.append(
-            _BuilderFromEstimator(
-                name, candidate_pool[name], logits_fn=self._logits_fn))
+            _BuilderFromSubestimator(
+                name,
+                _convert_to_subestimator(candidate_pool[name]),
+                logits_fn=self._logits_fn,
+                config=config))
       return builders
 
     for i, estimator in enumerate(candidate_pool):
       name = "{class_name}{index}".format(
           class_name=estimator.__class__.__name__, index=i)
       builders.append(
-          _BuilderFromEstimator(name, estimator, logits_fn=self._logits_fn))
+          _BuilderFromSubestimator(
+              name,
+              _convert_to_subestimator(estimator),
+              logits_fn=self._logits_fn,
+              config=config))
     return builders
 
 
@@ -174,18 +233,51 @@ class AutoEnsembleEstimator(Estimator):
       metrics = estimator.evaluate(input_fn=input_fn_eval, steps=10)
       predictions = estimator.predict(input_fn=input_fn_predict)
 
+  Or to train candidate subestimators on different training data subsets:
+
+  .. code-block:: python
+
+      train_data_files = [...]
+
+      # Learn to ensemble linear and DNN models.
+      estimator = adanet.AutoEnsembleEstimator(
+          head=head,
+          candidate_pool=lambda config: {
+              "linear":
+                  adanet.AutoEnsembleSubestimator(
+                      tf.estimator.LinearEstimator(
+                          head=head,
+                          feature_columns=feature_columns,
+                          config=config,
+                          optimizer=...),
+                      make_train_input_fn(train_data_files[:-1])),
+              "dnn":
+                  adanet.AutoEnsembleSubestimator(
+                      tf.estimator.DNNEstimator(
+                          head=head,
+                          feature_columns=feature_columns,
+                          config=config,
+                          optimizer=...,
+                          hidden_units=[1000, 500, 100]),
+                      make_train_input_fn(train_data_files[0:]))},
+          max_iteration_steps=50)
+
+      estimator.train(input_fn=make_train_input_fn(train_data_files), steps=100)
+
+
   Args:
     head: A :class:`tf.contrib.estimator.Head` instance for computing loss and
       evaluation metrics for every candidate.
-    candidate_pool: List of :class:`tf.estimator.Estimator` objects or dict of
-      string name to :class:`tf.estimator.Estimator` objects that are candidates
-      to ensemble at each iteration. The order does not directly affect which
-      candidates will be included in the final ensemble, but will affect the
-      name of the candidate. When using a dict, the string key will be used as
-      the name of the candidate.
+    candidate_pool: List of :class:`tf.estimator.Estimator` and
+      :class:`AutoEnsembleSubestimator` objects, or dict of string name to
+      :class:`tf.estimator.Estimator` and :class:`AutoEnsembleSubestimator`
+      objects that are candidate subestimators to ensemble at each iteration.
+      The order does not directly affect which candidates will be included in
+      the final ensemble, but will affect the name of the candidate. When using
+      a dict, the string key becomes the candidate subestimator's name.
       Alternatively, this argument can be a function that takes a `config`
       argument and returns the aforementioned values in case the
-      :code:`Estimators` need to be instantiated at each adanet iteration.
+      objects need to be re-instantiated at each adanet iteration.
     max_iteration_steps: Total number of steps for which to train candidates per
       iteration. If `OutOfRange` or `StopIteration` occurs in the middle,
       training stops before `max_iteration_steps` steps.

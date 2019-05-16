@@ -24,6 +24,7 @@ import shutil
 
 from absl.testing import parameterized
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
+from adanet.autoensemble.estimator import AutoEnsembleSubestimator
 import tensorflow as tf
 
 from tensorflow.python.estimator.export import export
@@ -103,6 +104,30 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
               },
           "want_loss":
               .209,
+      }, {
+          "testcase_name":
+              "bagging",
+          "candidate_pool":
+              lambda head, feature_columns, optimizer: {
+                  "same_train_data":
+                      AutoEnsembleSubestimator(
+                          tf.estimator.LinearEstimator(
+                              head=head,
+                              feature_columns=feature_columns,
+                              optimizer=optimizer)),
+                  "different_train_data":
+                      AutoEnsembleSubestimator(
+                          tf.estimator.DNNEstimator(
+                              head=head,
+                              feature_columns=feature_columns,
+                              optimizer=optimizer,
+                              hidden_units=[3]),
+                          train_input_fn=lambda: ({
+                              "input_1": tf.constant([[0., 1.]])
+                          }, tf.constant([[1.]]))),
+              },
+          "want_loss":
+              0.432,
       })
   # pylint: enable=g-long-lambda
   def test_auto_ensemble_estimator_lifecycle(self, candidate_pool, want_loss):
