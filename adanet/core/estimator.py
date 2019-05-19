@@ -841,8 +841,8 @@ class Estimator(tf.estimator.Estimator):
     logging.info("Adapting graph and incrementing iteration number...")
     self._prepare_next_iteration_state = self._Keys.INCREMENT_ITERATION
     temp_model_dir = os.path.join(self.model_dir, "temp_model_dir")
-    if not tf.gfile.Exists(temp_model_dir):
-      tf.gfile.MkDir(temp_model_dir)
+    if not tf.io.gfile.exists(temp_model_dir):
+      tf.io.gfile.makedirs(temp_model_dir)
     temp_model_sub_dir = tempfile.mkdtemp(dir=temp_model_dir)
     with _temp_tf_config(temp_model_sub_dir):
       temp_estimator = self._create_temp_estimator(temp_model_sub_dir)
@@ -853,12 +853,12 @@ class Estimator(tf.estimator.Estimator):
           max_steps=1,
           hooks=self._decorate_hooks(_cleaned_hooks(self._train_hooks)),
           saving_listeners=None)
+
+    # Handling folder and file exceptions
     try:
        tf.io.gfile.rmtree(temp_model_dir)
-    except Exception as e:
-      if not e.error_code in [7,9]:
-        raise
-      logging.info("Handling folder or file issues with error code {}: {}".format(e.error_code,"\"" + e.message + "\""))
+    except (tf.errors.PermissionDeniedError,tf.errors.FailedPreconditionError) as e:
+      logging.info("Ignoring folder or file issues: {}".format(e.error_code,"\"" + e.message + "\""))
     self._prepare_next_iteration_state = None
     logging.info("Done adapting graph and incrementing iteration number.")
 
