@@ -854,7 +854,7 @@ class Estimator(tf.estimator.Estimator):
           hooks=self._decorate_hooks(_cleaned_hooks(self._train_hooks)),
           saving_listeners=None)
 
-    # Handling folder and file exceptions
+    # Remove temp_model_dir directory and handle any folder or file exceptions
     try:
        tf.io.gfile.rmtree(temp_model_dir)
     except (tf.errors.PermissionDeniedError,tf.errors.FailedPreconditionError) as e:
