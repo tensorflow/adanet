@@ -24,7 +24,6 @@ import errno
 import inspect
 import json
 import os
-import tempfile
 import time
 
 from absl import logging
@@ -325,6 +324,18 @@ def _cleaned_hooks(hooks):
       hook for hook in hooks
       if not isinstance(hook, tf_compat.CheckpointSaverHook)
   ]
+
+
+def _delete_directory(directory):
+  """Removes directory and handles any folder or file exceptions."""
+  if not tf.io.gfile.exists(directory):
+    return
+  try:
+    tf.io.gfile.rmtree(directory)
+  except (tf.errors.PermissionDeniedError,
+          tf.errors.FailedPreconditionError) as e:
+    logging.info("Ignoring folder or file issues: %s '%s'", e.error_code,
+                 e.message)
 
 
 class Estimator(tf.estimator.Estimator):
@@ -695,7 +706,7 @@ class Estimator(tf.estimator.Estimator):
           # As the chief, store the train hooks and make a placeholder input_fn
           # in order to use them when preparing the next iteration.
           self._train_hooks = hooks or []
-          self._prepare_next_iteration(input_fn)
+          self._prepare_next_iteration(input_fn, current_iteration)
 
         # This inner loop serves mainly for synchronizing the workers with the
         # chief during distributed training. Workers that finish training early
@@ -801,7 +812,7 @@ class Estimator(tf.estimator.Estimator):
         model_dir=temp_model_dir,
         params={})
 
-  def _prepare_next_iteration(self, train_input_fn):
+  def _prepare_next_iteration(self, train_input_fn, current_iteration):
     """Prepares the next iteration.
 
     This method calls model_fn up to four times:
@@ -813,8 +824,10 @@ class Estimator(tf.estimator.Estimator):
 
     Args:
       train_input_fn: The input_fn used during training.
+      current_iteration: Integer current iteration number.
     """
-    logging.info("Preparing next iteration:")
+    next_iteration = current_iteration + 1
+    logging.info("Preparing iteration %s:", next_iteration)
 
     # First, evaluate and choose the best ensemble for this iteration.
     logging.info("Evaluating candidates...")
@@ -843,7 +856,10 @@ class Estimator(tf.estimator.Estimator):
     temp_model_dir = os.path.join(self.model_dir, "temp_model_dir")
     if not tf.io.gfile.exists(temp_model_dir):
       tf.io.gfile.makedirs(temp_model_dir)
-    temp_model_sub_dir = tempfile.mkdtemp(dir=temp_model_dir)
+    # Since deleting a model_dir can fail, we need each temporary directory to
+    # be unique. So we use the UTC time when creating it.
+    time_in_millis = int(time.time() * 1000)
+    temp_model_sub_dir = os.path.join(temp_model_dir, str(time_in_millis))
     with _temp_tf_config(temp_model_sub_dir):
       temp_estimator = self._create_temp_estimator(temp_model_sub_dir)
       # Do not train with any saving_listeners since this is just a temporary
@@ -854,17 +870,11 @@ class Estimator(tf.estimator.Estimator):
           hooks=self._decorate_hooks(_cleaned_hooks(self._train_hooks)),
           saving_listeners=None)
 
-    # Remove temp_model_dir directory and handle any folder or file exceptions.
-    try:
-      tf.io.gfile.rmtree(temp_model_dir)
-    except (tf.errors.PermissionDeniedError,
-            tf.errors.FailedPreconditionError) as e:
-      logging.info("Ignoring folder or file issues: %s '%s'", e.error_code,
-                   e.message)
+    _delete_directory(temp_model_dir)
     self._prepare_next_iteration_state = None
     logging.info("Done adapting graph and incrementing iteration number.")
 
-    logging.info("Finished preparing next iteration.")
+    logging.info("Finished preparing iteration %s.", next_iteration)
 
   def _architecture_filename(self, iteration_number):
     """Returns the filename of the given iteration's frozen graph."""

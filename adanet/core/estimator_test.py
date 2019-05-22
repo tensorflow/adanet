@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import json
 import os
+import time
 
 from absl import logging
 from absl.testing import parameterized
@@ -1064,13 +1065,9 @@ class EstimatorMultiHeadTest(tu.AdanetTestCase):
     estimator = Estimator(
         head=multi_head_lib.MultiHead(heads=[
             regression_head.RegressionHead(
-                name="head1",
-                loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE
-            ),
+                name="head1", loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE),
             regression_head.RegressionHead(
-                name="head2",
-                loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE
-            ),
+                name="head2", loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE),
         ]),
         subnetwork_generator=SimpleGenerator(builders),
         max_iteration_steps=3,
@@ -2437,8 +2434,7 @@ class EstimatorDebugTest(tu.AdanetTestCase):
               "nan_features",
           "head":
               regression_head.RegressionHead(
-                  name="y",
-                  loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE),
+                  name="y", loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE),
           "input_fn":
               lambda: ({
                   "x": tf.math.log([[1., 0.]])
@@ -2448,8 +2444,7 @@ class EstimatorDebugTest(tu.AdanetTestCase):
               "nan_label",
           "head":
               regression_head.RegressionHead(
-                  name="y",
-                  loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE),
+                  name="y", loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE),
           "input_fn":
               lambda: ({
                   "x": tf.ones([1, 2])
@@ -2460,8 +2455,7 @@ class EstimatorDebugTest(tu.AdanetTestCase):
           "head":
               multi_head_lib.MultiHead(heads=[
                   regression_head.RegressionHead(
-                      name="y",
-                      loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE),
+                      name="y", loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE),
               ]),
           "input_fn":
               lambda: ({
@@ -2547,6 +2541,7 @@ class EstimatorTFLearnRunConfigTest(tu.AdanetTestCase):
     finally:
       # Revert TF_CONFIG environment variable in order to not break other tests.
       del os.environ["TF_CONFIG"]
+
 
 
 if __name__ == "__main__":
