@@ -104,17 +104,23 @@ class _BuilderFromSubestimator(Builder):
 
     # Call in template to ensure that variables are created once and reused.
     call_model_fn_template = tf.make_template("model_fn", self._call_model_fn)
-    logits, train_op = call_model_fn_template(features, labels, mode)
+    subestimator_features, subestimator_labels = features, labels
     if training and self._subestimator.train_input_fn:
       # TODO: Consider tensorflow_estimator/python/estimator/util.py.
       inputs = self._subestimator.train_input_fn()
       if isinstance(inputs, (tf_compat.DatasetV1, tf_compat.DatasetV2)):
-        features, labels = tf_compat.make_one_shot_iterator(inputs).get_next()
+        subestimator_features, subestimator_labels = tf_compat.make_one_shot_iterator(
+            inputs).get_next()
       else:
-        features, labels = inputs
-      # Use different training set for train op only.
-      _, train_op = call_model_fn_template(features, labels, mode)
+        subestimator_features, subestimator_labels = inputs
 
+      # Construct subnetwork graph first because of dependencies on scope.
+      _, train_op = call_model_fn_template(subestimator_features,
+                                           subestimator_labels, mode)
+      # Graph for ensemble learning gets model_fn_1 for scope.
+      logits, _ = call_model_fn_template(features, labels, mode)
+    else:
+      logits, train_op = call_model_fn_template(features, labels, mode)
     self._subnetwork_train_op = train_op
 
     # TODO: Replace with variance complexity measure.
