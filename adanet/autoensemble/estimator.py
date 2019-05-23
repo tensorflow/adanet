@@ -121,19 +121,18 @@ class _BuilderFromSubestimator(Builder):
       logits, _ = call_model_fn_template(features, labels, mode)
     else:
       logits, train_op = call_model_fn_template(features, labels, mode)
-    self._subnetwork_train_op = train_op
 
     # TODO: Replace with variance complexity measure.
     complexity = tf.constant(0.)
     return Subnetwork(
         logits=logits,
         last_layer=logits,
-        persisted_tensors={},
+        shared={"train_op": train_op},
         complexity=complexity)
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
-    return self._subnetwork_train_op
+    return subnetwork.shared["train_op"]
 
 
 def _convert_to_subestimator(candidate):
