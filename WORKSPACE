@@ -19,7 +19,7 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 git_repository(
     name = "protobuf_bzl",
-    # v3.6.0
+    # v3.6.1.3
     commit = "ab8edf1dbe2237b4717869eaab11a2998541ad8d",
     remote = "https://github.com/google/protobuf.git",
 )
@@ -44,11 +44,11 @@ bind(
     actual = "@protobuf_bzl//:protoc",
 )
 
-# Using protobuf version 3.6.0
+# Using protobuf version 3.6.1.3
 http_archive(
     name = "com_google_protobuf",
-    strip_prefix = "protobuf-3.6.0",
-    urls = ["https://github.com/google/protobuf/archive/v3.6.0.zip"],
+    strip_prefix = "protobuf-3.6.1.3",
+    urls = ["https://github.com/google/protobuf/archive/v3.6.1.3.zip"],
 )
 
 # required by protobuf_python
