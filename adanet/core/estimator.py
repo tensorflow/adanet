@@ -46,6 +46,9 @@ import six
 import tensorflow as tf
 
 
+from tensorflow_estimator.python.estimator import util
+
+
 class _StopAfterTrainingHook(tf_compat.SessionRunHook):
   """Hook that requests stop once iteration is over."""
 
@@ -783,32 +786,29 @@ class Estimator(tf.estimator.Estimator):
   def _call_adanet_model_fn(self, input_fn, mode):
     """Calls model_fn with the given mode and parameters."""
 
-    with tf.Graph().as_default():
+    with tf.Graph().as_default() as g:
       tf_compat.v1.set_random_seed(self.config.tf_random_seed)
       # Create global step before calling model_fn as does superclass.
-      tf_compat.v1.train.get_or_create_global_step()
-      inputs = input_fn()
-      # TODO: Consider tensorflow_estimator/python/estimator/util.py.
-      if isinstance(inputs, (tf_compat.DatasetV1, tf_compat.DatasetV2)):
-        features, labels = tf_compat.make_one_shot_iterator(inputs).get_next()
-      else:
-        features, labels = inputs
+      self._create_and_assert_global_step(g)
+      features, labels, input_hooks = util.parse_input_fn_result(input_fn())
+      train_hooks = self._train_hooks
+      self._train_hooks = list(train_hooks) + input_hooks
       self.model_fn(features, labels, mode, self.config)
+      self._train_hooks = train_hooks
 
   def _create_temp_estimator(self, temp_model_dir):
     """Creates a temp `Estimator` to grow the graph for the next iteration."""
 
     config = self.config
-    temp_run_config_kwargs = dict(
+    temp_run_config = tf.estimator.RunConfig(
         model_dir=temp_model_dir,
         tf_random_seed=config.tf_random_seed,
         session_config=config.session_config,
-        device_fn=config.device_fn)
-    if tf_compat.version_greater_or_equal("1.11.0"):
-      temp_run_config_kwargs["protocol"] = config.protocol
+        device_fn=config.device_fn,
+        protocol=config.protocol)
     return tf.estimator.Estimator(
         model_fn=self._adanet_model_fn,
-        config=tf.estimator.RunConfig(**temp_run_config_kwargs),
+        config=temp_run_config,
         model_dir=temp_model_dir,
         params={})
 

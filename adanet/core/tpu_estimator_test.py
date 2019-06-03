@@ -19,7 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import contextlib
+import itertools
 import json
 import os
 
@@ -31,10 +31,9 @@ from adanet.subnetwork import Builder
 from adanet.subnetwork import Report
 from adanet.subnetwork import SimpleGenerator
 from adanet.subnetwork import Subnetwork
-from distutils.version import LooseVersion
+import numpy as np
 import tensorflow as tf
 
-from tensorflow.contrib.tpu.python.tpu import tpu_function
 
 
 class _DNNBuilder(Builder):
@@ -42,11 +41,13 @@ class _DNNBuilder(Builder):
 
   def __init__(self,
                name,
+               feature_columns=None,
                learning_rate=.01,
                layer_size=16,
                seed=13,
                use_tpu=False):
     self._name = name
+    self._feature_columns = feature_columns
     self._learning_rate = learning_rate
     self._layer_size = layer_size
     self._seed = seed
@@ -70,11 +71,16 @@ class _DNNBuilder(Builder):
     with tf.variable_scope("dnn"):
       persisted_tensors = {}
       with tf.variable_scope("hidden_layer"):
+        if self._feature_columns:
+          input_layer = tf.feature_column.input_layer(
+              features=features, feature_columns=self._feature_columns)
+        else:
+          input_layer = features["x"]
         w = tf.get_variable(
-            shape=[2, self._layer_size],
+            shape=[input_layer.shape[1], self._layer_size],
             initializer=tf.glorot_uniform_initializer(seed=seed),
             name="weight")
-        hidden_layer = tf.matmul(features["x"], w)
+        hidden_layer = tf.matmul(input_layer, w)
 
       if previous_ensemble:
         other_hidden_layer = previous_ensemble.weighted_subnetworks[
@@ -98,8 +104,7 @@ class _DNNBuilder(Builder):
           kernel_initializer=tf.glorot_uniform_initializer(seed=seed))
 
     summary.scalar("scalar", 3)
-    batch_size = features["x"].get_shape().as_list()[0]
-    summary.image("image", tf.ones([batch_size, 3, 3, 1]))
+    summary.image("image", tf.ones([1, 3, 3, 1]))
     with tf.variable_scope("nested"):
       summary.scalar("scalar", 5)
 
@@ -125,18 +130,6 @@ class _DNNBuilder(Builder):
             "moo": (tf.constant(3,
                                 dtype=tf.int32), tf.constant(3, dtype=tf.int32))
         })
-
-
-@contextlib.contextmanager
-def fake_run_on_tpu():
-  """Fakes TPU existence when running TPU tests on CPU/GPU."""
-
-  original_number_of_shards_fn = tpu_function.TpuContext.number_of_shards
-  tpu_function.TpuContext.number_of_shards = 1
-  try:
-    yield
-  finally:
-    tpu_function.TpuContext.number_of_shards = original_number_of_shards_fn
 
 
 # TODO: merge this function with _check_eventfile_for_keyword and place
@@ -170,9 +163,6 @@ class TPUEstimatorTest(tu.AdanetTestCase):
 
   def setUp(self):
     super(TPUEstimatorTest, self).setUp()
-    if LooseVersion(tf.VERSION) < LooseVersion("1.11.0"):
-      self.skipTest("TPUEstimatorSpec does not support `training_hooks`"
-                    "TF v1.11.0.")
 
     # TPUConfig initializes model_dir from TF_CONFIG and checks that the user
     # provided model_dir matches the TF_CONFIG one.
@@ -212,14 +202,8 @@ class TPUEstimatorTest(tu.AdanetTestCase):
         input_fn=train_input_fn, steps=1, hooks=None)
 
     # Predict.
-    # TODO: skip predictions on TF versions 1.11 and 1.12 since
-    # some TPU hooks seem to be failing on predict.
-    predictions = []
-    tf_version = LooseVersion(tf.VERSION)
-    if (tf_version != LooseVersion("1.11.0") and
-        tf_version != LooseVersion("1.12.0")):
-      predictions = estimator.predict(
-          input_fn=tu.dataset_input_fn(features=[0., 0.], labels=None))
+    predictions = estimator.predict(
+        input_fn=tu.dataset_input_fn(features=[0., 0.], labels=None))
 
     # Export SavedModel.
     def serving_input_fn():
@@ -241,6 +225,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     self.assertEqual(max_steps, eval_results["global_step"])
     for prediction in predictions:
       self.assertIsNotNone(prediction["predictions"])
+
 
   @parameterized.named_parameters(
       {

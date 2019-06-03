@@ -941,6 +941,15 @@ class IterationExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
                          .outputs["classes"]))
             del spec.export_outputs[key].outputs["classes"]
             del iteration.estimator_spec.export_outputs[key].outputs["classes"]
+          if "all_classes" in spec.export_outputs[key].outputs:
+            # Verify string Tensor outputs separately.
+            self.assertAllEqual(
+                sess.run(spec.export_outputs[key].outputs["all_classes"]),
+                sess.run(iteration.estimator_spec.export_outputs[key]
+                         .outputs["all_classes"]))
+            del spec.export_outputs[key].outputs["all_classes"]
+            del iteration.estimator_spec.export_outputs[key].outputs[
+                "all_classes"]
           self.assertAllClose(
               sess.run(spec.export_outputs[key].outputs),
               sess.run(iteration.estimator_spec.export_outputs[key].outputs))

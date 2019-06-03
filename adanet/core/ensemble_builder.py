@@ -160,7 +160,12 @@ def _monkey_patch_context(iteration_step_scope, scoped_summary, trainable_vars):
   setattr(training_util, "get_global_step", iteration_step)
   setattr(train, "get_or_create_global_step", iteration_step)
   setattr(training_util, "get_or_create_global_step", iteration_step)
-  _set_trainable_variables(trainable_vars)
+  # The TPUEmbedding uses dummy variables to coordinate sending and receiving
+  # gradients. If no gradients are computed on these dummy variables, the
+  # TPUEmbedding will throw an error.
+  embedding_variables = tf_compat.v1.get_collection(
+      "tpu_embedding_dummy_table_variables")
+  _set_trainable_variables(trainable_vars + embedding_variables)
 
   try:
     with monkey_patched_summaries(scoped_summary):

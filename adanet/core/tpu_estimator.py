@@ -24,17 +24,24 @@ import functools
 
 from adanet import tf_compat
 from adanet.core.estimator import Estimator
-from distutils.version import LooseVersion
 import tensorflow as tf
 
+from tensorflow.python.util import function_utils  # pylint: disable=g-direct-tensorflow-import
 
-class TPUEstimator(Estimator, tf_compat.TPUEstimator):
+
+class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
   """An :class:`adanet.Estimator` capable of training and evaluating on TPU.
 
-  Note: Unless :code:`use_tpu=False`, training will run on TPU. However,
-  certain parts of AdaNet training loop, such as report materialization and best
-  candidate selection still occurr on CPU. Furthermore, inference also occurs on
+  Unless :code:`use_tpu=False`, training will run on TPU. However, certain parts
+  of the AdaNet training loop, such as report materialization and best candidate
+  selection, will still occurr on CPU. Furthermore, inference also occurs on
   CPU.
+
+  TODO: Provide the missing functionality detailed below.
+  N.B: Embeddings using the TPUEmbedding (i.e. :code:`embedding_config_spec`
+  is provided) only support :code:`shared_embedding_columns` when running for
+  multiple AdaNet iterations. Using regular :code:`embedding_columns` will cause
+  iterations 2..n to fail because of mismatched embedding scopes.
 
   Args:
     head: See :class:`adanet.Estimator`.
@@ -55,6 +62,7 @@ class TPUEstimator(Estimator, tf_compat.TPUEstimator):
       Use :class:`adanet.Estimator` instead if you do not plan to run on TPU.
     train_batch_size: See :class:`tf.contrib.tpu.TPUEstimator`.
     eval_batch_size: See :class:`tf.contrib.tpu.TPUEstimator`.
+    embedding_config_spec: See :class:`tf.contrib.tpu.TPUEstimator`.
     debug: See :class:`adanet.Estimator`.
     **kwargs: Extra keyword args passed to the parent.
   """
@@ -77,6 +85,7 @@ class TPUEstimator(Estimator, tf_compat.TPUEstimator):
                use_tpu=True,
                train_batch_size=None,
                eval_batch_size=None,
+               embedding_config_spec=None,
                debug=False,
                **kwargs):
 
@@ -94,6 +103,7 @@ class TPUEstimator(Estimator, tf_compat.TPUEstimator):
     self._original_config = config or tf.contrib.RunConfig()
     self._train_batch_size = train_batch_size or 0
     self._eval_batch_size = eval_batch_size or train_batch_size or 0
+    self._embedding_config_spec = embedding_config_spec
 
     super(TPUEstimator, self).__init__(
         head=head,
@@ -115,6 +125,8 @@ class TPUEstimator(Estimator, tf_compat.TPUEstimator):
         export_to_tpu=False,
         train_batch_size=self._train_batch_size,
         eval_batch_size=self._eval_batch_size,
+        embedding_config_spec=self._embedding_config_spec,
+        debug=debug,
         **kwargs)
 
   # Yields predictions on CPU even when use_tpu=True.
@@ -133,7 +145,8 @@ class TPUEstimator(Estimator, tf_compat.TPUEstimator):
         model_dir=self.model_dir,
         config=self._original_config,
         params=self.params,
-        use_tpu=False)
+        use_tpu=False,
+        embedding_config_spec=self._embedding_config_spec)
     return tpu_estimator.predict(
         input_fn,
         predict_keys=predict_keys,
@@ -144,7 +157,7 @@ class TPUEstimator(Estimator, tf_compat.TPUEstimator):
   def _create_temp_estimator(self, temp_model_dir):
     """See the `Estimator` base class for details."""
 
-    temp_run_config_kwargs = dict(
+    temp_run_config = tf.contrib.tpu.RunConfig(
         model_dir=temp_model_dir,
         tpu_config=self._original_config.tpu_config,
         evaluation_master=self._original_config.evaluation_master,
@@ -152,33 +165,35 @@ class TPUEstimator(Estimator, tf_compat.TPUEstimator):
         cluster=self._original_config.cluster,
         tf_random_seed=self._original_config.tf_random_seed,
         session_config=self._original_config.session_config,
-        device_fn=self._original_config.device_fn)
-    if LooseVersion(tf.VERSION) >= LooseVersion("1.11.0"):
-      temp_run_config_kwargs["protocol"] = self._original_config.protocol
+        device_fn=self._original_config.device_fn,
+        protocol=self._original_config.protocol)
     return tf.contrib.tpu.TPUEstimator(
         model_fn=self._adanet_model_fn,
         params={},
-        config=tf.contrib.tpu.RunConfig(**temp_run_config_kwargs),
+        config=temp_run_config,
         model_dir=temp_model_dir,
         use_tpu=self._use_tpu,
         eval_on_tpu=self._use_tpu,
         export_to_tpu=False,
         train_batch_size=self._train_batch_size,
-        eval_batch_size=self._eval_batch_size)
+        eval_batch_size=self._eval_batch_size,
+        embedding_config_spec=self._embedding_config_spec)
 
   def _call_adanet_model_fn(self, input_fn, mode):
     """See the `Estimator` base class for details."""
 
-    # Fakes TPU shard context before calling through to the parent to suppress
-    # warnings by CrossShardOptimizer when running on TPU. Warnings are issued
-    # when `_adanet_model_fn` is called directly on CPU during the bookkeeping
-    # phase. Since we rebuild the graph each time `_adanet_model_fn` is called,
-    # this has no adverse effects.
-    with tf_compat.tpu_function.tpu_shard_context(0):
-      # Bind params to input_fn since the parent's input_fn is not expected to
-      # have any arguments.
-      input_fn = functools.partial(input_fn, self.params)  # A deep copy.
-      super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode)
+    # Bind parameters to input_fn since the parent's input_fn is not expected to
+    # have any arguments.
+    input_fn_args = function_utils.fn_args(input_fn)
+    kwargs = {}
+    if "mode" in input_fn_args:
+      kwargs["mode"] = mode
+    if "params" in input_fn_args:
+      kwargs["params"] = self.params
+    if "config" in input_fn_args:
+      kwargs["config"] = self.config
+    input_fn = functools.partial(input_fn, **kwargs)
+    super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode)
 
   def _create_estimator_spec(self, current_iteration, mode,
                              iteration_number_tensor, previous_iteration_vars):
