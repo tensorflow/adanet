@@ -69,6 +69,7 @@ flags.DEFINE_enum("estimator_type", "estimator", [
     "estimator",
     "autoensemble",
     "autoensemble_trees_multiclass",
+    "estimator_with_distributed_mirrored_strategy"
 ], "The estimator type to train.")
 
 flags.DEFINE_enum("placement_strategy", "replication", [
@@ -287,6 +288,35 @@ def train_and_evaluate_estimator():
 
     estimator = AutoEnsembleEstimator(
         head=head, candidate_pool=candidate_pool, **kwargs)
+
+  elif FLAGS.estimator_type == "estimator_with_distributed_mirrored_strategy":
+    def _model_fn(features, labels, mode):
+      layer = tf.layers.Dense(1)
+      logits = layer(features)
+
+      if mode == tf.estimator.ModeKeys.PREDICT:
+        predictions = {"logits": logits}
+        return tf.estimator.EstimatorSpec(mode, predictions=predictions)
+
+      loss = tf.losses.mean_squared_error(labels=labels, predictions=tf.reshape(logits,[]))
+
+      if mode == tf.estimator.ModeKeys.EVAL:
+        tf.estimator.EstimatorSpec(mode, loss=loss)
+
+      if mode == tf.estimator.ModeKeys.TRAIN:
+        train_op = tf.train.GradientDescentOptimizer(0.2).minimize(loss)
+        return tf.EstimatorSpec(mode, loss=loss, train_op=train_op)
+
+    def _input_fn():
+      features = tf.data.Dataset.from_tensors([[1.]]).repeat(100)
+      labels = tf.data.Dataset.from_tensors(1.).repeat(100)
+      return tf.data.Dataset.zip((features, labels))
+
+    distribution = tf.distribute.MirroredStrategy()
+    config = tf.estimator.RunConfig(train_distribute=distribution)
+    classifier = tf.estimator.Estimator(model_fn=_model_fn, config=config)
+    classifier.train(input_fn=_input_fn)
+    classifier.evaluate(input_fn=_input_fn)
 
   def input_fn():
     input_features = {"x": tf.constant(features, name="x")}
