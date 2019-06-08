@@ -91,8 +91,8 @@ class _CandidateBuilder(object):
       ValueError: If `max_steps` is <= 0.
     """
 
-    if max_steps <= 0:
-      raise ValueError("max_steps must be > 0.")
+    if max_steps is not None and max_steps <= 0:
+      raise ValueError("max_steps must be > 0 or None")
 
     self._max_steps = max_steps
     self._adanet_loss_decay = adanet_loss_decay
@@ -135,7 +135,7 @@ class _CandidateBuilder(object):
       if is_previous_best:
         # This candidate is frozen, so it is already done training.
         is_training = tf.constant(False, name="is_training")
-      else:
+      elif self._max_steps is not None:
         # Train this candidate for `max_steps` steps.
         # NOTE: During training, the iteration step gets incremented at the very
         # end of the computation graph, so we need to account for that here.
@@ -143,6 +143,9 @@ class _CandidateBuilder(object):
             iteration_step + 1 if training else 0,
             self._max_steps,
             name="is_training")
+      else:
+        # Train this candidate forever.
+        is_training = tf.constant(True, name="is_training")
 
       if training and track_moving_average:
         update_adanet_loss_op = moving_averages.assign_moving_average(

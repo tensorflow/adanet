@@ -164,6 +164,9 @@ class TPUEstimatorTest(tu.AdanetTestCase):
   def setUp(self):
     super(TPUEstimatorTest, self).setUp()
 
+    if not tf_compat.version_greater_or_equal("1.14.0"):
+      self.skipTest("TPUEmbedding not supported in version 1.13.0 and below.")
+
     # TPUConfig initializes model_dir from TF_CONFIG and checks that the user
     # provided model_dir matches the TF_CONFIG one.
     tf_config = {"model_dir": self.test_subdirectory}

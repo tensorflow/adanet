@@ -371,7 +371,8 @@ class Estimator(tf.estimator.Estimator):
       the candidate subnetworks to train and evaluate at every AdaNet iteration.
     max_iteration_steps: Total number of steps for which to train candidates per
       iteration. If :class:`OutOfRange` or :class:`StopIteration` occurs in the
-      middle, training stops before `max_iteration_steps` steps.
+      middle, training stops before `max_iteration_steps` steps. When
+      :code:`None`, it will train the current iteration forever.
     ensemblers: An iterable of :class:`adanet.ensemble.Ensembler` objects that
       define how to ensemble a group of subnetworks.
     ensemble_strategies: An iterable of :class:`adanet.ensemble.Strategy`
@@ -503,8 +504,8 @@ class Estimator(tf.estimator.Estimator):
       raise ValueError("More than a single Ensembler is not yet supported.")
     if subnetwork_generator is None:
       raise ValueError("subnetwork_generator can't be None.")
-    if max_iteration_steps <= 0.:
-      raise ValueError("max_iteration_steps must be > 0.")
+    if max_iteration_steps is not None and max_iteration_steps <= 0.:
+      raise ValueError("max_iteration_steps must be > 0 or None.")
     is_distributed_training = config and config.num_worker_replicas > 1
     is_model_dir_specified = model_dir or (config and config.model_dir)
     if is_distributed_training and not is_model_dir_specified:

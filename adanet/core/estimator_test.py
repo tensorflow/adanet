@@ -342,6 +342,14 @@ class EstimatorTest(tu.AdanetTestCase):
           "want_loss": 0.49899703,
       },
       {
+          "testcase_name": "none_max_iteration_steps",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": None,
+          "steps": 300,
+          "max_steps": None,
+          "want_loss": 0.32487726,
+      },
+      {
           "testcase_name": "single_builder_max_steps",
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": 200,

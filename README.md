@@ -98,6 +98,8 @@ Requires [Python](https://www.python.org/) 2.7, 3.4, 3.5, or 3.6.
 $ pip install "tensorflow>=1.13,<2.0"
 ```
 
+TensorFlow 2.0 support is currently in development.
+
 ## Installing with Pip
 
 You can use the [pip package manager](https://pip.pypa.io/en/stable/installing/) to install the official `adanet` package from [PyPi](https://pypi.org/project/adanet/):
@@ -120,7 +122,9 @@ $ cd adanet
 From the `adanet` root directory run the tests:
 
 ```shell
-$ bazel test -c opt //...
+$ bazel build -c opt //...
+$ cp bazel-genfiles/adanet/core/report_pb2.py adanet/core
+$ python3 -m nose
 ```
 
 Once you have verified that the tests have passed, install `adanet` from source as a [ pip package ](./adanet/pip_package/PIP.md).
@@ -133,17 +137,15 @@ import adanet
 
 ## Citing this Work
 
-If you use this AdaNet library for academic research, you are encouraged to cite the following:
+If you use this AdaNet library for academic research, you are encouraged to cite the following paper from the [ICML 2019 AutoML Workshop](https://arxiv.org/abs/1905.00080):
 
-    @misc{weill2018adanet,
-      author    = {Charles Weill and Javier Gonzalvo and Vitaly Kuznetsov and
-        Scott Yang and Scott Yak and Hanna Mazzawi and Eugen Hotaj and
-        Ghassen Jerfel and Vladimir Macko and Mehryar Mohri and Corinna Cortes},
-      title     = {AdaNet: Fast and flexible AutoML with learning guarantees},
-      year      = {2018},
-      publisher = {GitHub},
-      journal = {GitHub repository},
-      howpublished = {\url{https://github.com/tensorflow/adanet}},
+    @misc{weill2019adanet,
+        title={AdaNet: A Scalable and Flexible Framework for Automatically Learning Ensembles},
+        author={Charles Weill and Javier Gonzalvo and Vitaly Kuznetsov and Scott Yang and Scott Yak and Hanna Mazzawi and Eugen Hotaj and Ghassen Jerfel and Vladimir Macko and Ben Adlam and Mehryar Mohri and Corinna Cortes},
+        year={2019},
+        eprint={1905.00080},
+        archivePrefix={arXiv},
+        primaryClass={cs.LG}
     }
 
 ## License
