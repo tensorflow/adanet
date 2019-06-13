@@ -84,13 +84,12 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
 
     mock.patch.object(self._optimizer, 'minimize', autospec=True).start()
 
-    mock.patch.object(
-        tf.train, 'load_variable', autospec=True).start()
+    mock.patch.object(tf.train, 'load_variable', autospec=True).start()
 
     def load_variable(checkpoint_dir, name):
       self.assertEqual(checkpoint_dir, 'fake_checkpoint_dir')
-      return tf_compat.v1.get_variable(name='fake_loaded_variable_' + name,
-                                       initializer=1.)
+      return tf_compat.v1.get_variable(
+          name='fake_loaded_variable_' + name, initializer=1.)
 
     tf.train.load_variable.side_effect = load_variable
 
@@ -426,13 +425,31 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
     else:
       self.assertEqual(train_op.type, tf.no_op().type)
 
-  def test_build_train_op(self):
-    dummy_loss = tf.Variable(1e-3, name='dummy_loss')
-    dummy_weight = tf.Variable(0, name='dummy_weight')
-    train_op = self.easy_ensembler.build_train_op(
+  def test_build_train_op_callable_optimizer(self):
+    dummy_weight = tf.Variable(0., name='dummy_weight')
+    dummy_loss = dummy_weight * 2.
+    ensembler = ensemble.ComplexityRegularizedEnsembler(
+        optimizer=lambda: tf_compat.v1.train.GradientDescentOptimizer(.1))
+    train_op = ensembler.build_train_op(
         self._build_easy_ensemble([self._build_subnetwork()]), dummy_loss,
         [dummy_weight], *[None] * 4)
-    self.assertEqual(train_op, self._optimizer.minimize(loss='', var_list=''))
+    with tf_compat.v1.Session() as sess:
+      sess.run(tf_compat.v1.global_variables_initializer())
+      sess.run(train_op)
+      self.assertAllClose(-.2, sess.run(dummy_weight))
+
+  def test_build_train_op(self):
+    dummy_weight = tf.Variable(0., name='dummy_weight')
+    dummy_loss = dummy_weight * 2.
+    ensembler = ensemble.ComplexityRegularizedEnsembler(
+        optimizer=tf_compat.v1.train.GradientDescentOptimizer(.1))
+    train_op = ensembler.build_train_op(
+        self._build_easy_ensemble([self._build_subnetwork()]), dummy_loss,
+        [dummy_weight], *[None] * 4)
+    with tf_compat.v1.Session() as sess:
+      sess.run(tf_compat.v1.global_variables_initializer())
+      sess.run(train_op)
+      self.assertAllClose(-.2, sess.run(dummy_weight))
 
   def tearDown(self):
     self.summary.clear_scalars()

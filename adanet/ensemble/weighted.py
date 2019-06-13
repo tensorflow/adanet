@@ -170,8 +170,9 @@ class ComplexityRegularizedEnsembler(Ensembler):
   with :math:`\lambda >= 0` and :math:`\beta >= 0`.
 
   Args:
-    optimizer: A :class:`tf.train.Optimizer` instance to be used for building
-      the train op. If left as None, :meth:`tf.no_op` is returned as train op.
+    optimizer: String, :class:`tf.train.Optimizer` object, or callable that
+      creates the optimizer to use for training the ensemble weights. If left
+      as :code:`None`, :meth:`tf.no_op()` is used instead.
     mixture_weight_type: The :class:`adanet.ensemble.MixtureWeightType` defining
       which mixture weight type to learn on top of the subnetworks' logits.
     mixture_weight_initializer: The initializer for mixture_weights. When
@@ -552,9 +553,12 @@ class ComplexityRegularizedEnsembler(Ensembler):
   def build_train_op(self, ensemble, loss, var_list, labels, iteration_step,
                      summary, previous_ensemble):
     del labels, iteration_step, summary, previous_ensemble  # unused
-    if self._optimizer is None:
+    optimizer = self._optimizer
+    if callable(optimizer):
+      optimizer = optimizer()
+    if optimizer is None:
       return tf.no_op()
 
     # The AdaNet Estimator is responsible for incrementing the global step.
-    return self._optimizer.minimize(
+    return optimizer.minimize(
         loss=loss + ensemble.complexity_regularization, var_list=var_list)
