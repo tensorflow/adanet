@@ -246,10 +246,10 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
           },
           {
               "testcase_name":
-                  "estimator_with_distributed_mirrored_strategy_{}_five_workers_three_ps"
+                  "estimator_with_experimental_multiworker_{}_five_workers_three_ps"
                   .format(placement),
               "estimator":
-                  "estimator_with_distributed_mirrored_strategy",
+                  "estimator_with_experimental_multiworker_strategy",
               "placement_strategy":
                   placement,
               "num_workers":
