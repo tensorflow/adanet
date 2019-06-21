@@ -33,6 +33,7 @@ from adanet.ensemble import ComplexityRegularizedEnsembler
 from adanet.ensemble import MixtureWeightType
 from adanet.subnetwork import Builder
 from adanet.subnetwork import Subnetwork
+import tensorflow as tf_v1
 import tensorflow as tf
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.training import training as train
@@ -83,11 +84,14 @@ class _Builder(Builder):
         tf_compat.v1.train.get_global_step())
     assert step_name == tf_compat.tensor_name(train.get_global_step())
     assert step_name == tf_compat.tensor_name(training_util.get_global_step())
+    assert step_name == tf_compat.tensor_name(tf_v1.train.get_global_step())
     assert step_name == tf_compat.tensor_name(
         tf_compat.v1.train.get_or_create_global_step())
     assert step_name == tf_compat.tensor_name(train.get_or_create_global_step())
     assert step_name == tf_compat.tensor_name(
         training_util.get_or_create_global_step())
+    assert step_name == tf_compat.tensor_name(
+        tf_v1.train.get_or_create_global_step())
 
     # Subnetworks get scoped summaries.
     assert "fake_scalar" == tf_compat.v1.summary.scalar("scalar", 1.)
@@ -418,11 +422,14 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
         self.assertEqual("global_step",
                          tf_compat.v1.train.get_global_step().op.name)
         self.assertEqual("global_step", train.get_global_step().op.name)
+        self.assertEqual("global_step", tf_v1.train.get_global_step().op.name)
         self.assertEqual("global_step", training_util.get_global_step().op.name)
         self.assertEqual("global_step",
                          tf_compat.v1.train.get_or_create_global_step().op.name)
         self.assertEqual("global_step",
                          train.get_or_create_global_step().op.name)
+        self.assertEqual("global_step",
+                         tf_v1.train.get_or_create_global_step().op.name)
         self.assertEqual("global_step",
                          training_util.get_or_create_global_step().op.name)
 

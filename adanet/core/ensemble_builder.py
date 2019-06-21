@@ -32,6 +32,7 @@ from adanet.core.eval_metrics import _SubnetworkMetrics
 from adanet.core.summary import monkey_patched_summaries
 from adanet.ensemble import ComplexityRegularized
 from adanet.subnetwork import TrainOpSpec
+import tensorflow as tf_v1
 import tensorflow as tf
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.training import training as train
@@ -154,6 +155,8 @@ def _monkey_patch_context(iteration_step_scope, scoped_summary, trainable_vars):
   # monkey-patch global attributes.
   setattr(tf_compat.v1.train, "get_global_step", iteration_step)
   setattr(tf_compat.v1.train, "get_or_create_global_step", iteration_step)
+  setattr(tf_v1.train, "get_global_step", iteration_step)
+  setattr(tf_v1.train, "get_or_create_global_step", iteration_step)
   setattr(tf.train, "get_global_step", iteration_step)
   setattr(tf.train, "get_or_create_global_step", iteration_step)
   setattr(train, "get_global_step", iteration_step)
@@ -183,6 +186,9 @@ def _monkey_patch_context(iteration_step_scope, scoped_summary, trainable_vars):
     setattr(tf.train, "get_or_create_global_step",
             old_get_or_create_global_step_fn)
     setattr(tf.train, "get_global_step", old_get_global_step_fn)
+    setattr(tf_v1.train, "get_or_create_global_step",
+            old_get_or_create_global_step_fn)
+    setattr(tf_v1.train, "get_global_step", old_get_global_step_fn)
     setattr(tf_compat.v1.train, "get_or_create_global_step",
             old_get_or_create_global_step_fn)
     setattr(tf_compat.v1.train, "get_global_step", old_get_global_step_fn)
