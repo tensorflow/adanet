@@ -123,8 +123,10 @@ From the `adanet` root directory run the tests:
 
 ```shell
 $ bazel build -c opt //...
+# Copy the generated python proto module to core.
 $ cp bazel-genfiles/adanet/core/report_pb2.py adanet/core
-$ python3 -m nose
+# Run tests with nosetests, but skip example tests.
+$ NOSE_EXCLUDE='.*nasnet.*.py.*' python3 -m nose
 ```
 
 Once you have verified that the tests have passed, install `adanet` from source as a [ pip package ](./adanet/pip_package/PIP.md).
