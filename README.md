@@ -92,10 +92,10 @@ To get you started:
 
 Requires [Python](https://www.python.org/) 2.7, 3.4, 3.5, or 3.6.
 
-`adanet` depends on bug fixes and enhancements not present in TensorFlow releases prior to 1.13. You must install or upgrade your TensorFlow package to at least 1.13:
+`adanet` depends on bug fixes and enhancements not present in TensorFlow releases prior to 1.14. You must install or upgrade your TensorFlow package to at least 1.14:
 
 ```shell
-$ pip install "tensorflow>=1.13,<2.0"
+$ pip install "tensorflow>=1.14,<2.0"
 ```
 
 TensorFlow 2.0 support is currently in development.

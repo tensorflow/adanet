@@ -21,7 +21,7 @@ limitations under the License.
  * Fix bug when using Gradient Boosted Decision Tree Estimators with `AutoEnsembleEstimator` during distributed training.
  * Allow `AutoEnsembleEstimator's` `candidate_pool` argument to be a `lambda` in order to create `Estimators` lazily.
  * Remove `adanet.subnetwork.Builder#prune_previous_ensemble` for abstract class. This behavior is now specified using `adanet.ensemble.Strategy` subclasses.
- * **BREAKING CHANGE**: Only support TensorFlow >= 1.13 to better support TensorFlow 2.0. Drop support for versions < 1.13.
+ * **BREAKING CHANGE**: Only support TensorFlow >= 1.14 to better support TensorFlow 2.0. Drop support for versions < 1.14.
  * Correct eval metric computations on CPU and GPU.
 
 # Release 0.6.2
