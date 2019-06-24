@@ -251,6 +251,19 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
               "num_ps":
                   3,
           },
+          {
+              "testcase_name":
+                  "estimator_with_experimental_multiworker_{}_five_workers_three_ps"
+                  .format(placement),
+              "estimator":
+                  "estimator_with_experimental_multiworker_strategy",
+              "placement_strategy":
+                  placement,
+              "num_workers":
+                  5,
+              "num_ps":
+                  3,
+          },
       ] for placement in ["replication", "round_robin"]]))
   # pylint: enable=g-complex-comprehension
   def test_distributed_training(self,

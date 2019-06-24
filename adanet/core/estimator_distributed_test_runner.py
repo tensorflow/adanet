@@ -66,9 +66,8 @@ except ImportError:
 # pylint: enable=g-direct-tensorflow-import
 
 flags.DEFINE_enum("estimator_type", "estimator", [
-    "estimator",
-    "autoensemble",
-    "autoensemble_trees_multiclass",
+    "estimator", "autoensemble", "autoensemble_trees_multiclass",
+    "estimator_with_experimental_multiworker_strategy"
 ], "The estimator type to train.")
 
 flags.DEFINE_enum("placement_strategy", "replication", [
@@ -216,9 +215,11 @@ def train_and_evaluate_estimator():
       loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
   features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
   labels = [[1.], [0.], [1.], [0.]]
+
+  estimator_type = FLAGS.estimator_type
   if FLAGS.placement_strategy == "round_robin":
     kwargs["experimental_placement_strategy"] = RoundRobinStrategy()
-  if FLAGS.estimator_type == "autoensemble":
+  if estimator_type == "autoensemble":
     feature_columns = [tf.feature_column.numeric_column("x", shape=[2])]
     candidate_pool = {
         "linear":
@@ -242,7 +243,7 @@ def train_and_evaluate_estimator():
 
     estimator = AutoEnsembleEstimator(
         head=head, candidate_pool=candidate_pool, **kwargs)
-  elif FLAGS.estimator_type == "estimator":
+  elif estimator_type == "estimator":
     subnetwork_generator = SimpleGenerator([
         _DNNBuilder("dnn1", config, layer_size=3),
         _DNNBuilder("dnn2", config, layer_size=4),
@@ -287,6 +288,41 @@ def train_and_evaluate_estimator():
 
     estimator = AutoEnsembleEstimator(
         head=head, candidate_pool=candidate_pool, **kwargs)
+
+  elif estimator_type == "estimator_with_experimental_multiworker_strategy":
+
+    def _model_fn(features, labels, mode):
+      """Test model_fn."""
+      layer = tf.layers.Dense(1)
+      logits = layer(features)
+
+      if mode == tf.estimator.ModeKeys.PREDICT:
+        predictions = {"logits": logits}
+        return tf.estimator.EstimatorSpec(mode, predictions=predictions)
+
+      loss = tf.losses.mean_squared_error(
+          labels=labels, predictions=tf.reshape(logits, []))
+
+      if mode == tf.estimator.ModeKeys.EVAL:
+        tf.estimator.EstimatorSpec(mode, loss=loss)
+
+      if mode == tf.estimator.ModeKeys.TRAIN:
+        train_op = tf.train.GradientDescentOptimizer(0.2).minimize(loss)
+        return tf.EstimatorSpec(mode, loss=loss, train_op=train_op)
+
+    distribution = tf.distribute.experimental.MultiWorkerMirroredStrategy()
+    config = tf.estimator.RunConfig(
+        tf_random_seed=42,
+        train_distribute=distribution,
+        model_dir=FLAGS.model_dir,
+        session_config=tf_compat.v1.ConfigProto(
+            log_device_placement=False,
+            # Ignore other workers; only talk to parameter servers.
+            # Otherwise, when a chief/worker terminates, the others will hang.
+            device_filters=["/job:ps"]))
+    # TODO: Replace with adanet.Estimator. Currently this just verifies
+    # that the distributed testing framework supports distribute strategies.
+    estimator = tf.estimator.Estimator(model_fn=_model_fn, config=config)
 
   def input_fn():
     input_features = {"x": tf.constant(features, name="x")}
