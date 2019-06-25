@@ -805,7 +805,6 @@ class Estimator(tf.estimator.Estimator):
         model_dir=temp_model_dir,
         tf_random_seed=config.tf_random_seed,
         session_config=config.session_config,
-        device_fn=config.device_fn,
         protocol=config.protocol)
     return tf.estimator.Estimator(
         model_fn=self._adanet_model_fn,

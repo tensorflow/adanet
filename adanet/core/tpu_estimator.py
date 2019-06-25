@@ -165,7 +165,6 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         cluster=self._original_config.cluster,
         tf_random_seed=self._original_config.tf_random_seed,
         session_config=self._original_config.session_config,
-        device_fn=self._original_config.device_fn,
         protocol=self._original_config.protocol)
     return tf.contrib.tpu.TPUEstimator(
         model_fn=self._adanet_model_fn,
