@@ -264,20 +264,21 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
                   "num_ps":
                       3,
               },
-              # TODO: Fix this test.
-              # {
-              #     "testcase_name":
-              #         "estimator_with_experimental_multiworker_{}_five_workers_three_ps"
-              #         .format(placement),
-              #     "estimator":
-              #         "estimator_with_experimental_multiworker_strategy",
-              #     "placement_strategy":
-              #         placement,
-              #     "num_workers":
-              #         5,
-              #     "num_ps":
-              #         3,
-              # },
+              {
+                  "testcase_name":
+                      "estimator_with_experimental_multiworker_{}_five_workers"
+                      .format(placement),
+                  "estimator":
+                      "estimator_with_experimental_multiworker_strategy",
+                  "placement_strategy":
+                      placement,
+                  "num_workers":
+                      5,
+                  # Multiworker strategy means that all workers hold a copy of
+                  # the variables, and there are no parameter servers.
+                  "num_ps":
+                      0,
+              },
           ] for placement in ["replication", "round_robin"]
       ]))
   # pylint: enable=g-complex-comprehension

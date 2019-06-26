@@ -64,11 +64,12 @@ py_test(
         ":estimator_distributed_test_runner" +
         "",
     ],
-    shard_count = 14,
+    shard_count = 16,
     deps = [
         ":estimator",
         ":timer",
         "//adanet/subnetwork",
+        "@absl_py//absl/logging",
         "@absl_py//absl/testing:parameterized",
     ],
 )

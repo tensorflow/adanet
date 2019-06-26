@@ -26,6 +26,7 @@ from __future__ import division
 from __future__ import print_function
 
 import contextlib
+import json
 import os
 import sys
 
@@ -313,33 +314,39 @@ def train_and_evaluate_estimator():
         return tf.estimator.EstimatorSpec(mode, predictions=predictions)
 
       loss = tf.losses.mean_squared_error(
-          labels=labels, predictions=tf.reshape(logits, []))
+          labels=labels,
+          predictions=logits,
+          reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
       if mode == tf.estimator.ModeKeys.EVAL:
-        tf.estimator.EstimatorSpec(mode, loss=loss)
+        return tf.estimator.EstimatorSpec(mode, loss=loss)
 
       if mode == tf.estimator.ModeKeys.TRAIN:
-        train_op = tf.train.GradientDescentOptimizer(0.2).minimize(loss)
-        return tf.EstimatorSpec(mode, loss=loss, train_op=train_op)
+        optimizer = tf.train.GradientDescentOptimizer(0.2)
+        train_op = optimizer.minimize(
+            loss, global_step=tf.train.get_global_step())
+        return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
 
-    distribution = tf.distribute.experimental.MultiWorkerMirroredStrategy()
-    config = tf.estimator.RunConfig(
+    if json.loads(os.environ["TF_CONFIG"])["task"]["type"] == "evaluator":
+      # The evaluator job would crash if MultiWorkerMirroredStrategy is called.
+      distribution = None
+    else:
+      distribution = tf.distribute.experimental.MultiWorkerMirroredStrategy()
+
+    multiworker_config = tf.estimator.RunConfig(
         tf_random_seed=42,
-        train_distribute=distribution,
         model_dir=FLAGS.model_dir,
-        session_config=tf_compat.v1.ConfigProto(
-            log_device_placement=False,
-            # Ignore other workers; only talk to parameter servers.
-            # Otherwise, when a chief/worker terminates, the others will hang.
-            device_filters=["/job:ps"]))
+        train_distribute=distribution,
+        session_config=tf_compat.v1.ConfigProto(log_device_placement=False))
     # TODO: Replace with adanet.Estimator. Currently this just verifies
     # that the distributed testing framework supports distribute strategies.
-    estimator = tf.estimator.Estimator(model_fn=_model_fn, config=config)
+    estimator = tf.estimator.Estimator(
+        model_fn=_model_fn, config=multiworker_config)
 
   def input_fn():
     input_features = {"x": tf.constant(features, name="x")}
     input_labels = tf.constant(labels, name="y")
-    return input_features, input_labels
+    return tf.data.Dataset.from_tensors((input_features, input_labels)).repeat()
 
   train_hooks = [
       tf.estimator.ProfilerHook(save_steps=50, output_dir=FLAGS.model_dir)
