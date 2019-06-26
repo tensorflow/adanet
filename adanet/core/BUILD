@@ -64,8 +64,7 @@ py_test(
         ":estimator_distributed_test_runner" +
         "",
     ],
-    flaky = 1,
-    shard_count = 10,
+    shard_count = 14,
     deps = [
         ":estimator",
         ":timer",

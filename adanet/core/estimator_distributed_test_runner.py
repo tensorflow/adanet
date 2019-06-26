@@ -43,6 +43,7 @@ from adanet.distributed.placement import RoundRobinStrategy
 from adanet.subnetwork import Builder
 from adanet.subnetwork import SimpleGenerator
 from adanet.subnetwork import Subnetwork
+# TODO: Switch back to TF 2.0 once the distribution bug is fixed.
 import tensorflow as tf
 
 # pylint: disable=g-direct-tensorflow-import
@@ -53,8 +54,7 @@ from tensorflow.contrib.boosted_trees.proto import learner_pb2
 from tensorflow.contrib.boosted_trees.python.utils import losses as bt_losses
 
 from tensorflow.python.training import session_manager as session_manager_lib
-from tensorflow_estimator.python.estimator.head import multi_class_head
-from tensorflow_estimator.python.estimator.head import regression_head
+from tensorflow_estimator.python.estimator.canned import head as head_lib
 
 # Module path changed. Try importing from new and old location to maintain
 # backwards compatibility.
@@ -211,8 +211,9 @@ def train_and_evaluate_estimator():
       "worker_wait_timeout_secs": 60,
       "config": config
   }
-  head = regression_head.RegressionHead(
-      loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
+
+  head = head_lib._regression_head(  # pylint: disable=protected-access
+      loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
   features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
   labels = [[1.], [0.], [1.], [0.]]
 
@@ -221,25 +222,32 @@ def train_and_evaluate_estimator():
     kwargs["experimental_placement_strategy"] = RoundRobinStrategy()
   if estimator_type == "autoensemble":
     feature_columns = [tf.feature_column.numeric_column("x", shape=[2])]
+    # pylint: disable=g-long-lambda
+    # TODO: Switch optimizers to tf.keras.optimizers.Adam once the
+    # distribution bug is fixed.
     candidate_pool = {
         "linear":
             tf.estimator.LinearEstimator(
                 head=head,
                 feature_columns=feature_columns,
-                optimizer=lambda: tf.keras.optimizers.Adam(lr=.001)),
+                optimizer=lambda: tf_compat.v1.train.AdamOptimizer(
+                    learning_rate=.001)),
         "dnn":
             tf.estimator.DNNEstimator(
                 head=head,
                 feature_columns=feature_columns,
-                optimizer=lambda: tf.keras.optimizers.Adam(lr=.001),
+                optimizer=lambda: tf_compat.v1.train.AdamOptimizer(
+                    learning_rate=.001),
                 hidden_units=[3]),
         "dnn2":
             tf.estimator.DNNEstimator(
                 head=head,
                 feature_columns=feature_columns,
-                optimizer=lambda: tf.keras.optimizers.Adam(lr=.001),
+                optimizer=lambda: tf_compat.v1.train.AdamOptimizer(
+                    learning_rate=.001),
                 hidden_units=[5]),
     }
+    # pylint: enable=g-long-lambda
 
     estimator = AutoEnsembleEstimator(
         head=head, candidate_pool=candidate_pool, **kwargs)
@@ -254,26 +262,30 @@ def train_and_evaluate_estimator():
         head=head, subnetwork_generator=subnetwork_generator, **kwargs)
   elif FLAGS.estimator_type == "autoensemble_trees_multiclass":
     n_classes = 3
-    head = multi_class_head.MultiClassHead(
-        n_classes=n_classes, loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
+    head = head_lib._multi_class_head_with_softmax_cross_entropy_loss(  # pylint: disable=protected-access
+        n_classes=n_classes,
+        loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
     def tree_loss_fn(labels, logits):
       result = bt_losses.per_example_maxent_loss(
           labels=labels, logits=logits, num_classes=n_classes, weights=None)
       return result[0]
 
-    tree_head = multi_class_head.MultiClassHead(
+    tree_head = head_lib._multi_class_head_with_softmax_cross_entropy_loss(  # pylint: disable=protected-access
         loss_fn=tree_loss_fn,
         n_classes=n_classes,
-        loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
+        loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
     labels = [[1], [0], [1], [2]]
     feature_columns = [tf.feature_column.numeric_column("x", shape=[2])]
+    # TODO: Switch optimizers to tf.keras.optimizers.Adam once the
+    # distribution bug is fixed.
     candidate_pool = lambda config: {  # pylint: disable=g-long-lambda
         "linear":
             tf.estimator.LinearEstimator(
                 head=head,
                 feature_columns=feature_columns,
-                optimizer=tf.keras.optimizers.Adam(lr=.001),
+                optimizer=tf_compat.v1.train.AdamOptimizer(
+                    learning_rate=.001),
                 config=config),
         "gbdt":
             CoreGradientBoostedDecisionTreeEstimator(
@@ -293,8 +305,8 @@ def train_and_evaluate_estimator():
 
     def _model_fn(features, labels, mode):
       """Test model_fn."""
-      layer = tf.layers.Dense(1)
-      logits = layer(features)
+      layer = tf.keras.layers.Dense(1)
+      logits = layer(features["x"])
 
       if mode == tf.estimator.ModeKeys.PREDICT:
         predictions = {"logits": logits}
