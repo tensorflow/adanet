@@ -13,9 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================-->
 
-# Current version (0.7.0.dev)
+# Current version (0.8.0.dev)
  * Under development.
  * TODO: Add official Keras Model support, including Keras layers, Sequential, and Model subclasses for defining subnetworks.
+
+# Release 0.7.0
+ * Add embeddings support on TPU via `TPUEmbedding`.
  * Train the current iteration forever when `max_iteration_steps=None`.
  * Introduce `adanet.AutoEnsembleSubestimator` for training subestimators on different training data partitions and implement ensemble methods like bootstrap aggregating (a.k.a bagging).
  * Fix bug when using Gradient Boosted Decision Tree Estimators with `AutoEnsembleEstimator` during distributed training.
