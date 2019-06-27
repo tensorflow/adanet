@@ -64,6 +64,8 @@ py_test(
         ":estimator_distributed_test_runner" +
         "",
     ],
+    # Transient gRPC server errors when calling train_and_evaluate.
+    flaky = 1,
     shard_count = 16,
     deps = [
         ":estimator",
