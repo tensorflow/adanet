@@ -38,11 +38,17 @@ class ReplicationStrategyTest(tf.test.TestCase):
     self.assertTrue(strategy.should_train_subnetworks(num_subnetworks))
 
 
-class Config(object):
+class WorkerConfig(object):
 
   def __init__(self, num_worker_replicas, global_id_in_cluster):
     self.num_worker_replicas = num_worker_replicas
     self.global_id_in_cluster = global_id_in_cluster
+
+
+class ParameterServerConfig(object):
+
+  def __init__(self, num_ps_replicas):
+    self.num_ps_replicas = num_ps_replicas
 
 
 def _testcase_name(name, drop_remainder):
@@ -263,15 +269,16 @@ class RoundRobinStrategyTest(parameterized.TestCase, tf.test.TestCase):
           },
       ] for drop_remainder in [False, True]]))
   # pylint: enable=g-complex-comprehension
-  def test_methods(self, num_workers, num_subnetworks, drop_remainder,
-                   want_should_build_ensemble, want_should_build_subnetwork,
-                   want_should_train_subnetworks):
+  def test_worker_methods(self, num_workers, num_subnetworks, drop_remainder,
+                          want_should_build_ensemble,
+                          want_should_build_subnetwork,
+                          want_should_train_subnetworks):
     should_build_ensemble = []
     should_build_subnetwork = []
     should_train_subnetworks = []
     for worker_index in range(num_workers):
       strategy = RoundRobinStrategy(drop_remainder)
-      strategy.config = Config(num_workers, worker_index)
+      strategy.config = WorkerConfig(num_workers, worker_index)
       should_build_ensemble.append(
           strategy.should_build_ensemble(num_subnetworks))
       should_build_subnetwork.append([])
@@ -283,6 +290,272 @@ class RoundRobinStrategyTest(parameterized.TestCase, tf.test.TestCase):
     self.assertEqual(want_should_build_ensemble, should_build_ensemble)
     self.assertEqual(want_should_build_subnetwork, should_build_subnetwork)
     self.assertEqual(want_should_train_subnetworks, should_train_subnetworks)
+
+  @parameterized.named_parameters(
+      {
+          "testcase_name":
+              "one_ps_one_subnetwork",
+          "num_ps":
+              1,
+          "num_subnetworks":
+              1,
+          "want_variable_devices": [[
+              "/job:ps/task:0", "/job:ps/task:0", "/job:ps/task:0",
+              "/job:ps/task:0"
+          ],],
+      },
+      {
+          "testcase_name":
+              "three_ps_one_subnetwork",
+          "num_ps":
+              3,
+          "num_subnetworks":
+              1,
+          "want_variable_devices": [[
+              "/job:ps/task:1", "/job:ps/task:0", "/job:ps/task:2",
+              "/job:ps/task:0"
+          ],],
+      },
+      {
+          "testcase_name":
+              "two_ps_five_subnetworks",
+          "num_ps":
+              2,
+          "num_subnetworks":
+              5,
+          "want_variable_devices": [
+              [
+                  "/job:ps/task:0", "/job:ps/task:0", "/job:ps/task:0",
+                  "/job:ps/task:0"
+              ],
+              [
+                  "/job:ps/task:1", "/job:ps/task:1", "/job:ps/task:1",
+                  "/job:ps/task:1"
+              ],
+              [
+                  "/job:ps/task:0", "/job:ps/task:0", "/job:ps/task:0",
+                  "/job:ps/task:0"
+              ],
+              [
+                  "/job:ps/task:1", "/job:ps/task:1", "/job:ps/task:1",
+                  "/job:ps/task:1"
+              ],
+              [
+                  "/job:ps/task:0", "/job:ps/task:0", "/job:ps/task:0",
+                  "/job:ps/task:0"
+              ],
+          ],
+      },
+      {
+          "testcase_name":
+              "one_ps_three_subnetworks",
+          "num_ps":
+              1,
+          "num_subnetworks":
+              3,
+          "want_variable_devices": [
+              [
+                  "/job:ps/task:0", "/job:ps/task:0", "/job:ps/task:0",
+                  "/job:ps/task:0"
+              ],
+              [
+                  "/job:ps/task:0", "/job:ps/task:0", "/job:ps/task:0",
+                  "/job:ps/task:0"
+              ],
+              [
+                  "/job:ps/task:0", "/job:ps/task:0", "/job:ps/task:0",
+                  "/job:ps/task:0"
+              ],
+          ],
+      },
+      {
+          "testcase_name":
+              "two_ps_three_subnetworks",
+          "num_ps":
+              2,
+          "num_subnetworks":
+              3,
+          "want_variable_devices": [
+              [
+                  "/job:ps/task:0", "/job:ps/task:0", "/job:ps/task:0",
+                  "/job:ps/task:0"
+              ],
+              [
+                  "/job:ps/task:1", "/job:ps/task:1", "/job:ps/task:1",
+                  "/job:ps/task:1"
+              ],
+              [
+                  "/job:ps/task:0", "/job:ps/task:0", "/job:ps/task:0",
+                  "/job:ps/task:0"
+              ],
+          ],
+      },
+      {
+          "testcase_name":
+              "three_ps_three_subnetworks",
+          "num_ps":
+              3,
+          "num_subnetworks":
+              3,
+          "want_variable_devices": [
+              [
+                  "/job:ps/task:0", "/job:ps/task:0", "/job:ps/task:0",
+                  "/job:ps/task:0"
+              ],
+              [
+                  "/job:ps/task:1", "/job:ps/task:1", "/job:ps/task:1",
+                  "/job:ps/task:1"
+              ],
+              [
+                  "/job:ps/task:2", "/job:ps/task:2", "/job:ps/task:2",
+                  "/job:ps/task:2"
+              ],
+          ],
+      },
+      {
+          "testcase_name":
+              "three_ps_three_subnetworks_no_dedicated_parameter_servers",
+          "num_ps":
+              3,
+          "num_subnetworks":
+              3,
+          "dedicate_parameter_servers":
+              False,
+          "want_variable_devices": [
+              ["", "", "", ""],
+              ["", "", "", ""],
+              ["", "", "", ""],
+          ],
+      },
+      {
+          "testcase_name":
+              "four_ps_three_subnetworks",
+          "num_ps":
+              4,
+          "num_subnetworks":
+              3,
+          "want_variable_devices": [
+              [
+                  "/job:ps/task:1", "/job:ps/task:0", "/job:ps/task:0",
+                  "/job:ps/task:0"
+              ],
+              [
+                  "/job:ps/task:2", "/job:ps/task:2", "/job:ps/task:2",
+                  "/job:ps/task:2"
+              ],
+              [
+                  "/job:ps/task:3", "/job:ps/task:3", "/job:ps/task:3",
+                  "/job:ps/task:3"
+              ],
+          ],
+      },
+      {
+          "testcase_name":
+              "five_ps_three_subnetworks",
+          "num_ps":
+              5,
+          "num_subnetworks":
+              3,
+          "want_variable_devices": [
+              [
+                  "/job:ps/task:1", "/job:ps/task:0", "/job:ps/task:0",
+                  "/job:ps/task:0"
+              ],
+              [
+                  "/job:ps/task:2", "/job:ps/task:3", "/job:ps/task:3",
+                  "/job:ps/task:2"
+              ],
+              [
+                  "/job:ps/task:4", "/job:ps/task:4", "/job:ps/task:4",
+                  "/job:ps/task:4"
+              ],
+          ],
+      },
+      {
+          "testcase_name":
+              "six_ps_three_subnetworks",
+          "num_ps":
+              6,
+          "num_subnetworks":
+              3,
+          "want_variable_devices": [
+              [
+                  "/job:ps/task:1", "/job:ps/task:0", "/job:ps/task:0",
+                  "/job:ps/task:0"
+              ],
+              [
+                  "/job:ps/task:2", "/job:ps/task:3", "/job:ps/task:3",
+                  "/job:ps/task:2"
+              ],
+              [
+                  "/job:ps/task:5", "/job:ps/task:4", "/job:ps/task:4",
+                  "/job:ps/task:5"
+              ],
+          ],
+      },
+      {
+          "testcase_name":
+              "seven_ps_three_subnetworks",
+          "num_ps":
+              7,
+          "num_subnetworks":
+              3,
+          "want_variable_devices": [
+              [
+                  "/job:ps/task:1", "/job:ps/task:0", "/job:ps/task:2",
+                  "/job:ps/task:0"
+              ],
+              [
+                  "/job:ps/task:3", "/job:ps/task:4", "/job:ps/task:4",
+                  "/job:ps/task:3"
+              ],
+              [
+                  "/job:ps/task:6", "/job:ps/task:5", "/job:ps/task:5",
+                  "/job:ps/task:6"
+              ],
+          ],
+      },
+      {
+          "testcase_name":
+              "eight_ps_three_subnetworks",
+          "num_ps":
+              8,
+          "num_subnetworks":
+              3,
+          "want_variable_devices": [
+              [
+                  "/job:ps/task:1", "/job:ps/task:0", "/job:ps/task:2",
+                  "/job:ps/task:0"
+              ],
+              [
+                  "/job:ps/task:4", "/job:ps/task:5", "/job:ps/task:5",
+                  "/job:ps/task:4"
+              ],
+              [
+                  "/job:ps/task:7", "/job:ps/task:6", "/job:ps/task:6",
+                  "/job:ps/task:7"
+              ],
+          ],
+      },
+  )
+  def test_device_methods(self,
+                          num_ps,
+                          num_subnetworks,
+                          want_variable_devices,
+                          dedicate_parameter_servers=True):
+    x = tf.constant([[1., 0.]])
+    strategy = RoundRobinStrategy(
+        dedicate_parameter_servers=dedicate_parameter_servers)
+    strategy.config = ParameterServerConfig(num_ps)
+    variable_devices = []
+    for i in range(num_subnetworks):
+      with strategy.subnetwork_devices(num_subnetworks, i):
+        subnetwork = tf.keras.Sequential()
+        subnetwork.add(tf.keras.layers.Dense(4))
+        subnetwork.add(tf.keras.layers.Dense(3))
+        subnetwork(x)
+      variable_devices.append([w.op.device for w in subnetwork.weights])
+    self.assertEqual(want_variable_devices, variable_devices)
 
 
 if __name__ == "__main__":

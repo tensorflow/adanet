@@ -34,6 +34,10 @@ py_test(
 py_library(
     name = "placement",
     srcs = ["placement.py"],
+    deps = [
+        ":devices",
+        "//adanet/tf_compat",
+    ],
 )
 
 py_test(

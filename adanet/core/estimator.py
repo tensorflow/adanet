@@ -45,8 +45,9 @@ import numpy as np
 import six
 import tensorflow as tf
 
-
+# pylint: disable=g-direct-tensorflow-import
 from tensorflow_estimator.python.estimator import util
+# pylint: enable=g-direct-tensorflow-import
 
 
 class _StopAfterTrainingHook(tf_compat.SessionRunHook):
@@ -606,7 +607,6 @@ class Estimator(tf.estimator.Estimator):
         head=head, metric_fn=metric_fn, use_tpu=self._use_tpu)
     if not placement_strategy:
       placement_strategy = ReplicationStrategy()
-    placement_strategy.config = self.config
     self._iteration_builder = _IterationBuilder(
         candidate_builder,
         subnetwork_manager,
@@ -791,33 +791,34 @@ class Estimator(tf.estimator.Estimator):
     self._evaluation_checkpoint_path = None
     return result
 
-  def _call_adanet_model_fn(self, input_fn, mode):
+  def _call_adanet_model_fn(self, input_fn, mode, config):
     """Calls model_fn with the given mode and parameters."""
 
     with tf.Graph().as_default() as g:
-      tf_compat.v1.set_random_seed(self.config.tf_random_seed)
+      tf_compat.v1.set_random_seed(config.tf_random_seed)
       # Create global step before calling model_fn as does superclass.
       self._create_and_assert_global_step(g)
       features, labels, input_hooks = util.parse_input_fn_result(input_fn())
       train_hooks = self._train_hooks
       self._train_hooks = list(train_hooks) + input_hooks
-      self.model_fn(features, labels, mode, self.config)
+      self.model_fn(features, labels, mode, config)
       self._train_hooks = train_hooks
 
-  def _create_temp_estimator(self, temp_model_dir):
-    """Creates a temp `Estimator` to grow the graph for the next iteration."""
+  def _create_temp_run_config(self, temp_model_dir):
+    """Creates a temp `RunConfig` for the bookkeeping phase."""
 
     config = self.config
-    temp_run_config = tf.estimator.RunConfig(
+    return tf.estimator.RunConfig(
         model_dir=temp_model_dir,
         tf_random_seed=config.tf_random_seed,
         session_config=config.session_config,
         protocol=config.protocol)
+
+  def _create_temp_estimator(self, config):
+    """Creates a temp `Estimator` to grow the graph for the next iteration."""
+
     return tf.estimator.Estimator(
-        model_fn=self._adanet_model_fn,
-        config=temp_run_config,
-        model_dir=temp_model_dir,
-        params={})
+        model_fn=self._adanet_model_fn, config=config, params={})
 
   def _prepare_next_iteration(self, train_input_fn, current_iteration):
     """Prepares the next iteration.
@@ -833,33 +834,13 @@ class Estimator(tf.estimator.Estimator):
       train_input_fn: The input_fn used during training.
       current_iteration: Integer current iteration number.
     """
+
     next_iteration = current_iteration + 1
     logging.info("Preparing iteration %s:", next_iteration)
 
     # First, evaluate and choose the best ensemble for this iteration.
     logging.info("Evaluating candidates...")
-    self._prepare_next_iteration_state = self._Keys.EVALUATE_ENSEMBLES
-    if self._evaluator:
-      evaluator_input_fn = self._evaluator.input_fn
-    else:
-      evaluator_input_fn = train_input_fn
-    self._call_adanet_model_fn(evaluator_input_fn, tf.estimator.ModeKeys.EVAL)
-    logging.info("Done evaluating candidates.")
 
-    # Then materialize and store the subnetwork reports.
-    if self._report_materializer:
-      logging.info("Materializing reports...")
-      self._prepare_next_iteration_state = self._Keys.MATERIALIZE_REPORT
-      self._call_adanet_model_fn(self._report_materializer.input_fn,
-                                 tf.estimator.ModeKeys.EVAL)
-      logging.info("Done materializing reports.")
-
-    self._best_ensemble_index = None
-
-    # Finally, create the graph for the next iteration and overwrite the model
-    # directory checkpoint with the expanded graph.
-    logging.info("Adapting graph and incrementing iteration number...")
-    self._prepare_next_iteration_state = self._Keys.INCREMENT_ITERATION
     temp_model_dir = os.path.join(self.model_dir, "temp_model_dir")
     if not tf.io.gfile.exists(temp_model_dir):
       tf.io.gfile.makedirs(temp_model_dir)
@@ -868,7 +849,31 @@ class Estimator(tf.estimator.Estimator):
     time_in_millis = int(time.time() * 1000)
     temp_model_sub_dir = os.path.join(temp_model_dir, str(time_in_millis))
     with _temp_tf_config(temp_model_sub_dir, self._clear_ps_when_growing):
-      temp_estimator = self._create_temp_estimator(temp_model_sub_dir)
+      temp_run_config = self._create_temp_run_config(temp_model_sub_dir)
+      self._prepare_next_iteration_state = self._Keys.EVALUATE_ENSEMBLES
+      if self._evaluator:
+        evaluator_input_fn = self._evaluator.input_fn
+      else:
+        evaluator_input_fn = train_input_fn
+      self._call_adanet_model_fn(evaluator_input_fn, tf.estimator.ModeKeys.EVAL,
+                                 temp_run_config)
+      logging.info("Done evaluating candidates.")
+
+      # Then materialize and store the subnetwork reports.
+      if self._report_materializer:
+        logging.info("Materializing reports...")
+        self._prepare_next_iteration_state = self._Keys.MATERIALIZE_REPORT
+        self._call_adanet_model_fn(self._report_materializer.input_fn,
+                                   tf.estimator.ModeKeys.EVAL, temp_run_config)
+        logging.info("Done materializing reports.")
+
+      self._best_ensemble_index = None
+
+      # Finally, create the graph for the next iteration and overwrite the model
+      # directory checkpoint with the expanded graph.
+      logging.info("Adapting graph and incrementing iteration number...")
+      self._prepare_next_iteration_state = self._Keys.INCREMENT_ITERATION
+      temp_estimator = self._create_temp_estimator(temp_run_config)
       # Do not train with any saving_listeners since this is just a temporary
       # estimator.
       temp_estimator.train(
@@ -1267,6 +1272,7 @@ class Estimator(tf.estimator.Estimator):
           features=features,
           labels=labels,
           mode=mode,
+          config=config,
           previous_ensemble_summary=previous_ensemble_summary,
           previous_ensemble_spec=previous_ensemble_spec,
           skip_summaries=True,
@@ -1498,6 +1504,7 @@ class Estimator(tf.estimator.Estimator):
           features=features,
           labels=labels,
           mode=mode,
+          config=config,
           previous_ensemble_summary=previous_ensemble_summary,
           previous_ensemble_spec=previous_ensemble_spec,
           skip_summaries=True)
@@ -1514,7 +1521,7 @@ class Estimator(tf.estimator.Estimator):
 
     if self._prepare_next_iteration_state == self._Keys.EVALUATE_ENSEMBLES:
       assert mode == tf.estimator.ModeKeys.EVAL
-      assert self.config.is_chief
+      assert config.is_chief
       self._best_ensemble_index = self._get_best_ensemble_index(
           current_iteration)
       architecture = current_iteration.candidates[
@@ -1523,12 +1530,12 @@ class Estimator(tf.estimator.Estimator):
       self._save_architecture(new_architecture_filename, architecture)
     elif self._prepare_next_iteration_state == self._Keys.MATERIALIZE_REPORT:
       assert mode == tf.estimator.ModeKeys.EVAL
-      assert self.config.is_chief
+      assert config.is_chief
       assert self._best_ensemble_index is not None
       self._materialize_report(current_iteration)
     elif self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
       assert mode == tf.estimator.ModeKeys.TRAIN
-      assert self.config.is_chief
+      assert config.is_chief
       latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
       logging.info(
           "Overwriting checkpoint with new graph for iteration %s to %s",

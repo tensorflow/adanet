@@ -154,10 +154,10 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         checkpoint_path=checkpoint_path,
         yield_single_examples=yield_single_examples)
 
-  def _create_temp_estimator(self, temp_model_dir):
+  def _create_temp_run_config(self, temp_model_dir):
     """See the `Estimator` base class for details."""
 
-    temp_run_config = tf.contrib.tpu.RunConfig(
+    return tf.contrib.tpu.RunConfig(
         model_dir=temp_model_dir,
         tpu_config=self._original_config.tpu_config,
         evaluation_master=self._original_config.evaluation_master,
@@ -166,10 +166,15 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         tf_random_seed=self._original_config.tf_random_seed,
         session_config=self._original_config.session_config,
         protocol=self._original_config.protocol)
+
+  def _create_temp_estimator(self, config):
+    """See the `Estimator` base class for details."""
+
+    temp_model_dir = config.model_dir
     return tf.contrib.tpu.TPUEstimator(
         model_fn=self._adanet_model_fn,
         params={},
-        config=temp_run_config,
+        config=config,
         model_dir=temp_model_dir,
         use_tpu=self._use_tpu,
         eval_on_tpu=self._use_tpu,
@@ -178,7 +183,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         eval_batch_size=self._eval_batch_size,
         embedding_config_spec=self._embedding_config_spec)
 
-  def _call_adanet_model_fn(self, input_fn, mode):
+  def _call_adanet_model_fn(self, input_fn, mode, config):
     """See the `Estimator` base class for details."""
 
     # Bind parameters to input_fn since the parent's input_fn is not expected to
@@ -190,9 +195,9 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
     if "params" in input_fn_args:
       kwargs["params"] = self.params
     if "config" in input_fn_args:
-      kwargs["config"] = self.config
+      kwargs["config"] = config
     input_fn = functools.partial(input_fn, **kwargs)
-    super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode)
+    super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode, config)
 
   def _create_estimator_spec(self, current_iteration, mode,
                              iteration_number_tensor, previous_iteration_vars):

@@ -18,8 +18,17 @@ from __future__ import division
 from __future__ import print_function
 
 import abc
+import contextlib
 
 from absl import logging
+from adanet import tf_compat
+from adanet.distributed.devices import _OpNameHashStrategy
+import numpy as np
+
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.core.framework import node_def_pb2
+from tensorflow.python.training import device_setter
+# pylint: enable=g-direct-tensorflow-import
 
 
 class PlacementStrategy(object):
@@ -90,6 +99,11 @@ class PlacementStrategy(object):
       Boolean whether to train subnetworks on the current worker.
     """
 
+  @abc.abstractmethod
+  @contextlib.contextmanager
+  def subnetwork_devices(self, num_subnetworks, subnetwork_index):
+    """A context for assigning subnetwork ops to devices."""
+
 
 class ReplicationStrategy(PlacementStrategy):
   # pyformat: disable
@@ -115,6 +129,11 @@ class ReplicationStrategy(PlacementStrategy):
 
   def should_train_subnetworks(self, num_subnetworks):
     return True
+
+  @contextlib.contextmanager
+  def subnetwork_devices(self, num_subnetworks, subnetwork_index):
+    # Use default devices.
+    yield
 
 
 class RoundRobinStrategy(PlacementStrategy):
@@ -214,8 +233,9 @@ class RoundRobinStrategy(PlacementStrategy):
   #
   #   return subnetwork_index in self._worker_tasks(...)
 
-  def __init__(self, drop_remainder=False):
+  def __init__(self, drop_remainder=False, dedicate_parameter_servers=True):
     self._drop_remainder = drop_remainder
+    self._dedicate_parameter_servers = dedicate_parameter_servers
 
   @property
   def _num_workers(self):
@@ -271,3 +291,35 @@ class RoundRobinStrategy(PlacementStrategy):
     if num_subnetworks == 1 or self._num_workers == 1:
       return True
     return not self.should_build_ensemble(num_subnetworks)
+
+  @contextlib.contextmanager
+  def subnetwork_devices(self, num_subnetworks, subnetwork_index):
+    if not self._dedicate_parameter_servers:
+      # Use default device placement.
+      yield
+      return
+
+    # Each subnetwork gets its own dedicated parameter servers
+    num_ps_replicas = self.config.num_ps_replicas
+    ps_numbers = np.array(range(num_ps_replicas))
+    subnetwork_group = subnetwork_index
+    if num_ps_replicas > 0 and num_subnetworks > num_ps_replicas:
+      subnetwork_group = subnetwork_index % num_ps_replicas
+    ps_group = np.array_split(ps_numbers, num_subnetworks)[subnetwork_group]
+
+    # Assign ops to parameter servers based on hashed op names.
+    ps_strategy = _OpNameHashStrategy(len(ps_group))
+
+    def device_fn(op):
+      """Assigns variables to a subnetwork's dedicated parameter servers."""
+
+      node_def = op if isinstance(op, node_def_pb2.NodeDef) else op.node_def
+      if num_ps_replicas > 0 and node_def.op in device_setter.STANDARD_PS_OPS:
+        # ps_group lists the task ids in the group. Adding the first task id in
+        # the group to the task number determined by the PS strategy gives the
+        # correct parameter server assignment.
+        return "/job:ps/task:{}".format(ps_group[0] + ps_strategy(op))
+      return op.device
+
+    with tf_compat.v1.device(device_fn):
+      yield

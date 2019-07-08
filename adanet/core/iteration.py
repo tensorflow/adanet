@@ -209,6 +209,7 @@ class _IterationBuilder(object):
                       subnetwork_builders,
                       features,
                       mode,
+                      config,
                       labels=None,
                       previous_ensemble_summary=None,
                       previous_ensemble_spec=None,
@@ -230,6 +231,7 @@ class _IterationBuilder(object):
       features: Dictionary of `Tensor` objects keyed by feature name.
       mode: Defines whether this is training, evaluation or prediction. See
         `ModeKeys`.
+      config: The `tf.estimator.RunConfig` to use this iteration.
       labels: `Tensor` of labels. Can be `None`.
       previous_ensemble_summary: The `adanet.Summary` for the previous ensemble.
       previous_ensemble_spec: Optional `_EnsembleSpec` for iteration t-1.
@@ -246,6 +248,8 @@ class _IterationBuilder(object):
       ValueError: If two subnetworks share the same name.
       ValueError: If two ensembles share the same name.
     """
+
+    self._placement_strategy.config = config
 
     logging.info("%s iteration %s", "Rebuilding" if rebuilding else "Building",
                  iteration_number)
@@ -326,28 +330,27 @@ class _IterationBuilder(object):
         if not self._placement_strategy.should_build_subnetwork(
             num_subnetworks, i) and not rebuilding:
           continue
-        subnetwork_name = "t{}_{}".format(iteration_number,
-                                          subnetwork_builder.name)
-        subnetwork_summary = self._summary_maker(
-            namespace="subnetwork",
-            scope=subnetwork_name,
-            skip_summary=skip_summaries or rebuilding)
-        summaries.append(subnetwork_summary)
-        logging.info("%s subnetwork '%s'",
-                     "Rebuilding" if rebuilding else "Building",
-                     subnetwork_builder.name)
-        subnetwork_spec = self._subnetwork_manager.build_subnetwork_spec(
-            name=subnetwork_name,
-            subnetwork_builder=subnetwork_builder,
-            iteration_step=iteration_step_tensor,
-            summary=subnetwork_summary,
-            features=features,
-            mode=builder_mode,
-            labels=labels,
-            previous_ensemble=previous_ensemble)
-        subnetwork_specs.append(subnetwork_spec)
-        if not self._placement_strategy.should_build_ensemble(
-            num_subnetworks) and not rebuilding:
+        with self._placement_strategy.subnetwork_devices(num_subnetworks, i):
+          subnetwork_name = "t{}_{}".format(iteration_number,
+                                            subnetwork_builder.name)
+          subnetwork_summary = self._summary_maker(
+              namespace="subnetwork",
+              scope=subnetwork_name,
+              skip_summary=skip_summaries or rebuilding)
+          summaries.append(subnetwork_summary)
+          logging.info("%s subnetwork '%s'",
+                       "Rebuilding" if rebuilding else "Building",
+                       subnetwork_builder.name)
+          subnetwork_spec = self._subnetwork_manager.build_subnetwork_spec(
+              name=subnetwork_name,
+              subnetwork_builder=subnetwork_builder,
+              iteration_step=iteration_step_tensor,
+              summary=subnetwork_summary,
+              features=features,
+              mode=builder_mode,
+              labels=labels,
+              previous_ensemble=previous_ensemble)
+          subnetwork_specs.append(subnetwork_spec)
           # Workers that don't build ensembles need a dummy candidate in order
           # to train the subnetwork.
           # Because only ensembles can be considered candidates, we need to
@@ -355,22 +358,24 @@ class _IterationBuilder(object):
           # dummy candidate. However, this dummy candidate is never considered a
           # true candidate during candidate evaluation and selection.
           # TODO: Eliminate need for candidates.
-          dummy_candidate = self._candidate_builder.build_candidate(
-              # pylint: disable=protected-access
-              ensemble_spec=ensemble_builder_lib._EnsembleSpec(
-                  name=subnetwork_name,
-                  ensemble=None,
-                  architecture=None,
-                  subnetwork_builders=subnetwork_builders,
-                  predictions=subnetwork_spec.predictions,
-                  loss=subnetwork_spec.loss,
-                  adanet_loss=0.),
-              # pylint: enable=protected-access
-              training=training,
-              iteration_step=iteration_step_tensor,
-              summary=subnetwork_summary,
-              track_moving_average=False)
-          candidates.append(dummy_candidate)
+          if not self._placement_strategy.should_build_ensemble(
+              num_subnetworks) and not rebuilding:
+            dummy_candidate = self._candidate_builder.build_candidate(
+                # pylint: disable=protected-access
+                ensemble_spec=ensemble_builder_lib._EnsembleSpec(
+                    name=subnetwork_name,
+                    ensemble=None,
+                    architecture=None,
+                    subnetwork_builders=subnetwork_builders,
+                    predictions=subnetwork_spec.predictions,
+                    loss=subnetwork_spec.loss,
+                    adanet_loss=0.),
+                # pylint: enable=protected-access
+                training=training,
+                iteration_step=iteration_step_tensor,
+                summary=subnetwork_summary,
+                track_moving_average=False)
+            candidates.append(dummy_candidate)
         # Generate subnetwork reports.
         if mode != tf.estimator.ModeKeys.PREDICT:
           subnetwork_report = subnetwork_builder.build_subnetwork_report()
