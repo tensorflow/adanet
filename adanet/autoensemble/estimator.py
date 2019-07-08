@@ -84,15 +84,16 @@ class _BuilderFromSubestimator(Builder):
   def name(self):
     return self._name
 
-  def _call_model_fn(self, features, labels, mode):
-    model_fn = self._subestimator.estimator.model_fn
-    estimator_spec = model_fn(
-        features=features, labels=labels, mode=mode, config=self._config)
-    logits = self._logits_fn(estimator_spec=estimator_spec)
-    train_op = TrainOpSpec(
-        estimator_spec.train_op,
-        chief_hooks=estimator_spec.training_chief_hooks,
-        hooks=estimator_spec.training_hooks)
+  def _call_model_fn(self, features, labels, mode, summary):
+    with summary.current_scope():
+      model_fn = self._subestimator.estimator.model_fn
+      estimator_spec = model_fn(
+          features=features, labels=labels, mode=mode, config=self._config)
+      logits = self._logits_fn(estimator_spec=estimator_spec)
+      train_op = TrainOpSpec(
+          estimator_spec.train_op,
+          chief_hooks=estimator_spec.training_chief_hooks,
+          hooks=estimator_spec.training_hooks)
     return logits, train_op
 
   def build_subnetwork(self, features, labels, logits_dimension, training,
@@ -109,18 +110,18 @@ class _BuilderFromSubestimator(Builder):
       # TODO: Consider tensorflow_estimator/python/estimator/util.py.
       inputs = self._subestimator.train_input_fn()
       if isinstance(inputs, (tf_compat.DatasetV1, tf_compat.DatasetV2)):
-        subestimator_features, subestimator_labels = tf_compat.make_one_shot_iterator(
-            inputs).get_next()
+        subestimator_features, subestimator_labels = (
+            tf_compat.make_one_shot_iterator(inputs).get_next())
       else:
         subestimator_features, subestimator_labels = inputs
 
       # Construct subnetwork graph first because of dependencies on scope.
       _, train_op = call_model_fn_template(subestimator_features,
-                                           subestimator_labels, mode)
+                                           subestimator_labels, mode, summary)
       # Graph for ensemble learning gets model_fn_1 for scope.
-      logits, _ = call_model_fn_template(features, labels, mode)
+      logits, _ = call_model_fn_template(features, labels, mode, summary)
     else:
-      logits, train_op = call_model_fn_template(features, labels, mode)
+      logits, train_op = call_model_fn_template(features, labels, mode, summary)
 
     # TODO: Replace with variance complexity measure.
     complexity = tf.constant(0.)
