@@ -376,7 +376,8 @@ class Estimator(tf.estimator.Estimator):
       middle, training stops before `max_iteration_steps` steps. When
       :code:`None`, it will train the current iteration forever.
     ensemblers: An iterable of :class:`adanet.ensemble.Ensembler` objects that
-      define how to ensemble a group of subnetworks.
+      define how to ensemble a group of subnetworks. If there are multiple,
+      each should have a different `name` property.
     ensemble_strategies: An iterable of :class:`adanet.ensemble.Strategy`
       objects that define the candidate ensembles of subnetworks to explore at
       each iteration.
@@ -470,7 +471,6 @@ class Estimator(tf.estimator.Estimator):
     An :class:`adanet.Estimator` instance.
 
   Raises:
-    :code:`ValueError`: If :code:`ensemblers` is size > 1.
     :code:`ValueError`: If :code:`subnetwork_generator` is :code:`None`.
     :code:`ValueError`: If :code:`max_iteration_steps` is <= 0.
     :code:`ValueError`: If :code:`model_dir` is not specified during distributed
@@ -507,8 +507,6 @@ class Estimator(tf.estimator.Estimator):
                clear_ps_when_growing=True,
                debug=False,
                **kwargs):
-    if ensemblers and len(ensemblers) > 1:
-      raise ValueError("More than a single Ensembler is not yet supported.")
     if subnetwork_generator is None:
       raise ValueError("subnetwork_generator can't be None.")
     if max_iteration_steps is not None and max_iteration_steps <= 0.:
@@ -1276,7 +1274,8 @@ class Estimator(tf.estimator.Estimator):
           previous_ensemble_summary=previous_ensemble_summary,
           previous_ensemble_spec=previous_ensemble_spec,
           skip_summaries=True,
-          rebuilding=True)
+          rebuilding=True,
+          rebuilding_ensembler_name=architecture.ensembler_name)
       max_candidates = 2 if previous_ensemble_spec else 1
       assert len(current_iteration.candidates) == max_candidates
       previous_ensemble_spec = current_iteration.candidates[-1].ensemble_spec

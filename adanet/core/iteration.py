@@ -214,7 +214,8 @@ class _IterationBuilder(object):
                       previous_ensemble_summary=None,
                       previous_ensemble_spec=None,
                       skip_summaries=False,
-                      rebuilding=False):
+                      rebuilding=False,
+                      rebuilding_ensembler_name=None):
     """Builds and returns AdaNet iteration t.
 
     This method uses the generated the candidate subnetworks given the ensemble
@@ -239,6 +240,8 @@ class _IterationBuilder(object):
         `_Iteration`.
       rebuilding: Boolean whether the iteration is being rebuilt only to restore
         the previous best subnetworks and ensembles.
+      rebuilding_ensembler_name: Optional ensembler to restrict to, only
+        relevant when rebuilding is set as True.
 
     Returns:
       An _Iteration instance.
@@ -388,9 +391,12 @@ class _IterationBuilder(object):
             subnetwork_report.metrics[metric_name] = metric
           subnetwork_reports[subnetwork_builder.name] = subnetwork_report
 
-      # Create (ensembler_candidate*ensembler) ensembles.
+      # Create (ensemble_candidate*ensembler) ensembles.
       seen_ensemble_names = {}
       for ensembler in self._ensemblers:
+        if rebuilding and rebuilding_ensembler_name and (
+            ensembler.name != rebuilding_ensembler_name):
+          continue
         for ensemble_candidate in ensemble_candidates:
           if not self._placement_strategy.should_build_ensemble(
               num_subnetworks) and not rebuilding:

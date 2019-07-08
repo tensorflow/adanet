@@ -315,6 +315,7 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
               _get_complexity_regularization_summary_key(): [1 / 2., 1 / 2.],
           },
           'expected_complexity_regularization': 1.,
+          'name': 'with_bias',
       })
   def test_build_ensemble(self,
                           mixture_weight_type=ensemble.MixtureWeightType.SCALAR,
@@ -327,7 +328,8 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
                           num_subnetworks=1,
                           num_previous_ensemble_subnetworks=0,
                           expected_complexity_regularization=0.,
-                          expected_summary_scalars=None):
+                          expected_summary_scalars=None,
+                          name=None):
     model_dir = None
     if warm_start_mixture_weights:
       model_dir = 'fake_checkpoint_dir'
@@ -339,7 +341,13 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
         model_dir=model_dir,
         adanet_lambda=adanet_lambda,
         adanet_beta=adanet_beta,
-        use_bias=use_bias)
+        use_bias=use_bias,
+        name=name)
+
+    if name:
+      self.assertEqual(ensembler.name, name)
+    else:
+      self.assertEqual(ensembler.name, 'complexity_regularized')
 
     with tf_compat.v1.variable_scope('dummy_adanet_scope_iteration_0'):
       previous_ensemble_subnetworks_all = [

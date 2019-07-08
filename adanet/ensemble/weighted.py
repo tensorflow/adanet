@@ -200,6 +200,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
       equally to all subnetworks' weights :math:`w` in the ensemble regardless of
       their complexity. See Equation (4) in the AdaNet paper.
     use_bias: Whether to add a bias term to the ensemble's logits.
+    name: Optional name for the ensembler. Defaults to 'complexity_regularized'.
 
   Returns:
     An `adanet.ensemble.ComplexityRegularizedEnsembler` instance.
@@ -218,7 +219,8 @@ class ComplexityRegularizedEnsembler(Ensembler):
                model_dir=None,
                adanet_lambda=0.,
                adanet_beta=0.,
-               use_bias=False):
+               use_bias=False,
+               name=None):
     if warm_start_mixture_weights:
       if model_dir is None:
         raise ValueError("model_dir cannot be None when "
@@ -232,9 +234,12 @@ class ComplexityRegularizedEnsembler(Ensembler):
     self._adanet_lambda = adanet_lambda
     self._adanet_beta = adanet_beta
     self._use_bias = use_bias
+    self._name = name
 
   @property
   def name(self):
+    if self._name:
+      return self._name
     return "complexity_regularized"
 
   def build_ensemble(self, subnetworks, previous_ensemble_subnetworks, features,

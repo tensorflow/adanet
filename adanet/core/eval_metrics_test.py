@@ -151,7 +151,7 @@ class MetricsTest(tu.AdanetTestCase):
     self.assertEqual(actual, expected)
 
   def test_ensemble_metrics(self):
-    architecture = _Architecture("test_ensemble_candidate")
+    architecture = _Architecture("test_ensemble_candidate", "test_ensembler")
     architecture.add_subnetwork(iteration_number=0, builder_name="b_0_0")
     architecture.add_subnetwork(iteration_number=0, builder_name="b_0_1")
     architecture.add_subnetwork(iteration_number=1, builder_name="b_1_0")

@@ -32,8 +32,9 @@ class _Architecture(object):
   It is serializable and deserializable for persistent storage.
   """
 
-  def __init__(self, ensemble_candidate_name):
+  def __init__(self, ensemble_candidate_name, ensembler_name):
     self._ensemble_candidate_name = ensemble_candidate_name
+    self._ensembler_name = ensembler_name
     self._subnets = []
 
   @property
@@ -44,6 +45,15 @@ class _Architecture(object):
       String name of the ensemble candidate with this architecture.
     """
     return self._ensemble_candidate_name
+
+  @property
+  def ensembler_name(self):
+    """The ensembler's name.
+
+    Returns:
+      String name of the ensembler that constructed the ensemble.
+    """
+    return self._ensembler_name
 
   @property
   def subnetworks(self):
@@ -89,6 +99,7 @@ class _Architecture(object):
 
     ensemble_arch = {
         "ensemble_candidate_name": self.ensemble_candidate_name,
+        "ensembler_name": self.ensembler_name,
         "subnetworks": [],
     }
     for iteration_number, builder_name in self._subnets:
@@ -112,7 +123,8 @@ class _Architecture(object):
     """
 
     ensemble_arch = json.loads(serialized_architecture)
-    architecture = _Architecture(ensemble_arch["ensemble_candidate_name"])
+    architecture = _Architecture(ensemble_arch["ensemble_candidate_name"],
+                                 ensemble_arch["ensembler_name"])
     for subnet in ensemble_arch["subnetworks"]:
       architecture.add_subnetwork(subnet["iteration_number"],
                                   subnet["builder_name"])

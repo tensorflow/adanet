@@ -280,7 +280,7 @@ class _EnsembleBuilder(object):
     """
 
     with tf_compat.v1.variable_scope("ensemble_{}".format(name)):
-      architecture = _Architecture(candidate.name)
+      architecture = _Architecture(candidate.name, ensembler.name)
       previous_subnetworks = []
       subnetwork_builders = []
       previous_ensemble = None

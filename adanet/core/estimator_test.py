@@ -31,6 +31,7 @@ from adanet.core.estimator import Estimator
 from adanet.core.evaluator import Evaluator
 from adanet.core.report_materializer import ReportMaterializer
 from adanet.ensemble import AllStrategy
+from adanet.ensemble import ComplexityRegularizedEnsembler
 from adanet.ensemble import GrowStrategy
 from adanet.ensemble import MixtureWeightType
 from adanet.ensemble import SoloStrategy
@@ -600,6 +601,23 @@ class EstimatorTest(tu.AdanetTestCase):
       },
       {
           "testcase_name":
+              "all_strategy_multiple_ensemblers",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "ensemble_strategies": [AllStrategy()],
+          "ensemblers": [
+              ComplexityRegularizedEnsembler(),
+              ComplexityRegularizedEnsembler(use_bias=True, name="with_bias")
+          ],
+          "max_iteration_steps":
+              200,
+          "want_loss":
+              0.23053232,
+      },
+      {
+          "testcase_name":
               "solo_strategy",
           "subnetwork_generator":
               SimpleGenerator(
@@ -664,6 +682,7 @@ class EstimatorTest(tu.AdanetTestCase):
                      use_bias=True,
                      replicate_ensemble_in_training=False,
                      hooks=None,
+                     ensemblers=None,
                      ensemble_strategies=None,
                      max_steps=300,
                      steps=None,
@@ -672,20 +691,26 @@ class EstimatorTest(tu.AdanetTestCase):
     """Train entire estimator lifecycle using XOR dataset."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
+
+    default_ensembler_kwargs = {
+        "mixture_weight_type": mixture_weight_type,
+        "mixture_weight_initializer": tf_compat.v1.zeros_initializer(),
+        "warm_start_mixture_weights": True,
+        "use_bias": use_bias,
+    }
+    if ensemblers:
+      default_ensembler_kwargs = {}
     estimator = Estimator(
         head=tu.head(),
         subnetwork_generator=subnetwork_generator,
         max_iteration_steps=max_iteration_steps,
-        mixture_weight_type=mixture_weight_type,
-        mixture_weight_initializer=tf_compat.v1.zeros_initializer(),
-        warm_start_mixture_weights=True,
         evaluator=evaluator,
+        ensemblers=ensemblers,
         ensemble_strategies=ensemble_strategies,
         report_materializer=report_materializer,
-        use_bias=use_bias,
         replicate_ensemble_in_training=replicate_ensemble_in_training,
         model_dir=self.test_subdirectory,
-        config=run_config)
+        config=run_config, **default_ensembler_kwargs)
 
     if not train_input_fn:
       train_input_fn = tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS)
