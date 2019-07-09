@@ -307,7 +307,7 @@ class AutoEnsembleEstimator(Estimator):
     worker_wait_timeout_secs: See :class:`adanet.Estimator`.
     model_dir: See :class:`adanet.Estimator`.
     config: See :class:`adanet.Estimator`.
-    clear_ps_when_growing: See :class:`adanet.Estimator`.
+    debug: See :class:`adanet.Estimator`.
 
   Returns:
     An :class:`adanet.AutoEnsembleEstimator` instance.
@@ -332,7 +332,6 @@ class AutoEnsembleEstimator(Estimator):
                worker_wait_timeout_secs=7200,
                model_dir=None,
                config=None,
-               clear_ps_when_growing=True,
                **kwargs):
     subnetwork_generator = _GeneratorFromCandidatePool(candidate_pool,
                                                        logits_fn)
@@ -349,5 +348,4 @@ class AutoEnsembleEstimator(Estimator):
         worker_wait_timeout_secs=worker_wait_timeout_secs,
         model_dir=model_dir,
         config=config,
-        clear_ps_when_growing=clear_ps_when_growing,
         **kwargs)

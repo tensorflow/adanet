@@ -273,7 +273,7 @@ class _HookContextDecorator(tf_compat.SessionRunHook):
 
 
 @contextlib.contextmanager
-def _temp_tf_config(temp_model_dir, clear_ps):
+def _temp_tf_config(temp_model_dir):
   """Temporarily modifies the TF_CONFIG variable for the graph growing phase."""
 
   actual_tf_config_string = os.environ.get("TF_CONFIG", "")
@@ -285,8 +285,7 @@ def _temp_tf_config(temp_model_dir, clear_ps):
   temp_tf_config["model_dir"] = temp_model_dir
   cluster_spec = None
   if "cluster" in temp_tf_config:
-    if clear_ps:
-      temp_tf_config["cluster"].pop("ps", None)
+    temp_tf_config["cluster"].pop("ps", None)
     temp_tf_config["cluster"].pop("worker", None)
     cluster_spec = temp_tf_config["cluster"]
   # If cluster_spec is empty or None, set the current task to have type "worker"
@@ -459,10 +458,6 @@ class Estimator(tf.estimator.Estimator):
       is :code:`None`, this will not save anything. If :code:`None` or
       empty string, defaults to :code:`<model_dir>/report`.
     config: :class:`RunConfig` object to configure the runtime settings.
-    clear_ps_when_growing: Whether to clear the parameter servers from the
-      TF_CONFIG during the graph growing phase. Clearing the parameter servers
-      may cause partitioned variables to not be restored correctly when the
-      partitoning depends on the number of parameter servers.
     debug: Boolean to enable debug mode which will check features and labels
       for Infs and NaNs.
     **kwargs: Extra keyword args passed to the parent.
@@ -504,7 +499,6 @@ class Estimator(tf.estimator.Estimator):
                model_dir=None,
                report_dir=None,
                config=None,
-               clear_ps_when_growing=True,
                debug=False,
                **kwargs):
     if subnetwork_generator is None:
@@ -537,7 +531,6 @@ class Estimator(tf.estimator.Estimator):
     self._max_worker_delay_secs = max_worker_delay_secs
     self._worker_wait_secs = worker_wait_secs
     self._worker_wait_timeout_secs = worker_wait_timeout_secs
-    self._clear_ps_when_growing = clear_ps_when_growing
 
     self._evaluation_name = None
 
@@ -846,7 +839,7 @@ class Estimator(tf.estimator.Estimator):
     # be unique. So we use the UTC time when creating it.
     time_in_millis = int(time.time() * 1000)
     temp_model_sub_dir = os.path.join(temp_model_dir, str(time_in_millis))
-    with _temp_tf_config(temp_model_sub_dir, self._clear_ps_when_growing):
+    with _temp_tf_config(temp_model_sub_dir):
       temp_run_config = self._create_temp_run_config(temp_model_sub_dir)
       self._prepare_next_iteration_state = self._Keys.EVALUATE_ENSEMBLES
       if self._evaluator:
