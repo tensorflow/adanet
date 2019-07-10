@@ -1361,6 +1361,67 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
             "adanet_weighted_ensemble/subnetwork_0", ensemble_subdir),
         places=3)
 
+  def test_disable_summaries(self):
+    """Tests that summaries can be disabled for ensembles and subnetworks."""
+
+    run_config = tf.estimator.RunConfig(
+        tf_random_seed=42, log_step_count_steps=2, save_summary_steps=2)
+    subnetwork_generator = SimpleGenerator(
+        [_DNNBuilder("dnn", mixture_weight_learning_rate=.001)])
+    report_materializer = ReportMaterializer(
+        input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
+    estimator = Estimator(
+        head=tu.head(),
+        subnetwork_generator=subnetwork_generator,
+        report_materializer=report_materializer,
+        mixture_weight_type=MixtureWeightType.MATRIX,
+        mixture_weight_initializer=tf_compat.v1.zeros_initializer(),
+        warm_start_mixture_weights=True,
+        max_iteration_steps=10,
+        use_bias=True,
+        config=run_config,
+        model_dir=self.test_subdirectory,
+        enable_ensemble_summaries=False,
+        enable_subnetwork_summaries=False,
+    )
+    train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
+    estimator.train(input_fn=train_input_fn, max_steps=3)
+
+    ensemble_loss = 1.
+    self.assertAlmostEqual(
+        ensemble_loss,
+        _check_eventfile_for_keyword("loss", self.test_subdirectory),
+        places=3)
+    self.assertIsNotNone(
+        _check_eventfile_for_keyword("global_step/sec", self.test_subdirectory))
+    self.assertEqual(
+        0.,
+        _check_eventfile_for_keyword("iteration/adanet/iteration",
+                                     self.test_subdirectory))
+
+    subnetwork_subdir = os.path.join(self.test_subdirectory,
+                                     "subnetwork/t0_dnn")
+    with self.assertRaises(ValueError):
+      _check_eventfile_for_keyword("scalar", subnetwork_subdir)
+    with self.assertRaises(ValueError):
+      _check_eventfile_for_keyword("image/image/0", subnetwork_subdir)
+    with self.assertRaises(ValueError):
+      _check_eventfile_for_keyword("nested/scalar", subnetwork_subdir)
+
+    ensemble_subdir = os.path.join(
+        self.test_subdirectory, "ensemble/t0_dnn_grow_complexity_regularized")
+    with self.assertRaises(ValueError):
+      _check_eventfile_for_keyword(
+          "adanet_loss/adanet/adanet_weighted_ensemble", ensemble_subdir)
+    with self.assertRaises(ValueError):
+      _check_eventfile_for_keyword(
+          "complexity_regularization/adanet/adanet_weighted_ensemble",
+          ensemble_subdir)
+    with self.assertRaises(ValueError):
+      _check_eventfile_for_keyword(
+          "mixture_weight_norms/adanet/"
+          "adanet_weighted_ensemble/subnetwork_0", ensemble_subdir)
+
   @parameterized.named_parameters(
       {
           "testcase_name": "none_metrics",

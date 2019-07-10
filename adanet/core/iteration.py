@@ -133,7 +133,9 @@ class _IterationBuilder(object):
                placement_strategy=distributed.ReplicationStrategy(),
                replicate_ensemble_in_training=False,
                use_tpu=False,
-               debug=False):
+               debug=False,
+               enable_ensemble_summaries=True,
+               enable_subnetwork_summaries=True):
     """Creates an `_IterationBuilder` instance.
 
     Args:
@@ -151,6 +153,12 @@ class _IterationBuilder(object):
       use_tpu: Whether AdaNet is running on TPU.
       debug: Boolean to enable debug mode which will check features and labels
         for Infs and NaNs.
+      enable_ensemble_summaries: Whether to record summaries to display in
+        TensorBoard for each ensemble candidate. Disable to reduce memory and
+        disk usage per run.
+      enable_subnetwork_summaries: Whether to record summaries to display in
+        TensorBoard for each subnetwork. Disable to reduce memory and disk usage
+        per run.
 
     Returns:
       An `_IterationBuilder` object.
@@ -165,6 +173,8 @@ class _IterationBuilder(object):
     self._replicate_ensemble_in_training = replicate_ensemble_in_training
     self._use_tpu = use_tpu
     self._debug = debug
+    self._enable_ensemble_summaries = enable_ensemble_summaries
+    self._enable_subnetwork_summaries = enable_subnetwork_summaries
     super(_IterationBuilder, self).__init__()
 
   def _check_numerics(self, features, labels):
@@ -213,7 +223,6 @@ class _IterationBuilder(object):
                       labels=None,
                       previous_ensemble_summary=None,
                       previous_ensemble_spec=None,
-                      skip_summaries=False,
                       rebuilding=False,
                       rebuilding_ensembler_name=None):
     """Builds and returns AdaNet iteration t.
@@ -236,8 +245,6 @@ class _IterationBuilder(object):
       labels: `Tensor` of labels. Can be `None`.
       previous_ensemble_summary: The `adanet.Summary` for the previous ensemble.
       previous_ensemble_spec: Optional `_EnsembleSpec` for iteration t-1.
-      skip_summaries: Whether to skip creating the summary ops when building the
-        `_Iteration`.
       rebuilding: Boolean whether the iteration is being rebuilt only to restore
         the previous best subnetworks and ensembles.
       rebuilding_ensembler_name: Optional ensembler to restrict to, only
@@ -277,7 +284,7 @@ class _IterationBuilder(object):
     features, labels = self._check_numerics(features, labels)
 
     training = mode == tf.estimator.ModeKeys.TRAIN
-    skip_summaries = mode == tf.estimator.ModeKeys.PREDICT
+    skip_summaries = mode == tf.estimator.ModeKeys.PREDICT or rebuilding
     with tf_compat.v1.variable_scope("iteration_{}".format(iteration_number)):
       # Iteration step to use instead of global step.
       iteration_step = tf_compat.v1.get_variable(
@@ -308,7 +315,8 @@ class _IterationBuilder(object):
             summary=previous_ensemble_summary,
             is_previous_best=True)
         candidates.append(previous_best_candidate)
-        summaries.append(previous_ensemble_summary)
+        if self._enable_ensemble_summaries:
+          summaries.append(previous_ensemble_summary)
 
         # Generate subnetwork reports.
         if mode == tf.estimator.ModeKeys.EVAL:
@@ -329,6 +337,7 @@ class _IterationBuilder(object):
         seen_builder_names[subnetwork_builder.name] = True
       subnetwork_specs = []
       num_subnetworks = len(subnetwork_builders)
+      skip_summary = skip_summaries or not self._enable_subnetwork_summaries
       for i, subnetwork_builder in enumerate(subnetwork_builders):
         if not self._placement_strategy.should_build_subnetwork(
             num_subnetworks, i) and not rebuilding:
@@ -339,8 +348,9 @@ class _IterationBuilder(object):
           subnetwork_summary = self._summary_maker(
               namespace="subnetwork",
               scope=subnetwork_name,
-              skip_summary=skip_summaries or rebuilding)
-          summaries.append(subnetwork_summary)
+              skip_summary=skip_summary)
+          if not skip_summary:
+            summaries.append(subnetwork_summary)
           logging.info("%s subnetwork '%s'",
                        "Rebuilding" if rebuilding else "Building",
                        subnetwork_builder.name)
@@ -353,32 +363,32 @@ class _IterationBuilder(object):
               mode=builder_mode,
               labels=labels,
               previous_ensemble=previous_ensemble)
-          subnetwork_specs.append(subnetwork_spec)
-          # Workers that don't build ensembles need a dummy candidate in order
-          # to train the subnetwork.
-          # Because only ensembles can be considered candidates, we need to
-          # convert the subnetwork into a dummy ensemble and subsequently a
-          # dummy candidate. However, this dummy candidate is never considered a
-          # true candidate during candidate evaluation and selection.
-          # TODO: Eliminate need for candidates.
-          if not self._placement_strategy.should_build_ensemble(
-              num_subnetworks) and not rebuilding:
-            dummy_candidate = self._candidate_builder.build_candidate(
-                # pylint: disable=protected-access
-                ensemble_spec=ensemble_builder_lib._EnsembleSpec(
-                    name=subnetwork_name,
-                    ensemble=None,
-                    architecture=None,
-                    subnetwork_builders=subnetwork_builders,
-                    predictions=subnetwork_spec.predictions,
-                    loss=subnetwork_spec.loss,
-                    adanet_loss=0.),
-                # pylint: enable=protected-access
-                training=training,
-                iteration_step=iteration_step_tensor,
-                summary=subnetwork_summary,
-                track_moving_average=False)
-            candidates.append(dummy_candidate)
+        subnetwork_specs.append(subnetwork_spec)
+        # Workers that don't build ensembles need a dummy candidate in order
+        # to train the subnetwork.
+        # Because only ensembles can be considered candidates, we need to
+        # convert the subnetwork into a dummy ensemble and subsequently a
+        # dummy candidate. However, this dummy candidate is never considered a
+        # true candidate during candidate evaluation and selection.
+        # TODO: Eliminate need for candidates.
+        if not self._placement_strategy.should_build_ensemble(
+            num_subnetworks) and not rebuilding:
+          dummy_candidate = self._candidate_builder.build_candidate(
+              # pylint: disable=protected-access
+              ensemble_spec=ensemble_builder_lib._EnsembleSpec(
+                  name=subnetwork_name,
+                  ensemble=None,
+                  architecture=None,
+                  subnetwork_builders=subnetwork_builders,
+                  predictions=subnetwork_spec.predictions,
+                  loss=subnetwork_spec.loss,
+                  adanet_loss=0.),
+              # pylint: enable=protected-access
+              training=training,
+              iteration_step=iteration_step_tensor,
+              summary=subnetwork_summary,
+              track_moving_average=False)
+          candidates.append(dummy_candidate)
         # Generate subnetwork reports.
         if mode != tf.estimator.ModeKeys.PREDICT:
           subnetwork_report = subnetwork_builder.build_subnetwork_report()
@@ -392,6 +402,7 @@ class _IterationBuilder(object):
           subnetwork_reports[subnetwork_builder.name] = subnetwork_report
 
       # Create (ensemble_candidate*ensembler) ensembles.
+      skip_summary = skip_summaries or not self._enable_ensemble_summaries
       seen_ensemble_names = {}
       for ensembler in self._ensemblers:
         if rebuilding and rebuilding_ensembler_name and (
@@ -411,8 +422,9 @@ class _IterationBuilder(object):
           summary = self._summary_maker(
               namespace="ensemble",
               scope=ensemble_name,
-              skip_summary=skip_summaries or rebuilding)
-          summaries.append(summary)
+              skip_summary=skip_summary)
+          if not skip_summary:
+            summaries.append(summary)
           ensemble_spec = self._ensemble_builder.build_ensemble_spec(
               name=ensemble_name,
               candidate=ensemble_candidate,
@@ -477,8 +489,9 @@ class _IterationBuilder(object):
           continue
         training_chief_hooks += spec.train_op.chief_hooks or ()
         training_hooks += spec.train_op.hooks or ()
+      # Iteration summaries.
       summary = self._summary_maker(
-          namespace=None, scope=None, skip_summary=skip_summaries or rebuilding)
+          namespace=None, scope=None, skip_summary=skip_summaries)
       summaries.append(summary)
       with summary.current_scope():
         summary.scalar("iteration/adanet/iteration", iteration_number)

@@ -460,6 +460,12 @@ class Estimator(tf.estimator.Estimator):
     config: :class:`RunConfig` object to configure the runtime settings.
     debug: Boolean to enable debug mode which will check features and labels
       for Infs and NaNs.
+    enable_ensemble_summaries: Whether to record summaries to display in
+      TensorBoard for each ensemble candidate. Disable to reduce memory and disk
+      usage per run.
+    enable_subnetwork_summaries: Whether to record summaries to display in
+      TensorBoard for each subnetwork. Disable to reduce memory and disk usage
+      per run.
     **kwargs: Extra keyword args passed to the parent.
 
   Returns:
@@ -500,6 +506,8 @@ class Estimator(tf.estimator.Estimator):
                report_dir=None,
                config=None,
                debug=False,
+               enable_ensemble_summaries=True,
+               enable_subnetwork_summaries=True,
                **kwargs):
     if subnetwork_generator is None:
       raise ValueError("subnetwork_generator can't be None.")
@@ -607,7 +615,9 @@ class Estimator(tf.estimator.Estimator):
         placement_strategy,
         replicate_ensemble_in_training,
         use_tpu=self._use_tpu,
-        debug=debug)
+        debug=debug,
+        enable_ensemble_summaries=enable_ensemble_summaries,
+        enable_subnetwork_summaries=enable_subnetwork_summaries)
     self._ensemble_strategies = ensemble_strategies or [GrowStrategy()]
 
     report_dir = report_dir or os.path.join(self._model_dir, "report")
@@ -1266,7 +1276,6 @@ class Estimator(tf.estimator.Estimator):
           config=config,
           previous_ensemble_summary=previous_ensemble_summary,
           previous_ensemble_spec=previous_ensemble_spec,
-          skip_summaries=True,
           rebuilding=True,
           rebuilding_ensembler_name=architecture.ensembler_name)
       max_candidates = 2 if previous_ensemble_spec else 1
@@ -1498,8 +1507,7 @@ class Estimator(tf.estimator.Estimator):
           mode=mode,
           config=config,
           previous_ensemble_summary=previous_ensemble_summary,
-          previous_ensemble_spec=previous_ensemble_spec,
-          skip_summaries=True)
+          previous_ensemble_spec=previous_ensemble_spec)
 
     # Variable which allows us to read the current iteration from a checkpoint.
     # This must be created here so it is available when calling

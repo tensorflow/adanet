@@ -64,6 +64,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
     eval_batch_size: See :class:`tf.contrib.tpu.TPUEstimator`.
     embedding_config_spec: See :class:`tf.contrib.tpu.TPUEstimator`.
     debug: See :class:`adanet.Estimator`.
+    enable_ensemble_summaries: See :class:`adanet.Estimator`.
+    enable_subnetwork_summaries: See :class:`adanet.Estimator`.
     **kwargs: Extra keyword args passed to the parent.
   """
 
@@ -87,6 +89,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                eval_batch_size=None,
                embedding_config_spec=None,
                debug=False,
+               enable_ensemble_summaries=True,
+               enable_subnetwork_summaries=True,
                **kwargs):
 
     if tf_compat.version_greater_or_equal("2.0.0"):
@@ -127,6 +131,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         eval_batch_size=self._eval_batch_size,
         embedding_config_spec=self._embedding_config_spec,
         debug=debug,
+        enable_ensemble_summaries=enable_ensemble_summaries,
+        enable_subnetwork_summaries=enable_subnetwork_summaries,
         **kwargs)
 
   # Yields predictions on CPU even when use_tpu=True.

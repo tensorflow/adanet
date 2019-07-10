@@ -308,6 +308,9 @@ class AutoEnsembleEstimator(Estimator):
     model_dir: See :class:`adanet.Estimator`.
     config: See :class:`adanet.Estimator`.
     debug: See :class:`adanet.Estimator`.
+    enable_ensemble_summaries: See :class:`adanet.Estimator`.
+    enable_subnetwork_summaries: See :class:`adanet.Estimator`.
+    **kwargs: Extra keyword args passed to the parent.
 
   Returns:
     An :class:`adanet.AutoEnsembleEstimator` instance.
@@ -332,6 +335,9 @@ class AutoEnsembleEstimator(Estimator):
                worker_wait_timeout_secs=7200,
                model_dir=None,
                config=None,
+               debug=False,
+               enable_ensemble_summaries=True,
+               enable_subnetwork_summaries=True,
                **kwargs):
     subnetwork_generator = _GeneratorFromCandidatePool(candidate_pool,
                                                        logits_fn)
@@ -348,4 +354,7 @@ class AutoEnsembleEstimator(Estimator):
         worker_wait_timeout_secs=worker_wait_timeout_secs,
         model_dir=model_dir,
         config=config,
+        debug=debug,
+        enable_ensemble_summaries=enable_ensemble_summaries,
+        enable_subnetwork_summaries=enable_subnetwork_summaries,
         **kwargs)
