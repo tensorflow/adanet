@@ -49,6 +49,7 @@ class _EnsembleSpec(
         "architecture",
         "subnetwork_builders",
         "predictions",
+        "step",
         "loss",
         "adanet_loss",
         "train_op",
@@ -64,6 +65,8 @@ class _EnsembleSpec(
     subnetwork_builders: The Iterable of candidate subnetworks for the current
       iteration.
     predictions: Predictions `Tensor` or dict of `Tensor`.
+    step: `tf.Variable` step counter representing the number of steps this
+      ensemble trained for. Resets at every AdaNet iteration.
     loss: Loss `Tensor` as defined by the surrogate loss function Phi in
       Equations (4), (5), and (6). Must be either scalar, or with shape `[1]`.
     adanet_loss: Loss `Tensor` as defined by F(w) in Equation (4). Must be
@@ -91,6 +94,7 @@ class _EnsembleSpec(
               architecture,
               subnetwork_builders,
               predictions,
+              step,
               loss=None,
               adanet_loss=None,
               train_op=None,
@@ -103,6 +107,7 @@ class _EnsembleSpec(
         architecture=architecture,
         subnetwork_builders=subnetwork_builders,
         predictions=predictions,
+        step=step,
         loss=loss,
         adanet_loss=adanet_loss,
         train_op=train_op,
@@ -251,7 +256,6 @@ class _EnsembleBuilder(object):
                           summary,
                           features,
                           mode,
-                          iteration_step,
                           iteration_number,
                           labels=None,
                           previous_ensemble_spec=None):
@@ -267,8 +271,6 @@ class _EnsembleBuilder(object):
       summary: A `_ScopedSummary` instance for recording ensemble summaries.
       features: Input `dict` of `Tensor` objects.
       mode: Estimator `ModeKeys` indicating training, evaluation, or inference.
-      iteration_step: Integer `Tensor` representing the step since the beginning
-        of the current iteration, as opposed to the global step.
       iteration_number: Integer current iteration number.
       labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
         (for multi-head).
@@ -280,6 +282,16 @@ class _EnsembleBuilder(object):
     """
 
     with tf_compat.v1.variable_scope("ensemble_{}".format(name)):
+      step = tf_compat.v1.get_variable(
+          "step",
+          shape=[],
+          initializer=tf_compat.v1.zeros_initializer(),
+          trainable=False,
+          dtype=tf.int64)
+      # Convert to tensor so that users cannot mutate it.
+      step_tensor = tf.convert_to_tensor(value=step)
+      with summary.current_scope():
+        summary.scalar("iteration_step/adanet/iteration_step", step_tensor)
       architecture = _Architecture(candidate.name, ensembler.name)
       previous_subnetworks = []
       subnetwork_builders = []
@@ -328,7 +340,7 @@ class _EnsembleBuilder(object):
             labels=labels,
             logits_dimension=self._head.logits_dimension,
             training=mode == tf.estimator.ModeKeys.TRAIN,
-            iteration_step=iteration_step,
+            iteration_step=step_tensor,
             summary=summary,
             previous_ensemble=previous_ensemble)
       ensemble_var_list = _new_trainable_variables(before_var_list)
@@ -386,7 +398,7 @@ class _EnsembleBuilder(object):
                       var_list=ensemble_var_list,
                       logits=ensemble.logits,
                       labels=labels,
-                      iteration_step=iteration_step,
+                      iteration_step=step_tensor,
                       summary=summary))
             else:
               train_op = _to_train_op_spec(
@@ -395,7 +407,7 @@ class _EnsembleBuilder(object):
                       loss=adanet_loss,
                       var_list=ensemble_var_list,
                       labels=labels,
-                      iteration_step=iteration_step,
+                      iteration_step=step_tensor,
                       summary=summary,
                       previous_ensemble=previous_ensemble))
     return _EnsembleSpec(
@@ -404,6 +416,7 @@ class _EnsembleBuilder(object):
         subnetwork_builders=subnetwork_builders,
         ensemble=ensemble,
         predictions=estimator_spec.predictions,
+        step=step,
         loss=ensemble_loss,
         adanet_loss=adanet_loss,
         train_op=train_op,
@@ -432,6 +445,8 @@ class _SubnetworkSpec(
         "subnetwork",
         "builder",
         "predictions",
+        "is_training",
+        "step",
         "loss",
         "train_op",
         "eval_metrics",
@@ -443,6 +458,8 @@ class _SubnetworkSpec(
     subnetwork: The `adanet.subnetwork.Subnetwork` for this spec.
     builder: The `adanet.subnetwork.Builder` that produced `subnetwork`.
     predictions: Predictions `Tensor` or dict of `Tensor`.
+    step: `tf.Variable` step counter representing the number of steps this
+      subnetwork trained for. Resets at every AdaNet iteration.
     loss: Loss `Tensor` as computed by the `Head`. Must be either scalar, or
       with shape `[1]`.
     train_op: Candidate subnetwork's `TrainOpSpec`.
@@ -463,6 +480,8 @@ class _SubnetworkSpec(
               subnetwork,
               builder,
               predictions,
+              step,
+              is_training,
               loss=None,
               train_op=None,
               eval_metrics=None):
@@ -472,6 +491,8 @@ class _SubnetworkSpec(
         subnetwork=subnetwork,
         builder=builder,
         predictions=predictions,
+        step=step,
+        is_training=is_training,
         loss=loss,
         train_op=train_op,
         eval_metrics=eval_metrics)
@@ -485,6 +506,7 @@ class _SubnetworkManager(object):
 
   Args:
     head: A `tf.contrib.estimator.Head` instance.
+    max_steps: Maximum number steps to train candidate subnetworks.
     metric_fn: A function which should obey the following signature:
       - Args: can only have following three arguments in any order:
         * predictions: Predictions `Tensor` or dict of `Tensor` created by given
@@ -502,18 +524,23 @@ class _SubnetworkManager(object):
 
   Returns:
     An `_SubnetworkManager` instance.
+
+  Raises:
+    ValueError: If `max_steps` is <= 0.
   """
 
-  def __init__(self, head, metric_fn=None, use_tpu=False):
+  def __init__(self, head, max_steps=None, metric_fn=None, use_tpu=False):
+    if max_steps is not None and max_steps <= 0:
+      raise ValueError("max_steps must be > 0 or None")
     _verify_metric_fn_args(metric_fn)
     self._head = head
+    self._max_steps = max_steps
     self._metric_fn = metric_fn
     self._use_tpu = use_tpu
 
   def build_subnetwork_spec(self,
                             name,
                             subnetwork_builder,
-                            iteration_step,
                             summary,
                             features,
                             mode,
@@ -525,8 +552,6 @@ class _SubnetworkManager(object):
       name: String name of the subnetwork.
       subnetwork_builder: A `adanet.Builder` instance which defines how to train
         the subnetwork and ensemble mixture weights.
-      iteration_step: Integer `Tensor` representing the step since the beginning
-        of the current iteration, as opposed to the global step.
       summary: A `_ScopedSummary` instance for recording ensemble summaries.
       features: Input `dict` of `Tensor` objects.
       mode: Estimator's `ModeKeys`.
@@ -541,12 +566,23 @@ class _SubnetworkManager(object):
 
     before_var_list = tf_compat.v1.trainable_variables()
     with tf_compat.v1.variable_scope("subnetwork_{}".format(name)):
+      step = tf_compat.v1.get_variable(
+          "step",
+          shape=[],
+          initializer=tf_compat.v1.zeros_initializer(),
+          trainable=False,
+          dtype=tf.int64)
+
+      # Convert to tensor so that users cannot mutate it.
+      step_tensor = tf.convert_to_tensor(value=step)
+      with summary.current_scope():
+        summary.scalar("iteration_step/adanet/iteration_step", step_tensor)
       build_subnetwork = functools.partial(
           subnetwork_builder.build_subnetwork,
           features=features,
           logits_dimension=self._head.logits_dimension,
           training=mode == tf.estimator.ModeKeys.TRAIN,
-          iteration_step=iteration_step,
+          iteration_step=step_tensor,
           summary=summary,
           previous_ensemble=previous_ensemble)
       # Check which args are in the implemented build_subnetwork method
@@ -579,6 +615,18 @@ class _SubnetworkManager(object):
         with summary.current_scope():
           summary.scalar("loss", estimator_spec.loss)
 
+      if self._max_steps is not None:
+        # Train this candidate for `max_steps` steps.
+        # NOTE: During training, the iteration step gets incremented at the very
+        # end of the computation graph, so we need to account for that here.
+        is_training = tf.less(
+            step_tensor + 1 if mode == tf.estimator.ModeKeys.TRAIN else 0,
+            self._max_steps,
+            name="is_training")
+      else:
+        # Train this candidate forever.
+        is_training = tf.constant(True, name="is_training")
+
       # Create train ops for training subnetworks and ensembles.
       train_op = None
       if mode == tf.estimator.ModeKeys.TRAIN and subnetwork_builder:
@@ -592,7 +640,7 @@ class _SubnetworkManager(object):
                   loss=estimator_spec.loss,
                   var_list=subnetwork_var_list,
                   labels=labels,
-                  iteration_step=iteration_step,
+                  iteration_step=step_tensor,
                   summary=summary,
                   previous_ensemble=previous_ensemble))
     return _SubnetworkSpec(
@@ -601,5 +649,7 @@ class _SubnetworkManager(object):
         builder=subnetwork_builder,
         predictions=estimator_spec.predictions,
         loss=estimator_spec.loss,
+        step=step,
+        is_training=is_training,
         train_op=train_op,
         eval_metrics=subnetwork_metrics.eval_metrics_tuple())

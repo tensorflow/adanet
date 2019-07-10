@@ -81,13 +81,14 @@ class ArchitectureTest(parameterized.TestCase, tf.test.TestCase):
     self.assertEqual("dummy_ensembler_name", arch.ensembler_name)
     self.assertEqual(((0, ("linear", "dnn")), (1, ("dnn",))),
                      arch.subnetworks_grouped_by_iteration)
-    serialized = arch.serialize()
+    global_step = 100
+    serialized = arch.serialize(global_step)
     self.assertEqual(
         '{"ensemble_candidate_name": "foo", "ensembler_name": '
-        '"dummy_ensembler_name", "subnetworks": [{"builder_name": '
-        '"linear", "iteration_number": 0}, {"builder_name": "dnn", '
-        '"iteration_number": 0}, {"builder_name": "dnn", "iteration_number": 1}]}',
-        serialized)
+        '"dummy_ensembler_name", "global_step": 100, "subnetworks": '
+        '[{"builder_name": "linear", "iteration_number": 0}, {"builder_name": '
+        '"dnn", "iteration_number": 0}, {"builder_name": "dnn", '
+        '"iteration_number": 1}]}', serialized)
     deserialized_arch = _Architecture.deserialize(serialized)
     self.assertEqual(arch.ensemble_candidate_name,
                      deserialized_arch.ensemble_candidate_name)
@@ -95,6 +96,7 @@ class ArchitectureTest(parameterized.TestCase, tf.test.TestCase):
                      deserialized_arch.ensembler_name)
     self.assertEqual(arch.subnetworks_grouped_by_iteration,
                      deserialized_arch.subnetworks_grouped_by_iteration)
+    self.assertEqual(global_step, deserialized_arch.global_step)
 
 
 if __name__ == "__main__":

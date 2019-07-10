@@ -367,6 +367,7 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
         multi_head=multi_head)
 
     with tf.Graph().as_default() as g:
+      tf_compat.v1.train.get_or_create_global_step()
       # A trainable variable to later verify that creating models does not
       # affect the global variables collection.
       _ = tf_compat.v1.get_variable("some_var", 0., trainable=True)
@@ -380,7 +381,6 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
       subnetwork_spec = subnetwork_manager.build_subnetwork_spec(
           name="test",
           subnetwork_builder=subnetwork_builder,
-          iteration_step=tf_compat.v1.train.get_or_create_global_step(),
           summary=_FakeSummary(),
           features=features,
           mode=mode,
@@ -405,7 +405,6 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
           summary=_FakeSummary(),
           features=features,
           iteration_number=1,
-          iteration_step=tf_compat.v1.train.get_or_create_global_step(),
           labels=labels,
           mode=mode)
 
@@ -479,6 +478,23 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
             want_adanet_loss, sess.run(ensemble_spec.adanet_loss), places=3)
 
 
+class SubnetworkManagerTest(tu.AdanetTestCase):
+
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "negative_max_steps",
+          "max_steps": -1,
+      }, {
+          "testcase_name": "zero_max_steps",
+          "max_steps": 0,
+      })
+  def test_init_errors(self, max_steps=None):
+    head = binary_class_head.BinaryClassHead(loss_reduction=tf_compat.SUM)
+    with self.test_session():
+      with self.assertRaises(ValueError):
+        _SubnetworkManager(head, max_steps=max_steps)
+
+
 def _make_metrics(sess,
                   metric_fn,
                   mode=tf.estimator.ModeKeys.EVAL,
@@ -497,7 +513,7 @@ def _make_metrics(sess,
     labels = tf.constant([0, 1])
   features = {"x": tf.constant([[1.], [2.]])}
   builder = _EnsembleBuilder(head, metric_fn=metric_fn)
-  subnetwork_manager = _SubnetworkManager(head, metric_fn)
+  subnetwork_manager = _SubnetworkManager(head, metric_fn=metric_fn)
   subnetwork_builder = _Builder(
       lambda unused0, unused1: tf.no_op(),
       lambda unused0, unused1: tf.no_op(),
@@ -506,7 +522,6 @@ def _make_metrics(sess,
   subnetwork_spec = subnetwork_manager.build_subnetwork_spec(
       name="test",
       subnetwork_builder=subnetwork_builder,
-      iteration_step=1,
       summary=_FakeSummary(),
       features=features,
       mode=mode,
@@ -520,7 +535,6 @@ def _make_metrics(sess,
       summary=_FakeSummary(),
       features=features,
       iteration_number=0,
-      iteration_step=1,
       labels=labels,
       mode=mode)
   subnetwork_metric_ops = call_eval_metrics(subnetwork_spec.eval_metrics)

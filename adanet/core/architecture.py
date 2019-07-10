@@ -32,9 +32,10 @@ class _Architecture(object):
   It is serializable and deserializable for persistent storage.
   """
 
-  def __init__(self, ensemble_candidate_name, ensembler_name):
+  def __init__(self, ensemble_candidate_name, ensembler_name, global_step=None):
     self._ensemble_candidate_name = ensemble_candidate_name
     self._ensembler_name = ensembler_name
+    self._global_step = global_step
     self._subnets = []
 
   @property
@@ -54,6 +55,16 @@ class _Architecture(object):
       String name of the ensembler that constructed the ensemble.
     """
     return self._ensembler_name
+
+  @property
+  def global_step(self):
+    """The global step when this architecture was serialized.
+
+    Returns:
+      Integer global step.
+    """
+
+    return self._global_step
 
   @property
   def subnetworks(self):
@@ -94,11 +105,13 @@ class _Architecture(object):
     """
     self._subnets.append((iteration_number, builder_name))
 
-  def serialize(self):
+  def serialize(self, global_step):
     """Returns a string serialization of this object."""
 
+    assert global_step
     ensemble_arch = {
         "ensemble_candidate_name": self.ensemble_candidate_name,
+        "global_step": global_step,
         "ensembler_name": self.ensembler_name,
         "subnetworks": [],
     }
@@ -124,7 +137,8 @@ class _Architecture(object):
 
     ensemble_arch = json.loads(serialized_architecture)
     architecture = _Architecture(ensemble_arch["ensemble_candidate_name"],
-                                 ensemble_arch["ensembler_name"])
+                                 ensemble_arch["ensembler_name"],
+                                 ensemble_arch["global_step"])
     for subnet in ensemble_arch["subnetworks"]:
       architecture.add_subnetwork(subnet["iteration_number"],
                                   subnet["builder_name"])

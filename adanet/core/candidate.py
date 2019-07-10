@@ -28,29 +28,20 @@ from tensorflow.python.training import moving_averages
 
 
 class _Candidate(
-    collections.namedtuple(
-        "_Candidate",
-        ["ensemble_spec", "adanet_loss", "is_training", "is_previous_best"])):
+    collections.namedtuple("_Candidate", ["ensemble_spec", "adanet_loss"])):
   """An AdaNet candidate.
 
   A `_Candidate` tracks the progress of a candidate subnetwork's training
   within an ensemble, as well as their AdaNet loss over time.
   """
 
-  def __new__(cls,
-              ensemble_spec,
-              adanet_loss,
-              is_training,
-              is_previous_best=False):
+  def __new__(cls, ensemble_spec, adanet_loss):
     """Creates a validated `_Candidate` instance.
 
     Args:
       ensemble_spec: The `_EnsembleSpec` instance to track.
       adanet_loss: float `Tensor` representing the ensemble's AdaNet loss on the
         training set as defined in Equation (4) of the paper.
-      is_training: bool `Tensor` indicating if training is ongoing.
-      is_previous_best: bool identifying whether this ensemble came from the
-        previous iteration.
 
     Returns:
       A validated `_Candidate` object.
@@ -63,47 +54,31 @@ class _Candidate(
       raise ValueError("ensemble_spec is required")
     if adanet_loss is None:
       raise ValueError("adanet_loss is required")
-    if is_training is None:
-      raise ValueError("is_training is required")
     return super(_Candidate, cls).__new__(
-        cls,
-        ensemble_spec=ensemble_spec,
-        adanet_loss=adanet_loss,
-        is_training=is_training,
-        is_previous_best=is_previous_best)
+        cls, ensemble_spec=ensemble_spec, adanet_loss=adanet_loss)
 
 
 class _CandidateBuilder(object):
   """Builds AdaNet candidates."""
 
-  def __init__(self, max_steps, adanet_loss_decay=.999):
+  def __init__(self, adanet_loss_decay=.999):
     """Creates a `_CandidateBuilder` instance.
 
     Args:
-      max_steps: Total number steps to train this candidates.
       adanet_loss_decay: Float. The adanet loss is tracked as an exponential
         moving average, so this is the decay rate to use.
 
     Returns:
       A `_CandidateBuilder` object.
-
-    Raises:
-      ValueError: If `max_steps` is <= 0.
     """
 
-    if max_steps is not None and max_steps <= 0:
-      raise ValueError("max_steps must be > 0 or None")
-
-    self._max_steps = max_steps
     self._adanet_loss_decay = adanet_loss_decay
     super(_CandidateBuilder, self).__init__()
 
   def build_candidate(self,
                       ensemble_spec,
                       training,
-                      iteration_step,
                       summary,
-                      is_previous_best=False,
                       track_moving_average=True):
     """Builds and returns an AdaNet candidate.
 
@@ -111,12 +86,7 @@ class _CandidateBuilder(object):
       ensemble_spec: `_EnsembleSpec` instance to track.
       training: A python boolean indicating whether the graph is in training
         mode or prediction mode.
-      iteration_step: Integer `Tensor` representing the step since the beginning
-        of the current iteration, as opposed to the global step.
       summary: A `Summary` for recording summaries for TensorBoard.
-      is_previous_best: Bool identifying whether this ensemble came from a
-        previous iteration. If `True`, `is_training` will be `False` since its
-        weights are frozen.
       track_moving_average: Bool whether to track the moving average of the
         ensemble's adanet loss.
 
@@ -132,21 +102,6 @@ class _CandidateBuilder(object):
         adanet_loss = tf_compat.v1.get_variable(
             "adanet_loss", initializer=0., trainable=False)
 
-      if is_previous_best:
-        # This candidate is frozen, so it is already done training.
-        is_training = tf.constant(False, name="is_training")
-      elif self._max_steps is not None:
-        # Train this candidate for `max_steps` steps.
-        # NOTE: During training, the iteration step gets incremented at the very
-        # end of the computation graph, so we need to account for that here.
-        is_training = tf.less(
-            iteration_step + 1 if training else 0,
-            self._max_steps,
-            name="is_training")
-      else:
-        # Train this candidate forever.
-        is_training = tf.constant(True, name="is_training")
-
       if training and track_moving_average:
         update_adanet_loss_op = moving_averages.assign_moving_average(
             adanet_loss,
@@ -158,8 +113,4 @@ class _CandidateBuilder(object):
         with summary.current_scope():
           summary.scalar("adanet_loss/adanet/adanet_weighted_ensemble",
                          adanet_loss)
-      return _Candidate(
-          ensemble_spec=ensemble_spec,
-          adanet_loss=adanet_loss,
-          is_training=is_training,
-          is_previous_best=is_previous_best)
+      return _Candidate(ensemble_spec=ensemble_spec, adanet_loss=adanet_loss)

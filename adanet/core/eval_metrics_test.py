@@ -205,11 +205,9 @@ class MetricsTest(tu.AdanetTestCase):
           architecture=None,
           subnetwork_builders=None,
           predictions=None,
+          step=None,
           eval_metrics=(metric_fn, {}))
-      candidate = _Candidate(
-          ensemble_spec=spec,
-          adanet_loss=tf.constant(i),
-          is_training=tf.constant(False))
+      candidate = _Candidate(ensemble_spec=spec, adanet_loss=tf.constant(i))
       candidates.append(candidate)
     metrics = _IterationMetrics(candidates, subnetwork_specs=[])
 

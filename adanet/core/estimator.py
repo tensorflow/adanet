@@ -466,6 +466,8 @@ class Estimator(tf.estimator.Estimator):
     enable_subnetwork_summaries: Whether to record summaries to display in
       TensorBoard for each subnetwork. Disable to reduce memory and disk usage
       per run.
+    global_step_combiner_fn: Function for combining each subnetwork's
+      iteration step into the global step.
     **kwargs: Extra keyword args passed to the parent.
 
   Returns:
@@ -508,6 +510,7 @@ class Estimator(tf.estimator.Estimator):
                debug=False,
                enable_ensemble_summaries=True,
                enable_subnetwork_summaries=True,
+               global_step_combiner_fn=tf.math.reduce_mean,
                **kwargs):
     if subnetwork_generator is None:
       raise ValueError("subnetwork_generator can't be None.")
@@ -599,11 +602,15 @@ class Estimator(tf.estimator.Estimator):
     self._use_tpu = kwargs.get("use_tpu", False)
     ensemble_builder = _EnsembleBuilder(
         head=head, metric_fn=metric_fn, use_tpu=self._use_tpu)
+
+    # TODO: Merge CandidateBuilder into SubnetworkManager.
     candidate_builder = _CandidateBuilder(
-        max_steps=max_iteration_steps,
         adanet_loss_decay=self._adanet_loss_decay)
     subnetwork_manager = _SubnetworkManager(
-        head=head, metric_fn=metric_fn, use_tpu=self._use_tpu)
+        head=head,
+        max_steps=max_iteration_steps,
+        metric_fn=metric_fn,
+        use_tpu=self._use_tpu)
     if not placement_strategy:
       placement_strategy = ReplicationStrategy()
     self._iteration_builder = _IterationBuilder(
@@ -612,6 +619,7 @@ class Estimator(tf.estimator.Estimator):
         ensemble_builder,
         ensemblers,
         self._summary_maker,
+        global_step_combiner_fn,
         placement_strategy,
         replicate_ensemble_in_training,
         use_tpu=self._use_tpu,
@@ -1155,7 +1163,8 @@ class Estimator(tf.estimator.Estimator):
     # Make directories since model_dir may not have been created yet.
     tf.io.gfile.makedirs(os.path.dirname(filename))
     with tf.io.gfile.GFile(filename, "w") as record_file:
-      record_file.write(architecture.serialize())
+      record_file.write(
+          architecture.serialize(self._latest_checkpoint_global_step().item()))
 
   def _read_architecture(self, filename):
     """Reads an ensemble architecture from disk.
@@ -1267,6 +1276,7 @@ class Estimator(tf.estimator.Estimator):
       ensemble_candidate = self._find_ensemble_candidate(
           architecture.ensemble_candidate_name, ensemble_candidates)
       current_iteration = self._iteration_builder.build_iteration(
+          base_global_step=architecture.global_step,
           iteration_number=iteration_number,
           ensemble_candidates=[ensemble_candidate],
           subnetwork_builders=rebuild_subnetwork_builders,
@@ -1442,6 +1452,7 @@ class Estimator(tf.estimator.Estimator):
     skip_summaries = (
         mode != tf.estimator.ModeKeys.TRAIN or
         self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION)
+    base_global_step = 0
     with tf_compat.v1.variable_scope("adanet"):
       previous_ensemble_spec = None
       previous_ensemble = None
@@ -1460,6 +1471,7 @@ class Estimator(tf.estimator.Estimator):
                     "'{}:{}'".format(t, n)
                     for t, n in architecture.subnetworks_grouped_by_iteration
                 ])))
+        base_global_step = architecture.global_step
         previous_ensemble_spec = self._architecture_ensemble_spec(
             architecture, i, features, mode, labels, previous_ensemble_spec,
             config)
@@ -1499,6 +1511,7 @@ class Estimator(tf.estimator.Estimator):
         ensemble_candidates += ensemble_strategy.generate_ensemble_candidates(
             subnetwork_builders, previous_ensemble_subnetwork_builders)
       current_iteration = self._iteration_builder.build_iteration(
+          base_global_step=base_global_step,
           iteration_number=iteration_number,
           ensemble_candidates=ensemble_candidates,
           subnetwork_builders=subnetwork_builders,

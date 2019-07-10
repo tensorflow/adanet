@@ -44,10 +44,7 @@ from tensorflow_estimator.python.estimator.head import regression_head
 def _dummy_candidate():
   """Returns a dummy `_Candidate` instance."""
 
-  return _Candidate(
-      ensemble_spec=tu.dummy_ensemble_spec("foo"),
-      adanet_loss=1.,
-      is_training=True)
+  return _Candidate(ensemble_spec=tu.dummy_ensemble_spec("foo"), adanet_loss=1.)
 
 
 class IterationTest(parameterized.TestCase, tf.test.TestCase):
@@ -126,8 +123,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
                estimator_spec,
                best_candidate_index,
                is_over_fn,
-               subnetwork_reports_fn=None,
-               step=0):
+               subnetwork_reports_fn=None):
     if subnetwork_reports_fn is None:
       subnetwork_reports = {}
     else:
@@ -141,15 +137,13 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
           best_candidate_index=best_candidate_index,
           summaries=[],
           is_over_fn=is_over_fn,
-          subnetwork_reports=subnetwork_reports,
-          step=step)
+          subnetwork_reports=subnetwork_reports)
       self.assertEqual(iteration.number, number)
       self.assertEqual(iteration.candidates, candidates)
       self.assertEqual(iteration.estimator_spec, estimator_spec)
       self.assertEqual(iteration.best_candidate_index, best_candidate_index)
       self.assertEqual(iteration.is_over_fn(), is_over_fn())
       self.assertEqual(iteration.subnetwork_reports, subnetwork_reports)
-      self.assertEqual(iteration.step, step)
 
   @parameterized.named_parameters(
       {
@@ -181,9 +175,6 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
       }, {
           "testcase_name": "none_subnetwork_reports",
           "subnetwork_reports": lambda: None,
-      }, {
-          "testcase_name": "none_step",
-          "step": None,
       })
   def test_new_errors(self,
                       number=0,
@@ -191,8 +182,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
                       estimator_spec=tu.dummy_estimator_spec(),
                       best_candidate_index=0,
                       is_over_fn=lambda: True,
-                      subnetwork_reports=lambda: [],
-                      step=0):
+                      subnetwork_reports=lambda: []):
     with self.test_session():
       with self.assertRaises(ValueError):
         _Iteration(
@@ -203,8 +193,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
             best_candidate_index=best_candidate_index,
             summaries=[],
             is_over_fn=is_over_fn,
-            subnetwork_reports=subnetwork_reports(),
-            step=step)
+            subnetwork_reports=subnetwork_reports())
 
 
 class _FakeBuilder(SubnetworkBuilder):
@@ -268,7 +257,6 @@ class _FakeEnsembleBuilder(object):
                           summary,
                           features,
                           mode,
-                          iteration_step,
                           iteration_number,
                           labels=None,
                           previous_ensemble_spec=None,
@@ -279,7 +267,6 @@ class _FakeEnsembleBuilder(object):
     del features
     del mode
     del labels
-    del iteration_step
     del iteration_number
     del params
 
@@ -302,14 +289,12 @@ class _FakeSubnetworkManager(object):
   def build_subnetwork_spec(self,
                             name,
                             subnetwork_builder,
-                            iteration_step,
                             summary,
                             features,
                             mode,
                             labels=None,
                             previous_ensemble=None,
                             params=None):
-    del iteration_step
     del summary
     del features
     del mode
@@ -317,10 +302,16 @@ class _FakeSubnetworkManager(object):
     del previous_ensemble
     del params
 
+    is_training = False
+    if subnetwork_builder:
+      is_training = "training" in subnetwork_builder.name
+
     return _SubnetworkSpec(
         name=name,
         subnetwork=None,
         builder=subnetwork_builder,
+        step=tf.Variable(0.),
+        is_training=is_training,
         predictions=None,
         loss=None,
         train_op=subnetwork_builder.build_subnetwork_train_op(
@@ -333,23 +324,14 @@ class _FakeCandidateBuilder(object):
   def build_candidate(self,
                       ensemble_spec,
                       training,
-                      iteration_step,
                       summary,
-                      previous_ensemble_spec=None,
-                      is_previous_best=False):
+                      previous_ensemble_spec=None):
     del training  # Unused
-    del iteration_step  # Unused
     del summary  # Unused
     del previous_ensemble_spec  # Unused
 
-    is_training = False
-    if ensemble_spec.subnetwork_builders:
-      is_training = "training" in ensemble_spec.subnetwork_builders[0].name
     return _Candidate(
-        ensemble_spec=ensemble_spec,
-        adanet_loss=ensemble_spec.adanet_loss,
-        is_training=is_training,
-        is_previous_best=is_previous_best)
+        ensemble_spec=ensemble_spec, adanet_loss=ensemble_spec.adanet_loss)
 
 
 def _export_output_tensors(export_outputs):
@@ -741,6 +723,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
         summary_maker=summary_maker,
         ensemblers=[_FakeEnsembler()])
     iteration = builder.build_iteration(
+        base_global_step=0,
         iteration_number=0,
         ensemble_candidates=[
             EnsembleCandidate(b.name, [b], None) for b in subnetwork_builders
@@ -784,7 +767,6 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
         sess.run(iteration.estimator_spec.train_op)
         self.assertEqual(want_is_over, sess.run(iteration.is_over_fn()))
         self.assertEqual(1, sess.run(global_step))
-        self.assertEqual(1, sess.run(iteration.step))
 
   @parameterized.named_parameters(
       {
@@ -843,6 +825,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
     with self.test_session():
       with self.assertRaises(want_raises):
         builder.build_iteration(
+            base_global_step=0,
             iteration_number=0,
             ensemble_candidates=[
                 EnsembleCandidate("test", subnetwork_builders, None)
@@ -868,7 +851,6 @@ class _HeadEnsembleBuilder(object):
                           summary,
                           features,
                           mode,
-                          iteration_step,
                           iteration_number,
                           labels=None,
                           previous_ensemble_spec=None,
@@ -876,7 +858,6 @@ class _HeadEnsembleBuilder(object):
     del ensembler
     del subnetwork_specs
     del summary
-    del iteration_step
     del iteration_number
     del previous_ensemble_spec
     del params
@@ -891,6 +872,7 @@ class _HeadEnsembleBuilder(object):
         architecture=None,
         subnetwork_builders=candidate.subnetwork_builders,
         predictions=estimator_spec.predictions,
+        step=0,
         loss=None,
         adanet_loss=.1,
         train_op=None,
@@ -921,6 +903,7 @@ class IterationExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
     mode = tf.estimator.ModeKeys.PREDICT
     subnetwork_builders = [_FakeBuilder("test")]
     iteration = builder.build_iteration(
+        base_global_step=0,
         iteration_number=0,
         ensemble_candidates=[
             EnsembleCandidate("test", subnetwork_builders, None)

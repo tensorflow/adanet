@@ -37,8 +37,7 @@ import tensorflow as tf
 class _Iteration(
     collections.namedtuple("_Iteration", [
         "number", "candidates", "subnetwork_specs", "estimator_spec",
-        "best_candidate_index", "summaries", "is_over_fn", "subnetwork_reports",
-        "step"
+        "best_candidate_index", "summaries", "is_over_fn", "subnetwork_reports"
     ])):
   """An AdaNet iteration.
 
@@ -50,8 +49,7 @@ class _Iteration(
   """
 
   def __new__(cls, number, candidates, subnetwork_specs, estimator_spec,
-              best_candidate_index, summaries, is_over_fn, subnetwork_reports,
-              step):
+              best_candidate_index, summaries, is_over_fn, subnetwork_reports):
     """Creates a validated `_Iteration` instance.
 
     Args:
@@ -69,8 +67,6 @@ class _Iteration(
       is_over_fn: A fn()->Boolean `Variable` indicating if iteration is over.
       subnetwork_reports: Dict mapping string names to `subnetwork.Report`s, one
         per candidate.
-      step: Integer `Tensor` representing the step since the beginning of the
-        current iteration, as opposed to the global step.
 
     Raises:
       ValueError: If validation fails.
@@ -88,8 +84,6 @@ class _Iteration(
       raise ValueError("best_candidate_index is required")
     if not isinstance(subnetwork_reports, dict):
       raise ValueError("subnetwork_reports must be a dict")
-    if step is None:
-      raise ValueError("step is required")
     return super(_Iteration, cls).__new__(
         cls,
         number=number,
@@ -99,8 +93,7 @@ class _Iteration(
         best_candidate_index=best_candidate_index,
         summaries=summaries,
         is_over_fn=is_over_fn,
-        subnetwork_reports=subnetwork_reports,
-        step=step)
+        subnetwork_reports=subnetwork_reports)
 
 
 def _is_over_var():
@@ -130,6 +123,7 @@ class _IterationBuilder(object):
                ensemble_builder,
                ensemblers,
                summary_maker,
+               global_step_combiner_fn=tf.math.reduce_mean,
                placement_strategy=distributed.ReplicationStrategy(),
                replicate_ensemble_in_training=False,
                use_tpu=False,
@@ -146,6 +140,8 @@ class _IterationBuilder(object):
         define how to ensemble a group of subnetworks.
       summary_maker: A function that constructs an `adanet.Summary` instance
         from (namespace, scope, and skip_summary).
+      global_step_combiner_fn: Function for combining each subnetwork's
+        iteration step into the global step.
       placement_strategy: A `PlacementStrategy` for assigning subnetworks and
         ensembles to specific workers.
       replicate_ensemble_in_training: Whether to build the frozen subnetworks in
@@ -169,6 +165,7 @@ class _IterationBuilder(object):
     self._ensemble_builder = ensemble_builder
     self._ensemblers = ensemblers
     self._summary_maker = summary_maker
+    self._global_step_combiner_fn = global_step_combiner_fn
     self._placement_strategy = placement_strategy
     self._replicate_ensemble_in_training = replicate_ensemble_in_training
     self._use_tpu = use_tpu
@@ -214,6 +211,7 @@ class _IterationBuilder(object):
     return checked_features, checked_labels
 
   def build_iteration(self,
+                      base_global_step,
                       iteration_number,
                       ensemble_candidates,
                       subnetwork_builders,
@@ -234,6 +232,7 @@ class _IterationBuilder(object):
     defined by lowest complexity-regularized loss on the train set.
 
     Args:
+      base_global_step: Integer global step at the beginning of this iteration.
       iteration_number: Integer iteration number.
       ensemble_candidates: Iterable of `adanet.ensemble.Candidate` instances.
       subnetwork_builders: A list of `Builders` for adding ` Subnetworks` to the
@@ -286,17 +285,6 @@ class _IterationBuilder(object):
     training = mode == tf.estimator.ModeKeys.TRAIN
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT or rebuilding
     with tf_compat.v1.variable_scope("iteration_{}".format(iteration_number)):
-      # Iteration step to use instead of global step.
-      iteration_step = tf_compat.v1.get_variable(
-          "step",
-          shape=[],
-          initializer=tf_compat.v1.zeros_initializer(),
-          trainable=False,
-          dtype=tf.int64)
-
-      # Convert to tensor so that users cannot mutate it.
-      iteration_step_tensor = tf.convert_to_tensor(value=iteration_step)
-
       seen_builder_names = {}
       candidates = []
       summaries = []
@@ -311,9 +299,7 @@ class _IterationBuilder(object):
         previous_best_candidate = self._candidate_builder.build_candidate(
             ensemble_spec=previous_ensemble_spec,
             training=training,
-            iteration_step=iteration_step_tensor,
-            summary=previous_ensemble_summary,
-            is_previous_best=True)
+            summary=previous_ensemble_summary)
         candidates.append(previous_best_candidate)
         if self._enable_ensemble_summaries:
           summaries.append(previous_ensemble_summary)
@@ -357,38 +343,37 @@ class _IterationBuilder(object):
           subnetwork_spec = self._subnetwork_manager.build_subnetwork_spec(
               name=subnetwork_name,
               subnetwork_builder=subnetwork_builder,
-              iteration_step=iteration_step_tensor,
               summary=subnetwork_summary,
               features=features,
               mode=builder_mode,
               labels=labels,
               previous_ensemble=previous_ensemble)
-        subnetwork_specs.append(subnetwork_spec)
-        # Workers that don't build ensembles need a dummy candidate in order
-        # to train the subnetwork.
-        # Because only ensembles can be considered candidates, we need to
-        # convert the subnetwork into a dummy ensemble and subsequently a
-        # dummy candidate. However, this dummy candidate is never considered a
-        # true candidate during candidate evaluation and selection.
-        # TODO: Eliminate need for candidates.
-        if not self._placement_strategy.should_build_ensemble(
-            num_subnetworks) and not rebuilding:
-          dummy_candidate = self._candidate_builder.build_candidate(
-              # pylint: disable=protected-access
-              ensemble_spec=ensemble_builder_lib._EnsembleSpec(
-                  name=subnetwork_name,
-                  ensemble=None,
-                  architecture=None,
-                  subnetwork_builders=subnetwork_builders,
-                  predictions=subnetwork_spec.predictions,
-                  loss=subnetwork_spec.loss,
-                  adanet_loss=0.),
-              # pylint: enable=protected-access
-              training=training,
-              iteration_step=iteration_step_tensor,
-              summary=subnetwork_summary,
-              track_moving_average=False)
-          candidates.append(dummy_candidate)
+          subnetwork_specs.append(subnetwork_spec)
+          # Workers that don't build ensembles need a dummy candidate in order
+          # to train the subnetwork.
+          # Because only ensembles can be considered candidates, we need to
+          # convert the subnetwork into a dummy ensemble and subsequently a
+          # dummy candidate. However, this dummy candidate is never considered a
+          # true candidate during candidate evaluation and selection.
+          # TODO: Eliminate need for candidates.
+          if not self._placement_strategy.should_build_ensemble(
+              num_subnetworks) and not rebuilding:
+            dummy_candidate = self._candidate_builder.build_candidate(
+                # pylint: disable=protected-access
+                ensemble_spec=ensemble_builder_lib._EnsembleSpec(
+                    name=subnetwork_name,
+                    ensemble=None,
+                    architecture=None,
+                    subnetwork_builders=subnetwork_builders,
+                    predictions=subnetwork_spec.predictions,
+                    loss=subnetwork_spec.loss,
+                    step=0,
+                    adanet_loss=0.),
+                # pylint: enable=protected-access
+                training=training,
+                summary=subnetwork_summary,
+                track_moving_average=False)
+            candidates.append(dummy_candidate)
         # Generate subnetwork reports.
         if mode != tf.estimator.ModeKeys.PREDICT:
           subnetwork_report = subnetwork_builder.build_subnetwork_report()
@@ -433,7 +418,6 @@ class _IterationBuilder(object):
               summary=summary,
               features=features,
               mode=builder_mode,
-              iteration_step=iteration_step_tensor,
               iteration_number=iteration_number,
               labels=labels,
               previous_ensemble_spec=previous_ensemble_spec)
@@ -441,10 +425,7 @@ class _IterationBuilder(object):
           # TODO: Don't track moving average of loss when rebuilding
           # previous ensemble.
           candidate = self._candidate_builder.build_candidate(
-              ensemble_spec=ensemble_spec,
-              training=training,
-              iteration_step=iteration_step_tensor,
-              summary=summary)
+              ensemble_spec=ensemble_spec, training=training, summary=summary)
           candidates.append(candidate)
           # TODO: Move adanet_loss from subnetwork report to a new
           # ensemble report, since the adanet_loss is associated with an
@@ -495,13 +476,11 @@ class _IterationBuilder(object):
       summaries.append(summary)
       with summary.current_scope():
         summary.scalar("iteration/adanet/iteration", iteration_number)
-        summary.scalar("iteration_step/adanet/iteration_step",
-                       iteration_step_tensor)
         if best_loss is not None:
           summary.scalar("loss", best_loss)
-      train_op = self._create_train_op(subnetwork_specs, candidates, mode,
-                                       iteration_step, is_over_var_template,
-                                       num_subnetworks)
+      train_op = self._create_train_op(base_global_step, subnetwork_specs,
+                                       candidates, mode, is_over_var_template,
+                                       num_subnetworks, config)
       iteration_metrics = _IterationMetrics(candidates, subnetwork_specs)
       if self._use_tpu:
         estimator_spec = tf_compat.v1.estimator.tpu.TPUEstimatorSpec(
@@ -533,10 +512,9 @@ class _IterationBuilder(object):
           best_candidate_index=best_candidate_index,
           summaries=summaries,
           is_over_fn=is_over_var_template,
-          subnetwork_reports=subnetwork_reports,
-          step=iteration_step_tensor)
+          subnetwork_reports=subnetwork_reports)
 
-  def _assign_is_over(self, candidates, is_over_var_template):
+  def _assign_is_over(self, subnetwork_specs, is_over_var_template):
     """Assigns whether the iteration is over to the is_over_var.
 
     The iteration is over once all candidates are done training.
@@ -547,7 +525,7 @@ class _IterationBuilder(object):
     training is over.
 
     Args:
-      candidates: List of `_Candidate` instances to train.
+      subnetwork_specs: List of `_SubnetworkSpec` instances to train.
       is_over_var_template: A fn()->tf.Variable which returns the is_over_var.
 
     Returns:
@@ -556,16 +534,17 @@ class _IterationBuilder(object):
 
     with tf_compat.v1.variable_scope("is_over"):
       is_over = True
-      for candidate in candidates:
-        is_over = tf.logical_and(is_over, tf.logical_not(candidate.is_training))
+      for subnetwork_spec in subnetwork_specs:
+        is_over = tf.logical_and(is_over,
+                                 tf.logical_not(subnetwork_spec.is_training))
       is_over_var = is_over_var_template()
       return tf.cond(
           pred=is_over,
           true_fn=lambda: is_over_var.assign(True, name="assign_is_over"),
           false_fn=lambda: tf.no_op("noassign_is_over"))
 
-  def _create_train_op(self, subnetwork_specs, candidates, mode, step,
-                       is_over_var_template, num_subnetworks):
+  def _create_train_op(self, base_global_step, subnetwork_specs, candidates,
+                       mode, is_over_var_template, num_subnetworks, config):
     """Returns the train op for this set of candidates.
 
     This train op combines the train ops from all the candidates into a single
@@ -574,15 +553,15 @@ class _IterationBuilder(object):
     The train op is only non-None during the `TRAIN` mode.
 
     Args:
+      base_global_step: Integer global step at the beginning of this iteration.
       subnetwork_specs: List of `_SubnetworkSpec` instances for this iteration.
       candidates: List of `_Candidate` instances to train.
       mode: Defines whether this is training, evaluation or inference. The train
         op is only non-None during `TRAIN`. See `ModeKeys`.
-      step: Integer `Variable` for the current step of the iteration, as opposed
-        to the global step.
       is_over_var_template: A fn()->tf.Variable which returns the is_over_var.
       num_subnetworks: Integer number of subnetwork builders generated for the
         current iteration.
+      config: The `tf.estimator.RunConfig` to use this iteration.
 
     Returns:
       A `Tensor` train op.
@@ -600,15 +579,25 @@ class _IterationBuilder(object):
         if candidate.ensemble_spec.train_op is not None:
           # The train op of a previous ensemble is None even during `TRAIN`.
           train_ops.append(candidate.ensemble_spec.train_op.train_op)
-      train_ops.append(self._assign_is_over(candidates, is_over_var_template))
+      train_ops.append(
+          self._assign_is_over(subnetwork_specs, is_over_var_template))
+
       with tf.control_dependencies(train_ops):
-        # AdaNet is responsible for incrementing the global step, not the
-        # candidates it trains. Incrementing the global step and iteration step
-        # is the final action performed in the train op.
-        return tf.group(
-            tf_compat.v1.assign_add(tf_compat.v1.train.get_global_step(), 1),
-            tf_compat.v1.assign_add(step, 1),
-        )
+        # Increment steps after train ops complete to avoid non-determinism.
+        increment_ops = [s.step.assign_add(1) for s in subnetwork_specs]
+
+        if not config.is_chief:
+          return tf.group(*increment_ops)
+        # AdaNet's chief worker is responsible for setting the global step, not
+        # the candidates it trains. Assigning the global step is the final
+        # action performed in the train op.
+        with tf.control_dependencies(increment_ops):
+          steps = [s.step.read_value() for s in subnetwork_specs]
+          global_step = tf_compat.v1.train.get_global_step()
+          return global_step.assign(
+              tf.cast(
+                  base_global_step + self._global_step_combiner_fn(steps),
+                  dtype=tf.int64))
 
   def _best_candidate_index(self, candidates):
     """Returns the index of the best candidate in the list.
