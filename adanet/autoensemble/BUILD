@@ -26,6 +26,7 @@ py_library(
 
 py_test(
     name = "estimator_test",
+    size = "large",
     srcs = ["estimator_test.py"],
     deps = [
         ":estimator",
