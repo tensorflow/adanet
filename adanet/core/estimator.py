@@ -160,6 +160,7 @@ class _EvalMetricSaverHook(tf_compat.SessionRunHook):
             "or a serialized string of Summary.", key)
     summary_writer.add_summary(summary_proto, current_global_step)
     summary_writer.flush()
+    summary_writer.close()
 
 
 class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
