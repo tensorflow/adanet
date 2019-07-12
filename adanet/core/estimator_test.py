@@ -1226,6 +1226,9 @@ def _check_eventfile_for_keyword(keyword, dir_):
 
   tf_compat.v1.summary.FileWriterCache.clear()
 
+  if not tf.io.gfile.exists(dir_):
+    raise ValueError("Directory '{}' not found.".format(dir_))
+
   # Get last `Event` written.
   filenames = os.path.join(dir_, "events*")
   event_paths = tf.io.gfile.glob(filenames)
