@@ -207,15 +207,42 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
           'use_bias': True,
           'num_previous_ensemble_subnetworks': 2,
           'expected_summary_scalars': {
-              _get_norm_summary_key(0): [1 / 4., 1 / 4.],
-              _get_norm_summary_key(1): [1 / 4., 1 / 4.],
-              _get_norm_summary_key(2): [1 / 4., 1 / 4.],
-              _get_norm_summary_key(3): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(0): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(1): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(2): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(3): [1 / 4., 1 / 4.],
-              _get_complexity_regularization_summary_key(): [1 / 5., 1 / 5.],
+              'complexity_regularization/adanet/adanet_weighted_ensemble_head2':
+                  [0.2],
+              'complexity_regularization/adanet/adanet_weighted_ensemble_head1':
+                  [0.2],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head1_1':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head1_0':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head1_2':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head1_3':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head2_0':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head2_1':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head2_2':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head2_3':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head1_3':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head1_2':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head1_1':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head1_0':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head2_0':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head2_1':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head2_2':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head2_3':
+                  [0.25]
           },
           'expected_complexity_regularization': 2 / 5.,
       }, {
@@ -226,15 +253,42 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
           'use_bias': True,
           'num_previous_ensemble_subnetworks': 2,
           'expected_summary_scalars': {
-              _get_norm_summary_key(0): [1 / 4., 1 / 4.],
-              _get_norm_summary_key(1): [1 / 4., 1 / 4.],
-              _get_norm_summary_key(2): [1 / 4., 1 / 4.],
-              _get_norm_summary_key(3): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(0): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(1): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(2): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(3): [1 / 4., 1 / 4.],
-              _get_complexity_regularization_summary_key(): [1 / 5., 1 / 5.],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_bar_baz_3':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_bar_baz_2':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_bar_baz_1':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_bar_baz_0':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_foo_bar_1':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_bar_baz_3':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_bar_baz_2':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_bar_baz_1':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_bar_baz_0':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_foo_bar_1':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_foo_bar_2':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_foo_bar_0':
+                  [0.25],
+              'complexity_regularization/adanet/adanet_weighted_ensemble_foo_bar':
+                  [0.2],
+              'complexity_regularization/adanet/adanet_weighted_ensemble_bar_baz':
+                  [0.2],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_foo_bar_2':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_foo_bar_3':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_foo_bar_3':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_foo_bar_0':
+                  [0.25]
           },
           'expected_complexity_regularization': 2 / 5.,
       }, {
@@ -245,15 +299,42 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
           'use_bias': True,
           'num_previous_ensemble_subnetworks': 2,
           'expected_summary_scalars': {
-              _get_norm_summary_key(0): [1 / 4., 1 / 4.],
-              _get_norm_summary_key(1): [1 / 4., 1 / 4.],
-              _get_norm_summary_key(2): [1 / 4., 1 / 4.],
-              _get_norm_summary_key(3): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(0): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(1): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(2): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(3): [1 / 4., 1 / 4.],
-              _get_complexity_regularization_summary_key(): [1 / 5., 1 / 5.],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_bar_0_2':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_foo_1_3':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_foo_1_2':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_foo_1_1':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_foo_1_0':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_bar_0_1':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_bar_0_0':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_bar_0_3':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_bar_0_2':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_bar_0_1':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_foo_1_3':
+                  [0.25],
+              'complexity_regularization/adanet/adanet_weighted_ensemble_bar_0':
+                  [0.2],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_foo_1_1':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_foo_1_0':
+                  [0.25],
+              'complexity_regularization/adanet/adanet_weighted_ensemble_foo_1':
+                  [0.2],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_bar_0_0':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_bar_0_3':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_foo_1_2':
+                  [0.25]
           },
           'expected_complexity_regularization': 2 / 5.,
       }, {
@@ -264,15 +345,42 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
           'use_bias': True,
           'num_previous_ensemble_subnetworks': 2,
           'expected_summary_scalars': {
-              _get_norm_summary_key(0): [1 / 4., 1 / 4.],
-              _get_norm_summary_key(1): [1 / 4., 1 / 4.],
-              _get_norm_summary_key(2): [1 / 4., 1 / 4.],
-              _get_norm_summary_key(3): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(0): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(1): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(2): [1 / 4., 1 / 4.],
-              _get_fractions_summary_key(3): [1 / 4., 1 / 4.],
-              _get_complexity_regularization_summary_key(): [1 / 5., 1 / 5.],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_1_2':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_1_3':
+                  [0.25],
+              'complexity_regularization/adanet/adanet_weighted_ensemble_1':
+                  [0.2],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_1_1':
+                  [0.25],
+              'complexity_regularization/adanet/adanet_weighted_ensemble':
+                  [0.2],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_1_3':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_0':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_1':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_2':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_3':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_0':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_1':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_2':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_3':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_1_2':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_1_0':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_1_0':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_1_1':
+                  [0.25]
           },
           'expected_complexity_regularization': 2 / 5.,
       }, {
@@ -282,15 +390,24 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
           'warm_start_mixture_weights': True,
           'num_previous_ensemble_subnetworks': 2,
           'expected_summary_scalars': {
-              _get_norm_summary_key(0): [1.],
-              _get_norm_summary_key(1): [1.],
-              _get_norm_summary_key(2): [0.25],
-              _get_norm_summary_key(3): [0.25],
-              _get_fractions_summary_key(0): [.4],
-              _get_fractions_summary_key(1): [.4],
-              _get_fractions_summary_key(2): [.1],
-              _get_fractions_summary_key(3): [.1],
-              _get_complexity_regularization_summary_key(): [1 / 2.],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_2':
+                  [0.1],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_3':
+                  [0.1],
+              'complexity_regularization/adanet/adanet_weighted_ensemble':
+                  [0.5],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_1':
+                  [0.4],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_2':
+                  [0.25],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_0':
+                  [0.4],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_0':
+                  [1.0],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_1':
+                  [1.0],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_3':
+                  [0.25]
           },
           'expected_complexity_regularization': 1 / 2.,
       }, {
@@ -302,15 +419,42 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
           'warm_start_mixture_weights': True,
           'num_previous_ensemble_subnetworks': 2,
           'expected_summary_scalars': {
-              _get_norm_summary_key(0): [1., 1.],
-              _get_norm_summary_key(1): [1., 1.],
-              _get_norm_summary_key(2): [0.25, .25],
-              _get_norm_summary_key(3): [0.25, .25],
-              _get_fractions_summary_key(0): [.4, .4],
-              _get_fractions_summary_key(1): [.4, .4],
-              _get_fractions_summary_key(2): [.1, .1],
-              _get_fractions_summary_key(3): [.1, .1],
-              _get_complexity_regularization_summary_key(): [1 / 2., 1 / 2.],
+              'complexity_regularization/adanet/adanet_weighted_ensemble_head2':
+                  [0.5],
+              'complexity_regularization/adanet/adanet_weighted_ensemble_head1':
+                  [0.5],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head2_1':
+                  [1.0],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head2_0':
+                  [1.0],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head2_3':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head2_2':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head1_2':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head1_3':
+                  [0.25],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head1_0':
+                  [1.0],
+              'mixture_weight_norms/adanet/adanet_weighted_ensemble/subnetwork_head1_1':
+                  [1.0],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head1_2':
+                  [0.1],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head1_3':
+                  [0.1],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head1_0':
+                  [0.4],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head1_1':
+                  [0.4],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head2_1':
+                  [0.4],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head2_0':
+                  [0.4],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head2_3':
+                  [0.1],
+              'mixture_weight_fractions/adanet/adanet_weighted_ensemble/subnetwork_head2_2':
+                  [0.1]
           },
           'expected_complexity_regularization': 1.,
           'name': 'with_bias',
@@ -405,15 +549,16 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
 
         if expected_summary_scalars:
           for key in expected_summary_scalars.keys():
-            self.assertAllClose(summary_scalars[key],
-                                expected_summary_scalars[key])
+            print(summary_scalars)
+            self.assertAllClose(expected_summary_scalars[key],
+                                summary_scalars[key])
 
         self.assertEqual(
             [l.subnetwork for l in built_ensemble.weighted_subnetworks],
             previous_ensemble_subnetworks + subnetworks)
 
-        self.assertAllClose(complexity_regularization,
-                            expected_complexity_regularization)
+        self.assertAllClose(expected_complexity_regularization,
+                            complexity_regularization)
         self.assertIsNotNone(sess.run(built_ensemble.logits))
 
   def test_build_ensemble_subnetwork_has_scalar_logits(self):

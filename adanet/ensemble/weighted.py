@@ -26,6 +26,14 @@ from adanet.ensemble.ensembler import Ensembler
 import tensorflow as tf
 
 
+def _stringify(key):
+  """Flattens tuple and list keys into strings."""
+
+  if isinstance(key, (tuple, list)):
+    return "_".join([str(el) for el in key])
+  return key
+
+
 def _lookup_if_dict(target, key):
   if isinstance(target, dict):
     return target[key]
@@ -533,14 +541,16 @@ class ComplexityRegularizedEnsembler(Ensembler):
       weights.append(weight_l1_norm)
 
     with summary.current_scope():
+      # Append a suffix for multi head summaries.
+      suffix = "_{}".format(_stringify(key)) if key else ""
       summary.scalar(
-          "complexity_regularization/adanet/adanet_weighted_ensemble",
+          "complexity_regularization/adanet/adanet_weighted_ensemble" + suffix,
           ensemble_complexity_regularization)
-      summary.histogram("mixture_weights/adanet/adanet_weighted_ensemble",
-                        weights)
+      summary.histogram(
+          "mixture_weights/adanet/adanet_weighted_ensemble" + suffix, weights)
       for iteration, weight in enumerate(weights):
-        scope = "adanet/adanet_weighted_ensemble/subnetwork_{}".format(
-            iteration)
+        scope = "adanet/adanet_weighted_ensemble/subnetwork{}_{}".format(
+            suffix, iteration)
         summary.scalar("mixture_weight_norms/{}".format(scope), weight)
         fraction = weight / total_weight_l1_norms
         summary.scalar("mixture_weight_fractions/{}".format(scope), fraction)
