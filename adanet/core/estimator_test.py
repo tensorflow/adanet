@@ -30,6 +30,7 @@ from adanet.core import testing_utils as tu
 from adanet.core.estimator import Estimator
 from adanet.core.evaluator import Evaluator
 from adanet.core.report_materializer import ReportMaterializer
+from adanet.distributed.placement import RoundRobinStrategy
 from adanet.ensemble import AllStrategy
 from adanet.ensemble import ComplexityRegularizedEnsembler
 from adanet.ensemble import GrowStrategy
@@ -1061,22 +1062,17 @@ class MultiHeadBuilder(Builder):
     return "multi_head"
 
 
-def _tf_version_less_than_v1_10_0():
-  # TODO: Figure out why this is needed for multi-head.
-  return not tf_compat.version_greater_or_equal("1.10.0")
-
-
 class EstimatorMultiHeadTest(tu.AdanetTestCase):
 
   @parameterized.named_parameters(
       {
           "testcase_name": "concatenated_logits",
           "builders": [MultiHeadBuilder()],
-          "want_loss": 2.809 if _tf_version_less_than_v1_10_0() else 3.218,
+          "want_loss": 3.218,
       }, {
           "testcase_name": "split_logits",
           "builders": [MultiHeadBuilder(split_logits=True)],
-          "want_loss": 2.814 if _tf_version_less_than_v1_10_0() else 3.224,
+          "want_loss": 3.224,
       })
   def test_lifecycle(self, builders, want_loss):
     """Train entire estimator lifecycle using XOR dataset."""
@@ -1713,11 +1709,10 @@ class EstimatorDifferentFeaturesPerModeTest(tu.AdanetTestCase):
         serving_input_receiver_fn=serving_input_fn)
 
 
-class EstimatorExportSavedModelForPredictTest(tu.AdanetTestCase):
-  """Tests b/110435640."""
+class EstimatorExportSavedModelTest(tu.AdanetTestCase):
 
   def test_export_saved_model_for_predict(self):
-    """Tests new SavedModel exporting functionality."""
+    """Tests SavedModel exporting functionality for predict (b/110435640)."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
     subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
@@ -1757,16 +1752,8 @@ class EstimatorExportSavedModelForPredictTest(tu.AdanetTestCase):
         serving_input_receiver_fn=serving_input_fn,
         experimental_mode=tf.estimator.ModeKeys.PREDICT)
 
-
-class EstimatorExportSavedModelForEvalTest(tu.AdanetTestCase):
-  """Tests b/110991908."""
-
   def test_export_saved_model_for_eval(self):
-    """Tests new SavedModel exporting functionality."""
-
-    if _tf_version_less_than_v1_10_0():
-      self.skipTest("export_saved_model_for_eval is not "
-                    "supported before TF v1.10.0.")
+    """Tests SavedModel exporting functionality for eval (b/110991908)."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
     subnetwork_generator = SimpleGenerator(
@@ -1859,6 +1846,46 @@ class EstimatorExportSavedModelForEvalTest(tu.AdanetTestCase):
               tf_compat.v1.saved_model.utils.get_tensor_from_tensor_info(
                   signature_def.outputs["metrics/accuracy/value"])),
           places=3)
+
+  def test_export_saved_model_always_uses_replication_placement(self):
+    """Tests b/137675014."""
+
+    run_config = tf.estimator.RunConfig(tf_random_seed=42)
+    subnetwork_generator = SimpleGenerator(
+        [_DNNBuilder("dnn1"), _DNNBuilder("dnn2")])
+    estimator = Estimator(
+        head=tu.head(),
+        subnetwork_generator=subnetwork_generator,
+        max_iteration_steps=1,
+        model_dir=self.test_subdirectory,
+        config=run_config,
+        experimental_placement_strategy=RoundRobinStrategy())
+
+    features = {"x": [[1., 0.]]}
+    labels = [[1.]]
+    train_input_fn = _dummy_feature_dict_input_fn(features, labels)
+
+    # Train.
+    estimator.train(input_fn=train_input_fn, max_steps=2)
+
+    # Export SavedModel.
+    def serving_input_fn():
+      """Input fn for serving export, starting from serialized example."""
+      serialized_example = tf_compat.v1.placeholder(
+          dtype=tf.string, shape=(None), name="serialized_example")
+      for key, value in features.items():
+        features[key] = tf.constant(value)
+      return tf.estimator.export.ServingInputReceiver(
+          features=features, receiver_tensors=serialized_example)
+
+    # Fake the number of PS replicas so RoundRobinStrategy will be used.
+    estimator._config._num_ps_replicas = 2
+    # If we're still using RoundRobinStrategy, this call will fail by trying
+    # to place ops on non-existent devices.
+    estimator.export_saved_model(
+        export_dir_base=self.test_subdirectory,
+        serving_input_receiver_fn=serving_input_fn,
+        experimental_mode=tf.estimator.ModeKeys.PREDICT)
 
 
 class EstimatorReportTest(tu.AdanetTestCase):

@@ -174,6 +174,14 @@ class _IterationBuilder(object):
     self._enable_subnetwork_summaries = enable_subnetwork_summaries
     super(_IterationBuilder, self).__init__()
 
+  @property
+  def placement_strategy(self):
+    return self._placement_strategy
+
+  @placement_strategy.setter
+  def placement_strategy(self, new_placement_strategy):
+    self._placement_strategy = new_placement_strategy
+
   def _check_numerics(self, features, labels):
     """Checks for NaNs and Infs in input features and labels.
 

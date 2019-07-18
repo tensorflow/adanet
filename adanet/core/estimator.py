@@ -801,6 +801,43 @@ class Estimator(tf.estimator.Estimator):
     self._evaluation_checkpoint_path = None
     return result
 
+  @contextlib.contextmanager
+  def _export_placement_strategy(self):
+    """Sets placement_strategy to always be ReplicationStrategy for exports.
+
+    Estimator's export saved model functions always create a new local Session,
+    even during distributed training. In such cases, RoundRobinReplication will
+    try to place ops on the cluster devices but will fail since the local
+    session does not have access to them. Instead, we always export the model
+    using ReplicationStrategy.
+
+    Yields:
+      Nothing. Simply returns control back to the caller.
+    """
+
+    temp_placement_strategy = self._iteration_builder.placement_strategy
+    try:
+      self._iteration_builder.placement_strategy = ReplicationStrategy()
+      yield
+    finally:
+      self._iteration_builder.placement_strategy = temp_placement_strategy
+
+  def _export_all_saved_models(self,
+                               export_dir_base,
+                               input_receiver_fn_map,
+                               assets_extra=None,
+                               as_text=False,
+                               checkpoint_path=None,
+                               strip_default_attrs=True):
+    with self._export_placement_strategy():
+      super(Estimator, self)._export_all_saved_models(
+          export_dir_base,
+          input_receiver_fn_map,
+          assets_extra=assets_extra,
+          as_text=as_text,
+          checkpoint_path=checkpoint_path,
+          strip_default_attrs=strip_default_attrs)
+
   def _call_adanet_model_fn(self, input_fn, mode, config):
     """Calls model_fn with the given mode and parameters."""
 

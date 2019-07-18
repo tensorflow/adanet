@@ -180,9 +180,6 @@ class RoundRobinStrategy(PlacementStrategy):
   """
   # pyformat: enable
 
-  # TODO: Implement specialized parameter server variable placement per
-  # subnetwork to get O(m*n/k) scaling. Currently it is O(m*n).
-
   # TODO: Allow user to disable ensemble workers. For example, when there
   # are no ensemble variables to train, such as in a uniform average ensemble,
   # there is no need for a non-chief to create the full ensemble during
