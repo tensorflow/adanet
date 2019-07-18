@@ -808,7 +808,9 @@ class Estimator(tf.estimator.Estimator):
       tf_compat.v1.set_random_seed(config.tf_random_seed)
       # Create global step before calling model_fn as does superclass.
       self._create_and_assert_global_step(g)
-      features, labels, input_hooks = util.parse_input_fn_result(input_fn())
+      with tf.device("/cpu:0"):
+        input_fn_outs = input_fn()
+      features, labels, input_hooks = util.parse_input_fn_result(input_fn_outs)
       train_hooks = self._train_hooks
       self._train_hooks = list(train_hooks) + input_hooks
       self.model_fn(features, labels, mode, config)
