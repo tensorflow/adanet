@@ -830,7 +830,7 @@ class Estimator(tf.estimator.Estimator):
                                checkpoint_path=None,
                                strip_default_attrs=True):
     with self._export_placement_strategy():
-      super(Estimator, self)._export_all_saved_models(
+      return super(Estimator, self)._export_all_saved_models(
           export_dir_base,
           input_receiver_fn_map,
           assets_extra=assets_extra,
