@@ -1080,10 +1080,10 @@ class Estimator(tf.estimator.Estimator):
   def _decorate_hooks(self, hooks):
     """Decorate hooks to reset AdaNet state before calling their methods."""
 
-    is_growing_phase = (
-        self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION)
     decorated_hooks = []
     for hook in hooks:
+      is_growing_phase = (
+          self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION)
       # Set is_growing_phase=False for OverwriteCheckpointHook so the hook's
       # before_run method is called to overwrite the checkpoint.
       if isinstance(hook, _OverwriteCheckpointHook):
