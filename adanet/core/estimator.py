@@ -230,6 +230,9 @@ class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
       checkpoint_path = os.path.join(self._model_dir, "increment.ckpt")
       # Specify global_step=self._iteration_number to append the iteration
       # number to the checkpoint name, e.g. <model_dir>/increment-1.ckpt.
+      logging.info(
+          "Overwriting checkpoint with new graph for iteration %d to %s",
+          self._iteration_number, checkpoint_path)
       self._overwrite_saver.save(
           session, checkpoint_path, global_step=self._iteration_number)
       self._checkpoint_overwritten = True
@@ -1488,6 +1491,8 @@ class Estimator(tf.estimator.Estimator):
           self._evaluation_checkpoint_path, self._Keys.CURRENT_ITERATION)
 
     if self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
+      assert mode == tf.estimator.ModeKeys.TRAIN
+      assert config.is_chief
       iteration_number += 1
 
     # Only record summaries when training.
@@ -1588,13 +1593,7 @@ class Estimator(tf.estimator.Estimator):
       assert config.is_chief
       assert self._best_ensemble_index is not None
       self._materialize_report(current_iteration)
-    elif self._prepare_next_iteration_state == self._Keys.INCREMENT_ITERATION:
-      assert mode == tf.estimator.ModeKeys.TRAIN
-      assert config.is_chief
-      latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
-      logging.info(
-          "Overwriting checkpoint with new graph for iteration %s to %s",
-          iteration_number, latest_checkpoint)
+
     return self._create_estimator_spec(current_iteration, mode,
                                        iteration_number_tensor,
                                        previous_iteration_vars)
