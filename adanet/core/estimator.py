@@ -170,7 +170,7 @@ class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
 
   def __init__(self, current_iteration, iteration_number_tensor,
                previous_iteration_vars, config):
-    """Initilizes an _OverwriteCheckpointHook instance.
+    """Initializes an _OverwriteCheckpointHook instance.
 
     Args:
       current_iteration: Current `_Iteration` object.
@@ -228,11 +228,11 @@ class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
                                   self._checkpoint_state.model_checkpoint_path)
       session.run(self._update_op)
       checkpoint_path = os.path.join(self._model_dir, "increment.ckpt")
-      # Specify global_step=self._iteration_number to append the iteration
-      # number to the checkpoint name, e.g. <model_dir>/increment-1.ckpt.
       logging.info(
-          "Overwriting checkpoint with new graph for iteration %d to %s",
-          self._iteration_number, checkpoint_path)
+          "Overwriting checkpoint with new graph for iteration %d to %s-%d",
+          self._iteration_number, checkpoint_path, self._iteration_number)
+      # Specify global_step=self._iteration_number to append the iteration
+      # number to the checkpoint name, e.g. <model_dir>/increment.ckpt-1.
       self._overwrite_saver.save(
           session, checkpoint_path, global_step=self._iteration_number)
       self._checkpoint_overwritten = True
