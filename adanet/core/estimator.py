@@ -715,12 +715,15 @@ class Estimator(tf.estimator.Estimator):
 
         # If training ended because the maximum number of training steps
         # occurred, exit training.
-        if self._latest_checkpoint_global_step() >= max_steps:
+        global_steps = self._latest_checkpoint_global_step()
+        if max_steps is not None and global_steps >= max_steps:
+          logging.info("Training ended after %s global steps", global_steps)
           return result
 
         # If training ended for any reason other than the iteration ending,
         # exit training.
         if not self._iteration_ended:
+          logging.info("Training stop requested")
           return result
 
         logging.info("Beginning bookkeeping phase for iteration %s",

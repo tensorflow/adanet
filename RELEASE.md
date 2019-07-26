@@ -16,6 +16,7 @@ limitations under the License.
 # Current version (0.8.0.dev)
  * Under development.
  * TODO: Add official Keras Model support, including Keras layers, Sequential, and Model subclasses for defining subnetworks.
+ * Train forever if `max_steps` and `steps` are both `None`.
 
 # Release 0.7.0
  * Add embeddings support on TPU via `TPUEmbedding`.
