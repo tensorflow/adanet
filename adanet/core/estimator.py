@@ -1018,6 +1018,9 @@ class Estimator(tf.estimator.Estimator):
       else:
         adanet_losses = sess.run(
             [c.adanet_loss for c in current_iteration.candidates])
+      # Replace NaNs with Infs since so that NaN loss candidates are never
+      # chosen.
+      adanet_losses = [np.inf if np.isnan(l) else l for l in adanet_losses]
       values = []
       for i in range(len(current_iteration.candidates)):
         metric_name = "adanet_loss"

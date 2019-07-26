@@ -132,6 +132,32 @@ class _DNNBuilder(Builder):
         })
 
 
+class _NanLossBuilder(Builder):
+  """A subnetwork builder always produces a NaN loss."""
+
+  @property
+  def name(self):
+    return "nan"
+
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
+    logits = tf_compat.v1.layers.dense(
+        features["x"],
+        logits_dimension,
+        kernel_initializer=tf_compat.v1.glorot_uniform_initializer(
+            seed=42)) * np.nan
+    return Subnetwork(last_layer=logits, logits=logits, complexity=0)
+
+  def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
+                                iteration_step, summary, previous_ensemble):
+    return tf.no_op()
+
+
 # TODO: merge this function with _check_eventfile_for_keyword and place
 # in test_utils.
 def _get_summary_value(keyword, dir_):
@@ -174,17 +200,22 @@ class TPUEstimatorTest(tu.AdanetTestCase):
 
   @parameterized.named_parameters(
       {
-          "testcase_name": "not_use_tpu",
-          "use_tpu": False,
-          "want_loss": .27357,
+          "testcase_name":
+              "not_use_tpu",
+          "use_tpu":
+              False,
+          "subnetwork_generator":
+              SimpleGenerator([_DNNBuilder("dnn", use_tpu=False)]),
+          "want_loss":
+              .27357,
       },
   )
-  def test_tpu_estimator_simple_lifecycle(self, use_tpu, want_loss):
+  def test_tpu_estimator_simple_lifecycle(self, use_tpu, subnetwork_generator,
+                                          want_loss):
     config = tf.contrib.tpu.RunConfig(master="", tf_random_seed=42)
     estimator = TPUEstimator(
         head=tu.head(),
-        subnetwork_generator=SimpleGenerator(
-            [_DNNBuilder("dnn", use_tpu=use_tpu)]),
+        subnetwork_generator=subnetwork_generator,
         max_iteration_steps=100,
         model_dir=self.test_subdirectory,
         config=config,

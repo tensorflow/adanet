@@ -20,6 +20,8 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import json
+import os
 
 from absl import logging
 from adanet import distributed
@@ -39,18 +41,29 @@ class _TrainManager(object):
   This object maintains a dictionary of states for each SubnetworkSpec and
   EnsembleSpec to coordinate and manage training. Users can check the
   training status of a spec, or request that it stops training.
+
+  It also persists metadata about specs to disk in order to be consistent across
+  runs and robust to preemptions.
   """
 
-  def __init__(self, subnetwork_specs, ensemble_specs):
+  def __init__(self, subnetwork_specs, ensemble_specs, train_manager_dir):
     """Initializes a _TrainManager instance.
 
     Args:
       subnetwork_specs: List of `_SubnetworkSpec` instances to monitor.
       ensemble_specs: List of `EstimatorSpec` instances to monitor.
+      train_manager_dir: Directory for storing metadata about training. When a
+        spec should no longer be trained, a JSON file with its name and metadata
+        is written to this directory, to persist across runs and preemptions.
     """
 
+    if not tf.io.gfile.exists(train_manager_dir):
+      tf.io.gfile.makedirs(train_manager_dir)
+    self._train_manager_dir = train_manager_dir
+
     self._is_training = {
-        spec.name: True for spec in subnetwork_specs + ensemble_specs
+        spec.name: not self._is_done_training(spec)
+        for spec in subnetwork_specs + ensemble_specs
     }
 
   def should_train(self, spec):
@@ -58,10 +71,26 @@ class _TrainManager(object):
 
     return self._is_training[spec.name]
 
-  def request_stop(self, spec):
+  def _is_done_training(self, spec):
+    """If the file exists, then the candidate is done training."""
+
+    return tf.io.gfile.exists(self._filename_for(spec))
+
+  def _filename_for(self, spec):
+    """Returns the filename to identify the spec."""
+
+    return os.path.join(self._train_manager_dir, "{}.json".format(spec.name))
+
+  def request_stop(self, spec, message):
     """Registers that given spec should no longer train."""
 
     self._is_training[spec.name] = False
+    with tf.io.gfile.GFile(self._filename_for(spec), "w") as record_file:
+      # TODO: Consider making these messages be some kind of Enum. There
+      # might be a case where we want to parse these files. For example, in
+      # iteration n+1, maybe we no longer even want to build NaN candidates.
+      message = {"message": message}
+      record_file.write(json.dumps(message))
 
   def is_over(self):
     """Whether all specs are done training and the iteration is over."""
@@ -71,6 +100,33 @@ class _TrainManager(object):
         # Still needs to train.
         return False
     return True
+
+
+class _NanLossHook(tf_compat.SessionRunHook):
+  """Monitors a spec's loss tensor and stops its training if loss is NaN."""
+
+  def __init__(self, train_manager, spec):
+    """Initializes a `NanTensorHook`.
+
+    Args:
+      train_manager: The current iteration's `_TrainManager`.
+      spec: Either a `SubnetworkSpec` or `EnsembleSpec` to monitor.
+    """
+
+    self._train_manager = train_manager
+    self._spec = spec
+
+  def before_run(self, run_context):
+    del run_context  # Unused
+    if self._train_manager.should_train(self._spec):
+      return tf_compat.SessionRunArgs(self._spec.loss)
+
+  def after_run(self, run_context, run_values):
+    loss = run_values.results
+    if loss is None or not np.isnan(loss):
+      return
+    logging.warning("'%s' diverged with loss = NaN.", self._spec.name)
+    self._train_manager.request_stop(self._spec, "NaN loss during training.")
 
 
 class _TrainingLimitHook(tf_compat.SessionRunHook):
@@ -96,15 +152,17 @@ class _TrainingLimitHook(tf_compat.SessionRunHook):
     self._increment_step_op = increment_step_op
 
   def after_create_session(self, session, coord):
+    if not self._train_manager.should_train(self._spec):
+      return
     if self._spec.step is None:
       # None for dummy candidates used during round-robin placement.
-      self._train_manager.request_stop(self._spec)
+      self._train_manager.request_stop(self._spec, "Dummy candidate to ignore.")
       return
     step_value = session.run(self._spec.step)
     if self._should_stop(step_value):
       logging.info("Skipping '%s' training which already trained %d steps",
                    self._spec.name, step_value)
-      self._train_manager.request_stop(self._spec)
+      self._train_manager.request_stop(self._spec, "Training already complete.")
 
   def before_run(self, run_context):
     del run_context  # Unused
@@ -122,7 +180,8 @@ class _TrainingLimitHook(tf_compat.SessionRunHook):
     if self._should_stop(step_value):
       logging.info("Now stopping '%s' training after %d steps", self._spec.name,
                    step_value)
-      self._train_manager.request_stop(self._spec)
+      self._train_manager.request_stop(
+          self._spec, "Training complete after {} steps.".format(step_value))
 
   def _should_stop(self, step):
     return self._max_steps is not None and step >= self._max_steps
@@ -621,9 +680,11 @@ class _IterationBuilder(object):
       best_export_outputs = self._best_export_outputs(candidates,
                                                       best_candidate_index,
                                                       mode, best_predictions)
+      train_manager_dir = os.path.join(config.model_dir, "train_manager",
+                                       "t{}".format(iteration_number))
       train_manager, training_chief_hooks, training_hooks = self._create_hooks(
           base_global_step, subnetwork_specs, candidates, num_subnetworks,
-          rebuilding)
+          rebuilding, train_manager_dir)
       # Iteration summaries.
       summary = self._summary_maker(
           namespace=None, scope=None, skip_summary=skip_summaries)
@@ -759,7 +820,7 @@ class _IterationBuilder(object):
                   dtype=tf.int64))
 
   def _create_hooks(self, base_global_step, subnetwork_specs, candidates,
-                    num_subnetworks, rebuilding):
+                    num_subnetworks, rebuilding, train_manager_dir):
     """Returns the hooks to monitor and train this iteration.
 
     Args:
@@ -770,6 +831,7 @@ class _IterationBuilder(object):
         current iteration.
       rebuilding: Boolean whether the iteration is being rebuilt only to restore
         the previous best subnetworks and ensembles.
+      train_manager_dir: Directory for the TrainManager to store spec metadata.
 
     Returns:
       A 3-tuple of a _TrainManager for monitoring training, a list of
@@ -779,7 +841,8 @@ class _IterationBuilder(object):
 
     training_chief_hooks, training_hooks = [], []
     ensemble_specs = [c.ensemble_spec for c in candidates]
-    train_manager = _TrainManager(subnetwork_specs, ensemble_specs)
+    train_manager = _TrainManager(subnetwork_specs, ensemble_specs,
+                                  train_manager_dir)
     if not self._use_tpu:
       # On TPU, the global step gets incremented in an op since it doesn't have
       # hook run granularity of CPU and GPU training.
@@ -790,6 +853,8 @@ class _IterationBuilder(object):
     should_train_subnetworks = (
         self._placement_strategy.should_train_subnetworks(num_subnetworks))
     for spec in subnetwork_specs:
+      if not self._use_tpu:
+        training_hooks.append(_NanLossHook(train_manager, spec))
       # We increment the step along with the global step as part of the train
       # op on TPU, whereas on CPU and GPU we use hooks for fine grained control.
       if self._use_tpu or not should_train_subnetworks or spec.train_op is None:
@@ -808,6 +873,8 @@ class _IterationBuilder(object):
         continue
       self._add_hooks(spec, train_manager, training_chief_hooks, training_hooks)
     for spec in ensemble_specs:
+      if not self._use_tpu:
+        training_hooks.append(_NanLossHook(train_manager, spec))
       # See above comment about incrementing the step on CPU vs. TPU.
       if self._use_tpu or spec.train_op is None:
         increment_step_op = None
@@ -840,6 +907,11 @@ class _IterationBuilder(object):
 
     The best candidate is the one with the smallest AdaNet loss.
 
+    In case a candidate has a NaN loss, their loss is immediately set to
+    infinite, so that they are not selected. As long as one candidate ensemble
+    has a non-NaN loss during training, the dreaded `NanLossDuringTrainingError`
+    should not be raised.
+
     Args:
       candidates: List of `_Candidate` instances to choose from.
 
@@ -851,6 +923,11 @@ class _IterationBuilder(object):
       if len(candidates) == 1:
         return tf.constant(0)
       adanet_losses = [candidate.adanet_loss for candidate in candidates]
+      # Replace NaNs with Infs since so that NaN loss candidates are never
+      # chosen.
+      adanet_losses = tf.where(
+          tf_compat.v1.is_nan(adanet_losses),
+          tf.ones_like(adanet_losses) * np.inf, adanet_losses)
       return tf.argmin(input=adanet_losses, axis=0)
 
   def _best_predictions(self, candidates, best_candidate_index):

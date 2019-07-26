@@ -48,7 +48,7 @@ def _dummy_candidate():
   return _Candidate(ensemble_spec=tu.dummy_ensemble_spec("foo"), adanet_loss=1.)
 
 
-class IterationTest(parameterized.TestCase, tf.test.TestCase):
+class IterationTest(tu.AdanetTestCase):
 
   # pylint: disable=g-long-lambda
   @parameterized.named_parameters(
@@ -123,7 +123,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
           best_candidate_index=best_candidate_index,
           summaries=[],
           subnetwork_reports=subnetwork_reports,
-          train_manager=_TrainManager([], []))
+          train_manager=_TrainManager([], [], self.test_subdirectory))
       self.assertEqual(iteration.number, number)
       self.assertEqual(iteration.candidates, candidates)
       self.assertEqual(iteration.estimator_spec, estimator_spec)
@@ -177,7 +177,7 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
             best_candidate_index=best_candidate_index,
             summaries=[],
             subnetwork_reports=subnetwork_reports(),
-            train_manager=_TrainManager([], []))
+            train_manager=_TrainManager([], [], self.test_subdirectory))
 
 
 class _FakeBuilder(SubnetworkBuilder):
@@ -339,7 +339,7 @@ class _FakeEnsembler(object):
     return "fake_ensembler"
 
 
-class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
+class IterationBuilderTest(tu.AdanetTestCase):
 
   @parameterized.named_parameters(
       {
@@ -728,7 +728,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
         features=features(),
         labels=labels(),
         mode=mode,
-        config=tf.estimator.RunConfig(),
+        config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
         previous_ensemble_spec=previous_ensemble_spec())
     with self.test_session() as sess:
       init = tf.group(tf_compat.v1.global_variables_initializer(),
@@ -829,7 +829,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
             features=features,
             labels=labels,
             mode=mode,
-            config=tf.estimator.RunConfig(),
+            config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
             previous_ensemble_spec=previous_ensemble_spec_fn())
 
 
@@ -875,7 +875,7 @@ class _HeadEnsembleBuilder(object):
         export_outputs=estimator_spec.export_outputs)
 
 
-class IterationExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
+class IterationExportOutputsTest(tu.AdanetTestCase):
 
   @parameterized.named_parameters(
       {
@@ -907,7 +907,7 @@ class IterationExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
         subnetwork_builders=subnetwork_builders,
         features=features,
         labels=labels,
-        config=tf.estimator.RunConfig(),
+        config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
         mode=mode)
 
     # Compare iteration outputs with default head outputs.

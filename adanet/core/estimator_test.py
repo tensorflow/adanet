@@ -43,6 +43,7 @@ from adanet.subnetwork import Report
 from adanet.subnetwork import SimpleGenerator
 from adanet.subnetwork import Subnetwork
 from adanet.subnetwork import TrainOpSpec
+import numpy as np
 import tensorflow as tf
 from tensorflow_estimator.python.estimator.head import binary_class_head
 from tensorflow_estimator.python.estimator.head import multi_head as multi_head_lib
@@ -231,6 +232,32 @@ class _SimpleBuilder(Builder):
                                      iteration_step, summary):
     optimizer = tf_compat.v1.train.GradientDescentOptimizer(learning_rate=.001)
     return optimizer.minimize(loss, var_list=var_list)
+
+
+class _NanLossBuilder(Builder):
+  """A subnetwork builder always produces a NaN loss."""
+
+  @property
+  def name(self):
+    return "nan"
+
+  def build_subnetwork(self,
+                       features,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble=None):
+    logits = tf_compat.v1.layers.dense(
+        features["x"],
+        logits_dimension,
+        kernel_initializer=tf_compat.v1.glorot_uniform_initializer(
+            seed=42)) * np.nan
+    return Subnetwork(last_layer=logits, logits=logits, complexity=0)
+
+  def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
+                                iteration_step, summary, previous_ensemble):
+    return tf.no_op()
 
 
 class _LinearBuilder(Builder):
@@ -660,6 +687,54 @@ class EstimatorTest(tu.AdanetTestCase):
       },
       {
           "testcase_name":
+              "nan_loss_builder_first",
+          "subnetwork_generator":
+              SimpleGenerator([
+                  _NanLossBuilder(),
+                  _DNNBuilder("dnn"),
+              ]),
+          "max_iteration_steps":
+              100,
+          "max_steps":
+              200,
+          "want_loss":
+              0.29585412,
+      },
+      {
+          "testcase_name":
+              "nan_loss_builder_last",
+          "subnetwork_generator":
+              SimpleGenerator([
+                  _DNNBuilder("dnn"),
+                  _NanLossBuilder(),
+              ]),
+          "max_iteration_steps":
+              100,
+          "max_steps":
+              200,
+          "want_loss":
+              0.29585412,
+      },
+      {
+          "testcase_name":
+              "nan_loss_builder_evaluator",
+          "subnetwork_generator":
+              SimpleGenerator([
+                  _DNNBuilder("dnn"),
+                  _NanLossBuilder(),
+              ]),
+          "evaluator":
+              Evaluator(
+                  input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=3),
+          "max_iteration_steps":
+              100,
+          "max_steps":
+              200,
+          "want_loss":
+              0.36137745,
+      },
+      {
+          "testcase_name":
               "dataset_train_input_fn",
           "subnetwork_generator":
               SimpleGenerator([_DNNBuilder("dnn")]),
@@ -672,7 +747,7 @@ class EstimatorTest(tu.AdanetTestCase):
           "max_iteration_steps":
               100,
           "want_loss":
-              .32219219,
+              0.32219219,
       })
   def test_lifecycle(self,
                      subnetwork_generator,
@@ -711,7 +786,8 @@ class EstimatorTest(tu.AdanetTestCase):
         report_materializer=report_materializer,
         replicate_ensemble_in_training=replicate_ensemble_in_training,
         model_dir=self.test_subdirectory,
-        config=run_config, **default_ensembler_kwargs)
+        config=run_config,
+        **default_ensembler_kwargs)
 
     if not train_input_fn:
       train_input_fn = tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS)
@@ -815,35 +891,49 @@ class EstimatorTest(tu.AdanetTestCase):
           "testcase_name": "no_subnetwork_generator",
           "subnetwork_generator": None,
           "max_iteration_steps": 100,
+          "want_error": ValueError,
       }, {
           "testcase_name": "negative_max_iteration_steps",
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": -1,
+          "want_error": ValueError,
       }, {
           "testcase_name": "zero_max_iteration_steps",
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": 0,
+          "want_error": ValueError,
       }, {
           "testcase_name": "steps_and_max_steps",
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": 1,
           "steps": 1,
           "max_steps": 1,
+          "want_error": ValueError,
       }, {
           "testcase_name": "zero_steps",
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": 1,
           "steps": 0,
           "max_steps": None,
-      })
+          "want_error": ValueError,
+      },
+      {
+          "testcase_name": "nan_loss_builder",
+          "subnetwork_generator": SimpleGenerator([_NanLossBuilder()]),
+          "max_iteration_steps": 1,
+          "max_steps": None,
+          "want_error": tf_compat.v1.estimator.NanLossDuringTrainingError,
+      },
+  )
   def test_train_error(self,
                        subnetwork_generator,
                        max_iteration_steps,
+                       want_error,
                        steps=None,
                        max_steps=10):
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
-    with self.assertRaises(ValueError):
+    with self.assertRaises(want_error):
       estimator = Estimator(
           head=tu.head(),
           subnetwork_generator=subnetwork_generator,
