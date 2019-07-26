@@ -478,23 +478,6 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
             want_adanet_loss, sess.run(ensemble_spec.adanet_loss), places=3)
 
 
-class SubnetworkManagerTest(tu.AdanetTestCase):
-
-  @parameterized.named_parameters(
-      {
-          "testcase_name": "negative_max_steps",
-          "max_steps": -1,
-      }, {
-          "testcase_name": "zero_max_steps",
-          "max_steps": 0,
-      })
-  def test_init_errors(self, max_steps=None):
-    head = binary_class_head.BinaryClassHead(loss_reduction=tf_compat.SUM)
-    with self.test_session():
-      with self.assertRaises(ValueError):
-        _SubnetworkManager(head, max_steps=max_steps)
-
-
 def _make_metrics(sess,
                   metric_fn,
                   mode=tf.estimator.ModeKeys.EVAL,

@@ -70,15 +70,19 @@ class _StopAfterTrainingHook(tf_compat.SessionRunHook):
   def before_run(self, run_context):
     """See `SessionRunHook`."""
 
-    del run_context  # Unused
-    return tf_compat.SessionRunArgs(self._iteration.is_over_fn())
+    self._stop_if_is_over(run_context)
 
   def after_run(self, run_context, run_values):
     """See `SessionRunHook`."""
 
-    is_over = run_values.results
-    if not is_over:
+    self._stop_if_is_over(run_context)
+
+  def _stop_if_is_over(self, run_context):
+    """Signals the monitored session to step when the iteration is over."""
+
+    if not self._iteration.train_manager.is_over():
       return
+    logging.info("Now stopping iteration %d training", self._iteration.number)
     run_context.request_stop()
     self._after_fn()
 
@@ -613,10 +617,7 @@ class Estimator(tf.estimator.Estimator):
     candidate_builder = _CandidateBuilder(
         adanet_loss_decay=self._adanet_loss_decay)
     subnetwork_manager = _SubnetworkManager(
-        head=head,
-        max_steps=max_iteration_steps,
-        metric_fn=metric_fn,
-        use_tpu=self._use_tpu)
+        head=head, metric_fn=metric_fn, use_tpu=self._use_tpu)
     if not placement_strategy:
       placement_strategy = ReplicationStrategy()
     self._iteration_builder = _IterationBuilder(
@@ -624,6 +625,7 @@ class Estimator(tf.estimator.Estimator):
         subnetwork_manager,
         ensemble_builder,
         ensemblers,
+        max_iteration_steps,
         self._summary_maker,
         global_step_combiner_fn,
         placement_strategy,

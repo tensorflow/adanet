@@ -127,7 +127,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
                           }, tf.constant([[1.]]))),
               },
           "want_loss":
-              0.160,
+              0.469,
       })
   # pylint: enable=g-long-lambda
   def test_auto_ensemble_estimator_lifecycle(self, candidate_pool, want_loss):

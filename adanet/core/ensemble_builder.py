@@ -445,7 +445,6 @@ class _SubnetworkSpec(
         "subnetwork",
         "builder",
         "predictions",
-        "is_training",
         "step",
         "loss",
         "train_op",
@@ -481,7 +480,6 @@ class _SubnetworkSpec(
               builder,
               predictions,
               step,
-              is_training,
               loss=None,
               train_op=None,
               eval_metrics=None):
@@ -492,7 +490,6 @@ class _SubnetworkSpec(
         builder=builder,
         predictions=predictions,
         step=step,
-        is_training=is_training,
         loss=loss,
         train_op=train_op,
         eval_metrics=eval_metrics)
@@ -506,7 +503,6 @@ class _SubnetworkManager(object):
 
   Args:
     head: A `tf.contrib.estimator.Head` instance.
-    max_steps: Maximum number steps to train candidate subnetworks.
     metric_fn: A function which should obey the following signature:
       - Args: can only have following three arguments in any order:
         * predictions: Predictions `Tensor` or dict of `Tensor` created by given
@@ -529,12 +525,9 @@ class _SubnetworkManager(object):
     ValueError: If `max_steps` is <= 0.
   """
 
-  def __init__(self, head, max_steps=None, metric_fn=None, use_tpu=False):
-    if max_steps is not None and max_steps <= 0:
-      raise ValueError("max_steps must be > 0 or None")
+  def __init__(self, head, metric_fn=None, use_tpu=False):
     _verify_metric_fn_args(metric_fn)
     self._head = head
-    self._max_steps = max_steps
     self._metric_fn = metric_fn
     self._use_tpu = use_tpu
 
@@ -615,18 +608,6 @@ class _SubnetworkManager(object):
         with summary.current_scope():
           summary.scalar("loss", estimator_spec.loss)
 
-      if self._max_steps is not None:
-        # Train this candidate for `max_steps` steps.
-        # NOTE: During training, the iteration step gets incremented at the very
-        # end of the computation graph, so we need to account for that here.
-        is_training = tf.less(
-            step_tensor + 1 if mode == tf.estimator.ModeKeys.TRAIN else 0,
-            self._max_steps,
-            name="is_training")
-      else:
-        # Train this candidate forever.
-        is_training = tf.constant(True, name="is_training")
-
       # Create train ops for training subnetworks and ensembles.
       train_op = None
       if mode == tf.estimator.ModeKeys.TRAIN and subnetwork_builder:
@@ -650,6 +631,5 @@ class _SubnetworkManager(object):
         predictions=estimator_spec.predictions,
         loss=estimator_spec.loss,
         step=step,
-        is_training=is_training,
         train_op=train_op,
         eval_metrics=subnetwork_metrics.eval_metrics_tuple())

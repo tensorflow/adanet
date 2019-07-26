@@ -25,7 +25,7 @@ from absl import logging
 from adanet import distributed
 from adanet import subnetwork
 from adanet import tf_compat
-from adanet.core import ensemble_builder as ensemble_builder_lib
+from adanet.core.ensemble_builder import _EnsembleSpec
 from adanet.core.eval_metrics import _IterationMetrics
 from adanet.core.eval_metrics import call_eval_metrics
 
@@ -33,11 +33,189 @@ import numpy as np
 import tensorflow as tf
 
 
-# TODO: Include estimator_specs instead of candidates.
+class _TrainManager(object):
+  """Manages the training of SubnetworkSpecs and EnsembleSpecs.
+
+  This object maintains a dictionary of states for each SubnetworkSpec and
+  EnsembleSpec to coordinate and manage training. Users can check the
+  training status of a spec, or request that it stops training.
+  """
+
+  def __init__(self, subnetwork_specs, ensemble_specs):
+    """Initializes a _TrainManager instance.
+
+    Args:
+      subnetwork_specs: List of `_SubnetworkSpec` instances to monitor.
+      ensemble_specs: List of `EstimatorSpec` instances to monitor.
+    """
+
+    self._is_training = {
+        spec.name: True for spec in subnetwork_specs + ensemble_specs
+    }
+
+  def should_train(self, spec):
+    """Whether the given spec should keep training."""
+
+    return self._is_training[spec.name]
+
+  def request_stop(self, spec):
+    """Registers that given spec should no longer train."""
+
+    self._is_training[spec.name] = False
+
+  def is_over(self):
+    """Whether all specs are done training and the iteration is over."""
+
+    for k in sorted(self._is_training):
+      if self._is_training[k]:
+        # Still needs to train.
+        return False
+    return True
+
+
+class _TrainingLimitHook(tf_compat.SessionRunHook):
+  """Limits a given spec's training to a maximum number of steps.
+
+  Is also responsible for incrementing the spec's step.
+  """
+
+  def __init__(self, train_manager, spec, max_steps, increment_step_op):
+    """Initializes a _TrainingLimitHook instance.
+
+    Args:
+      train_manager: The current iteration's `_TrainManager`.
+      spec: Either a `SubnetworkSpec` or `EnsembleSpec` to monitor.
+      max_steps: Maximum number steps to train the given spec.
+      increment_step_op: That increments the current step and executes one train
+        op run.
+    """
+
+    self._train_manager = train_manager
+    self._spec = spec
+    self._max_steps = max_steps
+    self._increment_step_op = increment_step_op
+
+  def after_create_session(self, session, coord):
+    if self._spec.step is None:
+      # None for dummy candidates used during round-robin placement.
+      self._train_manager.request_stop(self._spec)
+      return
+    step_value = session.run(self._spec.step)
+    if self._should_stop(step_value):
+      logging.info("Skipping '%s' training which already trained %d steps",
+                   self._spec.name, step_value)
+      self._train_manager.request_stop(self._spec)
+
+  def before_run(self, run_context):
+    del run_context  # Unused
+    if not self._train_manager.should_train(self._spec):
+      return None
+    if self._increment_step_op is None:
+      # None on TPU.
+      return tf_compat.SessionRunArgs(self._spec.step)
+    return tf_compat.SessionRunArgs(self._increment_step_op)
+
+  def after_run(self, run_context, run_values):
+    step_value = run_values.results
+    if step_value is None:
+      return
+    if self._should_stop(step_value):
+      logging.info("Now stopping '%s' training after %d steps", self._spec.name,
+                   step_value)
+      self._train_manager.request_stop(self._spec)
+
+  def _should_stop(self, step):
+    return self._max_steps is not None and step >= self._max_steps
+
+
+class _GlobalStepSetterHook(tf_compat.SessionRunHook):
+  """A hook for setting the global step variable.
+
+  Should only be run on CPU and GPU, but not TPU. TPUs run many training steps
+  per hook run, so the global step should be incremented in an op along with the
+  candidates' train ops.
+  """
+
+  def __init__(self, train_manager, subnetwork_specs, base_global_step,
+               global_step_combiner_fn):
+    """Initializes a _GlobalStepSetterHook instance.
+
+    Args:
+      train_manager: The current iteration's `_TrainManager`.
+      subnetwork_specs: List of `_SubnetworkSpec` instances for this iteration.
+      base_global_step: Integer global step at the beginning of this iteration.
+      global_step_combiner_fn: Function for combining each subnetwork's
+        iteration step into the global step.
+    """
+
+    self._train_manager = train_manager
+    self._subnetwork_specs = subnetwork_specs
+    self._base_global_step = base_global_step
+    self._global_step_combiner_fn = global_step_combiner_fn
+    self._steps = [s.step.read_value() for s in subnetwork_specs]
+
+  def begin(self):
+    global_step = tf_compat.v1.train.get_global_step()
+    self._assign_global_step_op = global_step.assign(
+        tf.cast(
+            self._base_global_step + self._global_step_combiner_fn(self._steps),
+            dtype=tf.int64))
+
+  def after_create_session(self, session, coord):
+    self._step_values = session.run(self._steps)
+
+  def after_run(self, run_context, run_values):
+    # Global step cannot be retrieved via SessionRunArgs and before_run due to
+    # race condition in hook execution.
+    run_context.session.run(self._assign_global_step_op)
+
+
+class _TrainingHookRunnerHook(tf_compat.SessionRunHook):
+  """Hook wrapper for executing a spec's training hook.
+
+  Will only run the hook according to the current TrainManager.
+  """
+
+  def __init__(self, train_manager, spec, hook):
+    """Initializes a _TrainingHookRunnerHook instance.
+
+    Only accepts a single hook, since merging hooks is complex and should be
+    handled by the MonitoredTrainingSession instead.
+
+    Args:
+      train_manager: The current iteration's `_TrainManager`.
+      spec: Either a `SubnetworkSpec` or `EnsembleSpec` to train.
+      hook: The spec's training hook to execute.
+    """
+
+    self._train_manager = train_manager
+    self._spec = spec
+    self._hook = hook
+
+  def begin(self):
+    self._hook.begin()
+
+  def after_create_session(self, session, coord):
+    self._hook.after_create_session(session, coord)
+
+  def before_run(self, run_context):
+    if self._train_manager.should_train(self._spec):
+      return self._hook.before_run(run_context)
+
+  def after_run(self, run_context, run_values):
+    if self._train_manager.should_train(self._spec):
+      self._hook.after_run(run_context, run_values)
+
+  def end(self, session):
+    self._hook.end(session)
+
+
+# TODO: Replace candidates with ensemble_specs.
 class _Iteration(
     collections.namedtuple("_Iteration", [
         "number", "candidates", "subnetwork_specs", "estimator_spec",
-        "best_candidate_index", "summaries", "is_over_fn", "subnetwork_reports"
+        "best_candidate_index", "summaries", "train_manager",
+        "subnetwork_reports"
     ])):
   """An AdaNet iteration.
 
@@ -49,7 +227,8 @@ class _Iteration(
   """
 
   def __new__(cls, number, candidates, subnetwork_specs, estimator_spec,
-              best_candidate_index, summaries, is_over_fn, subnetwork_reports):
+              best_candidate_index, summaries, train_manager,
+              subnetwork_reports):
     """Creates a validated `_Iteration` instance.
 
     Args:
@@ -64,7 +243,8 @@ class _Iteration(
       estimator_spec: `EstimatorSpec` instance.
       best_candidate_index: Int `Tensor` indicating the best candidate's index.
       summaries: List of `adanet.Summary` instances for each candidate.
-      is_over_fn: A fn()->Boolean `Variable` indicating if iteration is over.
+      train_manager: The current `_TrainManager` for monitoring candidate per
+        training.
       subnetwork_reports: Dict mapping string names to `subnetwork.Report`s, one
         per candidate.
 
@@ -92,18 +272,8 @@ class _Iteration(
         estimator_spec=estimator_spec,
         best_candidate_index=best_candidate_index,
         summaries=summaries,
-        is_over_fn=is_over_fn,
+        train_manager=train_manager,
         subnetwork_reports=subnetwork_reports)
-
-
-def _is_over_var():
-  var = tf_compat.v1.get_variable(
-      "is_over_var",
-      shape=[],
-      initializer=tf_compat.v1.zeros_initializer(),
-      trainable=False,
-      dtype=tf.bool)
-  return var
 
 
 def _is_numeric(tensor):
@@ -122,6 +292,7 @@ class _IterationBuilder(object):
                subnetwork_manager,
                ensemble_builder,
                ensemblers,
+               max_steps,
                summary_maker,
                global_step_combiner_fn=tf.math.reduce_mean,
                placement_strategy=distributed.ReplicationStrategy(),
@@ -138,6 +309,7 @@ class _IterationBuilder(object):
       ensemble_builder: An `_EnsembleBuilder` instance.
       ensemblers: An iterable of :class:`adanet.ensemble.Ensembler` objects that
         define how to ensemble a group of subnetworks.
+      max_steps: Maximum number of steps to train candidate subnetworks.
       summary_maker: A function that constructs an `adanet.Summary` instance
         from (namespace, scope, and skip_summary).
       global_step_combiner_fn: Function for combining each subnetwork's
@@ -160,10 +332,13 @@ class _IterationBuilder(object):
       An `_IterationBuilder` object.
     """
 
+    if max_steps is not None and max_steps <= 0:
+      raise ValueError("max_steps must be > 0 or None")
     self._candidate_builder = candidate_builder
     self._subnetwork_manager = subnetwork_manager
     self._ensemble_builder = ensemble_builder
     self._ensemblers = ensemblers
+    self._max_steps = max_steps
     self._summary_maker = summary_maker
     self._global_step_combiner_fn = global_step_combiner_fn
     self._placement_strategy = placement_strategy
@@ -366,22 +541,10 @@ class _IterationBuilder(object):
           # TODO: Eliminate need for candidates.
           if not self._placement_strategy.should_build_ensemble(
               num_subnetworks) and not rebuilding:
-            dummy_candidate = self._candidate_builder.build_candidate(
-                # pylint: disable=protected-access
-                ensemble_spec=ensemble_builder_lib._EnsembleSpec(
-                    name=subnetwork_name,
-                    ensemble=None,
-                    architecture=None,
-                    subnetwork_builders=subnetwork_builders,
-                    predictions=subnetwork_spec.predictions,
-                    loss=subnetwork_spec.loss,
-                    step=0,
-                    adanet_loss=0.),
-                # pylint: enable=protected-access
-                training=training,
-                summary=subnetwork_summary,
-                track_moving_average=False)
-            candidates.append(dummy_candidate)
+            candidates.append(
+                self._create_dummy_candidate(subnetwork_spec,
+                                             subnetwork_builders,
+                                             subnetwork_summary, training))
         # Generate subnetwork reports.
         if mode != tf.estimator.ModeKeys.PREDICT:
           subnetwork_report = subnetwork_builder.build_subnetwork_report()
@@ -458,26 +621,9 @@ class _IterationBuilder(object):
       best_export_outputs = self._best_export_outputs(candidates,
                                                       best_candidate_index,
                                                       mode, best_predictions)
-      # Hooks on TPU cannot depend on any graph `Tensors`. Instead the value of
-      # `is_over` is stored in a `Variable` that can later be retrieved from
-      # inside a training hook.
-      is_over_var_template = tf_compat.v1.make_template("is_over_var_template",
-                                                        _is_over_var)
-      training_chief_hooks, training_hooks = (), ()
-      for subnetwork_spec in subnetwork_specs:
-        if not self._placement_strategy.should_train_subnetworks(
-            num_subnetworks) and not rebuilding:
-          continue
-        if not subnetwork_spec.train_op:
-          continue
-        training_chief_hooks += subnetwork_spec.train_op.chief_hooks or ()
-        training_hooks += subnetwork_spec.train_op.hooks or ()
-      for candidate in candidates:
-        spec = candidate.ensemble_spec
-        if not spec.train_op:
-          continue
-        training_chief_hooks += spec.train_op.chief_hooks or ()
-        training_hooks += spec.train_op.hooks or ()
+      train_manager, training_chief_hooks, training_hooks = self._create_hooks(
+          base_global_step, subnetwork_specs, candidates, num_subnetworks,
+          rebuilding)
       # Iteration summaries.
       summary = self._summary_maker(
           namespace=None, scope=None, skip_summary=skip_summaries)
@@ -486,16 +632,18 @@ class _IterationBuilder(object):
         summary.scalar("iteration/adanet/iteration", iteration_number)
         if best_loss is not None:
           summary.scalar("loss", best_loss)
-      train_op = self._create_train_op(base_global_step, subnetwork_specs,
-                                       candidates, mode, is_over_var_template,
-                                       num_subnetworks, config)
-      iteration_metrics = _IterationMetrics(candidates, subnetwork_specs)
+      iteration_metrics = _IterationMetrics(iteration_number, candidates,
+                                            subnetwork_specs)
+      # All training happens in hooks so we don't need a train op.
+      train_op = tf.no_op()
       if self._use_tpu:
         estimator_spec = tf_compat.v1.estimator.tpu.TPUEstimatorSpec(
             mode=mode,
             predictions=best_predictions,
             loss=best_loss,
-            train_op=train_op,
+            train_op=self._create_tpu_train_op(base_global_step,
+                                               subnetwork_specs, candidates,
+                                               mode, num_subnetworks, config),
             eval_metrics=iteration_metrics.best_eval_metrics_tuple(
                 best_candidate_index, mode),
             export_outputs=best_export_outputs,
@@ -519,40 +667,44 @@ class _IterationBuilder(object):
           estimator_spec=estimator_spec,
           best_candidate_index=best_candidate_index,
           summaries=summaries,
-          is_over_fn=is_over_var_template,
+          train_manager=train_manager,
           subnetwork_reports=subnetwork_reports)
 
-  def _assign_is_over(self, subnetwork_specs, is_over_var_template):
-    """Assigns whether the iteration is over to the is_over_var.
+  def _create_dummy_candidate(self, subnetwork_spec, subnetwork_builders,
+                              subnetwork_summary, training):
+    """Returns a dummy candidate for the given SubnetworkSpec.
 
-    The iteration is over once all candidates are done training.
-
-    Workers can only assign `is_over_var` to `True` when they think the
-    iteration is over, so that `is_over` cannot be undone in distributed
-    training. Effectively, the fastest worker will always determine when
-    training is over.
+    AdaNet only considers ensembles as candidate models, and ensembles
+    are represented as `_Candidates`. When training only subnetworks, such as
+    on a subnetwork-worker in the RoundRobinStrategy, then we still need a
+    candidate to manage the training of the subnetwork, even if it gets
+    discarded, hence the dummy candidate.
 
     Args:
-      subnetwork_specs: List of `_SubnetworkSpec` instances to train.
-      is_over_var_template: A fn()->tf.Variable which returns the is_over_var.
-
-    Returns:
-      An op which assigns whether the iteration is over to the is_over_var.
+      subnetwork_spec: The subnetwork spec for the dummy candidate to wrap.
+      subnetwork_builders: List of all subnetwork builders generated this
+        iteration.
+      subnetwork_summary: `_Summary` object to use for TensorBoard.
+      training: Whether or not we are currently training.
     """
 
-    with tf_compat.v1.variable_scope("is_over"):
-      is_over = True
-      for subnetwork_spec in subnetwork_specs:
-        is_over = tf.logical_and(is_over,
-                                 tf.logical_not(subnetwork_spec.is_training))
-      is_over_var = is_over_var_template()
-      return tf.cond(
-          pred=is_over,
-          true_fn=lambda: is_over_var.assign(True, name="assign_is_over"),
-          false_fn=lambda: tf.no_op("noassign_is_over"))
+    dummy_ensemble_spec = _EnsembleSpec(
+        name="dummy_{}".format(subnetwork_spec.name),
+        ensemble=None,
+        architecture=None,
+        subnetwork_builders=subnetwork_builders,
+        predictions=subnetwork_spec.predictions,
+        loss=subnetwork_spec.loss,
+        step=None,
+        adanet_loss=0.)
+    return self._candidate_builder.build_candidate(
+        ensemble_spec=dummy_ensemble_spec,
+        training=training,
+        summary=subnetwork_summary,
+        track_moving_average=False)
 
-  def _create_train_op(self, base_global_step, subnetwork_specs, candidates,
-                       mode, is_over_var_template, num_subnetworks, config):
+  def _create_tpu_train_op(self, base_global_step, subnetwork_specs, candidates,
+                           mode, num_subnetworks, config):
     """Returns the train op for this set of candidates.
 
     This train op combines the train ops from all the candidates into a single
@@ -566,7 +718,6 @@ class _IterationBuilder(object):
       candidates: List of `_Candidate` instances to train.
       mode: Defines whether this is training, evaluation or inference. The train
         op is only non-None during `TRAIN`. See `ModeKeys`.
-      is_over_var_template: A fn()->tf.Variable which returns the is_over_var.
       num_subnetworks: Integer number of subnetwork builders generated for the
         current iteration.
       config: The `tf.estimator.RunConfig` to use this iteration.
@@ -577,22 +728,22 @@ class _IterationBuilder(object):
 
     if mode != tf.estimator.ModeKeys.TRAIN:
       return tf.no_op()
+    ensemble_specs = [c.ensemble_spec for c in candidates]
     with tf_compat.v1.variable_scope("train_op"):
       train_ops = []
       if self._placement_strategy.should_train_subnetworks(num_subnetworks):
         for subnetwork_spec in subnetwork_specs:
           if subnetwork_spec.train_op is not None:
             train_ops.append(subnetwork_spec.train_op.train_op)
-      for candidate in candidates:
-        if candidate.ensemble_spec.train_op is not None:
+      for ensemble_spec in ensemble_specs:
+        if ensemble_spec.train_op is not None:
           # The train op of a previous ensemble is None even during `TRAIN`.
-          train_ops.append(candidate.ensemble_spec.train_op.train_op)
-      train_ops.append(
-          self._assign_is_over(subnetwork_specs, is_over_var_template))
+          train_ops.append(ensemble_spec.train_op.train_op)
 
       with tf.control_dependencies(train_ops):
         # Increment steps after train ops complete to avoid non-determinism.
         increment_ops = [s.step.assign_add(1) for s in subnetwork_specs]
+        increment_ops += [e.step.assign_add(1) for e in ensemble_specs]
 
         if not config.is_chief:
           return tf.group(*increment_ops)
@@ -606,6 +757,83 @@ class _IterationBuilder(object):
               tf.cast(
                   base_global_step + self._global_step_combiner_fn(steps),
                   dtype=tf.int64))
+
+  def _create_hooks(self, base_global_step, subnetwork_specs, candidates,
+                    num_subnetworks, rebuilding):
+    """Returns the hooks to monitor and train this iteration.
+
+    Args:
+      base_global_step: Integer global step at the beginning of this iteration.
+      subnetwork_specs: List of `_SubnetworkSpec` instances.
+      candidates: List of `_Candidate` instances to compare.
+      num_subnetworks: Integer number of subnetwork builders generated for the
+        current iteration.
+      rebuilding: Boolean whether the iteration is being rebuilt only to restore
+        the previous best subnetworks and ensembles.
+
+    Returns:
+      A 3-tuple of a _TrainManager for monitoring training, a list of
+      `SessionRunHooks` to run on chief, and a list of `SessionRunHooks` to run
+      on all workers.
+    """
+
+    training_chief_hooks, training_hooks = [], []
+    ensemble_specs = [c.ensemble_spec for c in candidates]
+    train_manager = _TrainManager(subnetwork_specs, ensemble_specs)
+    if not self._use_tpu:
+      # On TPU, the global step gets incremented in an op since it doesn't have
+      # hook run granularity of CPU and GPU training.
+      training_chief_hooks.append(
+          _GlobalStepSetterHook(train_manager, subnetwork_specs,
+                                base_global_step,
+                                self._global_step_combiner_fn))
+    should_train_subnetworks = (
+        self._placement_strategy.should_train_subnetworks(num_subnetworks))
+    for spec in subnetwork_specs:
+      # We increment the step along with the global step as part of the train
+      # op on TPU, whereas on CPU and GPU we use hooks for fine grained control.
+      if self._use_tpu or not should_train_subnetworks or spec.train_op is None:
+        increment_step_op = None
+      else:
+        with tf.control_dependencies([spec.train_op.train_op]):
+          increment_step_op = spec.step.assign_add(1)
+      # TPU also supports uneven training, but up to num_iterations_per_loop.
+      training_hooks.append(
+          _TrainingLimitHook(
+              train_manager,
+              spec,
+              self._max_steps,
+              increment_step_op=increment_step_op))
+      if not should_train_subnetworks and not rebuilding:
+        continue
+      self._add_hooks(spec, train_manager, training_chief_hooks, training_hooks)
+    for spec in ensemble_specs:
+      # See above comment about incrementing the step on CPU vs. TPU.
+      if self._use_tpu or spec.train_op is None:
+        increment_step_op = None
+      else:
+        with tf.control_dependencies([spec.train_op.train_op]):
+          increment_step_op = spec.step.assign_add(1)
+      training_hooks.append(
+          _TrainingLimitHook(
+              train_manager,
+              spec,
+              self._max_steps,
+              increment_step_op=increment_step_op))
+      self._add_hooks(spec, train_manager, training_chief_hooks, training_hooks)
+    return train_manager, training_chief_hooks, training_hooks
+
+  def _add_hooks(self, spec, train_manager, training_chief_hooks,
+                 training_hooks):
+    """Appends spec train hooks to the given hook lists."""
+
+    if not spec.train_op:
+      return
+    for hook in spec.train_op.chief_hooks:
+      training_chief_hooks.append(
+          _TrainingHookRunnerHook(train_manager, spec, hook))
+    for hook in spec.train_op.hooks:
+      training_hooks.append(_TrainingHookRunnerHook(train_manager, spec, hook))
 
   def _best_candidate_index(self, candidates):
     """Returns the index of the best candidate in the list.

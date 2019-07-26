@@ -226,6 +226,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
 
     self.assertAlmostEqual(want_loss, eval_results["loss"], places=2)
     self.assertEqual(max_steps, eval_results["global_step"])
+    self.assertEqual(2, eval_results["iteration"])
     for prediction in predictions:
       self.assertIsNotNone(prediction["predictions"])
 
@@ -270,6 +271,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=1)
     self.assertAlmostEqual(want_loss, eval_results["loss"], places=2)
     self.assertEqual(max_steps, eval_results["global_step"])
+    self.assertEqual(0, eval_results["iteration"])
 
     subnetwork_subdir = os.path.join(self.test_subdirectory,
                                      "subnetwork/t0_dnn")

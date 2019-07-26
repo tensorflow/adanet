@@ -28,6 +28,7 @@ from adanet.core.ensemble_builder import _EnsembleSpec
 from adanet.core.ensemble_builder import _SubnetworkSpec
 from adanet.core.iteration import _Iteration
 from adanet.core.iteration import _IterationBuilder
+from adanet.core.iteration import _TrainManager
 from adanet.core.summary import _ScopedSummary
 from adanet.core.summary import _TPUScopedSummary
 import adanet.core.testing_utils as tu
@@ -57,7 +58,6 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
           "candidates": [_dummy_candidate()],
           "estimator_spec": tu.dummy_estimator_spec(),
           "best_candidate_index": 0,
-          "is_over_fn": lambda: True,
       }, {
           "testcase_name": "two_candidates",
           "number": 0,
@@ -65,35 +65,24 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
                          _dummy_candidate()],
           "estimator_spec": tu.dummy_estimator_spec(),
           "best_candidate_index": 0,
-          "is_over_fn": lambda: True,
       }, {
           "testcase_name": "positive_number",
           "number": 1,
           "candidates": [_dummy_candidate()],
           "estimator_spec": tu.dummy_estimator_spec(),
           "best_candidate_index": 0,
-          "is_over_fn": lambda: True,
-      }, {
-          "testcase_name": "false_is_over",
-          "number": 1,
-          "candidates": [_dummy_candidate()],
-          "estimator_spec": tu.dummy_estimator_spec(),
-          "best_candidate_index": 0,
-          "is_over_fn": lambda: False,
       }, {
           "testcase_name": "zero_best_predictions",
           "number": 1,
           "candidates": [_dummy_candidate()],
           "estimator_spec": tu.dummy_estimator_spec(),
           "best_candidate_index": 0,
-          "is_over_fn": lambda: True,
       }, {
           "testcase_name": "zero_best_loss",
           "number": 1,
           "candidates": [_dummy_candidate()],
           "estimator_spec": tu.dummy_estimator_spec(),
           "best_candidate_index": 0,
-          "is_over_fn": lambda: True,
       }, {
           "testcase_name":
               "pass_subnetwork_report",
@@ -104,8 +93,6 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
               tu.dummy_estimator_spec(),
           "best_candidate_index":
               0,
-          "is_over_fn":
-              lambda: True,
           "subnetwork_reports_fn":
               lambda: {
                   "foo":
@@ -122,7 +109,6 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
                candidates,
                estimator_spec,
                best_candidate_index,
-               is_over_fn,
                subnetwork_reports_fn=None):
     if subnetwork_reports_fn is None:
       subnetwork_reports = {}
@@ -136,13 +122,12 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
           estimator_spec=estimator_spec,
           best_candidate_index=best_candidate_index,
           summaries=[],
-          is_over_fn=is_over_fn,
-          subnetwork_reports=subnetwork_reports)
+          subnetwork_reports=subnetwork_reports,
+          train_manager=_TrainManager([], []))
       self.assertEqual(iteration.number, number)
       self.assertEqual(iteration.candidates, candidates)
       self.assertEqual(iteration.estimator_spec, estimator_spec)
       self.assertEqual(iteration.best_candidate_index, best_candidate_index)
-      self.assertEqual(iteration.is_over_fn(), is_over_fn())
       self.assertEqual(iteration.subnetwork_reports, subnetwork_reports)
 
   @parameterized.named_parameters(
@@ -181,7 +166,6 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
                       candidates=lambda: [_dummy_candidate()],
                       estimator_spec=tu.dummy_estimator_spec(),
                       best_candidate_index=0,
-                      is_over_fn=lambda: True,
                       subnetwork_reports=lambda: []):
     with self.test_session():
       with self.assertRaises(ValueError):
@@ -192,8 +176,8 @@ class IterationTest(parameterized.TestCase, tf.test.TestCase):
             estimator_spec=estimator_spec,
             best_candidate_index=best_candidate_index,
             summaries=[],
-            is_over_fn=is_over_fn,
-            subnetwork_reports=subnetwork_reports())
+            subnetwork_reports=subnetwork_reports(),
+            train_manager=_TrainManager([], []))
 
 
 class _FakeBuilder(SubnetworkBuilder):
@@ -302,16 +286,11 @@ class _FakeSubnetworkManager(object):
     del previous_ensemble
     del params
 
-    is_training = False
-    if subnetwork_builder:
-      is_training = "training" in subnetwork_builder.name
-
     return _SubnetworkSpec(
         name=name,
         subnetwork=None,
         builder=subnetwork_builder,
         step=tf.Variable(0.),
-        is_training=is_training,
         predictions=None,
         loss=None,
         train_op=subnetwork_builder.build_subnetwork_train_op(
@@ -362,6 +341,25 @@ class _FakeEnsembler(object):
 
 class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
 
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "negative_max_steps",
+          "max_steps": -1,
+      }, {
+          "testcase_name": "zero_max_steps",
+          "max_steps": 0,
+      })
+  def test_init_errors(self, max_steps):
+    with self.test_session():
+      with self.assertRaises(ValueError):
+        _IterationBuilder(
+            _FakeCandidateBuilder(),
+            _FakeSubnetworkManager(),
+            _FakeEnsembleBuilder(),
+            summary_maker=_ScopedSummary,
+            ensemblers=[_FakeEnsembler()],
+            max_steps=max_steps)
+
   # pylint: disable=g-long-lambda
   @parameterized.named_parameters(
       {
@@ -408,7 +406,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               1.403943,
           "want_predictions":
               2.129,
-          "want_eval_metric_ops": ["a"],
+          "want_eval_metric_ops": ["a", "iteration"],
           "want_best_candidate_index":
               0,
       }, {
@@ -428,7 +426,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               1.403943,
           "want_predictions":
               2.129,
-          "want_eval_metric_ops": ["a"],
+          "want_eval_metric_ops": ["a", "iteration"],
           "want_best_candidate_index":
               0,
       }, {
@@ -440,7 +438,6 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           "want_loss": 1.403943,
           "want_predictions": 2.129,
           "want_best_candidate_index": 0,
-          "want_is_over": True,
       }, {
           "testcase_name": "single_dict_predictions_subnetwork_fn",
           "ensemble_builder": _FakeEnsembleBuilder(dict_predictions=True),
@@ -504,7 +501,7 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
               1.403943,
           "want_predictions":
               2.129,
-          "want_eval_metric_ops": ["a"],
+          "want_eval_metric_ops": ["a", "iteration"],
           "want_best_candidate_index":
               1,
       }, {
@@ -553,7 +550,6 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
           "want_loss": 1.403943,
           "want_predictions": 2.129,
           "want_best_candidate_index": 0,
-          "want_is_over": True,
       }, {
           "testcase_name": "two_dict_predictions_subnetwork_fns",
           "ensemble_builder": _FakeEnsembleBuilder(dict_predictions=True),
@@ -708,20 +704,20 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
                            want_predictions,
                            want_best_candidate_index,
                            want_eval_metric_ops=(),
-                           want_is_over=False,
                            previous_ensemble_spec=lambda: None,
                            want_loss=None,
                            want_export_outputs=None,
                            mode=tf.estimator.ModeKeys.TRAIN,
                            summary_maker=_ScopedSummary,
                            want_chief_hooks=False):
-    global_step = tf_compat.v1.train.create_global_step()
+    tf_compat.v1.train.create_global_step()
     builder = _IterationBuilder(
         _FakeCandidateBuilder(),
         _FakeSubnetworkManager(),
         ensemble_builder,
         summary_maker=summary_maker,
-        ensemblers=[_FakeEnsembler()])
+        ensemblers=[_FakeEnsembler()],
+        max_steps=1)
     iteration = builder.build_iteration(
         base_global_step=0,
         iteration_number=0,
@@ -765,8 +761,6 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
       self.assertIsNone(iteration.estimator_spec.export_outputs)
       if mode == tf.estimator.ModeKeys.TRAIN:
         sess.run(iteration.estimator_spec.train_op)
-        self.assertEqual(want_is_over, sess.run(iteration.is_over_fn()))
-        self.assertEqual(1, sess.run(global_step))
 
   @parameterized.named_parameters(
       {
@@ -819,7 +813,8 @@ class IterationBuilderTest(parameterized.TestCase, tf.test.TestCase):
         _FakeSubnetworkManager(),
         ensemble_builder,
         summary_maker=summary_maker,
-        ensemblers=[_FakeEnsembler()])
+        ensemblers=[_FakeEnsembler()],
+        max_steps=100)
     features = [[1., -1., 0.]]
     labels = [1]
     with self.test_session():
@@ -872,7 +867,7 @@ class _HeadEnsembleBuilder(object):
         architecture=None,
         subnetwork_builders=candidate.subnetwork_builders,
         predictions=estimator_spec.predictions,
-        step=0,
+        step=tf.Variable(0),
         loss=None,
         adanet_loss=.1,
         train_op=None,
@@ -897,7 +892,8 @@ class IterationExportOutputsTest(parameterized.TestCase, tf.test.TestCase):
         _FakeSubnetworkManager(),
         ensemble_builder,
         summary_maker=_ScopedSummary,
-        ensemblers=[_FakeEnsembler()])
+        ensemblers=[_FakeEnsembler()],
+        max_steps=10)
     features = [[1., -1., 0.]]
     labels = [1]
     mode = tf.estimator.ModeKeys.PREDICT

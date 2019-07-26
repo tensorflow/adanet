@@ -291,7 +291,8 @@ class _EnsembleMetrics(_SubnetworkMetrics):
 class _IterationMetrics(object):
   """A object which creates evaluation metrics for an Iteration."""
 
-  def __init__(self, candidates, subnetwork_specs):
+  def __init__(self, iteration_number, candidates, subnetwork_specs):
+    self._iteration_number = iteration_number
     self._candidates = candidates
     self._subnetwork_specs = subnetwork_specs
 
@@ -391,6 +392,8 @@ class _IterationMetrics(object):
           ensemble_loss_ops = candidate_grouped_metrics.get("loss", tf.no_op())
           all_ops = tf.group(ops, ensemble_loss_ops, subnetwork_grouped_metrics)
           eval_metric_ops[metric_name] = (best_value, all_ops)
+        iteration_number = tf.constant(self._iteration_number)
+        eval_metric_ops["iteration"] = (iteration_number, iteration_number)
 
         # tf.estimator.Estimator does not allow a "loss" key to be present in
         # its eval_metrics.

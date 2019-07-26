@@ -209,7 +209,7 @@ class MetricsTest(tu.AdanetTestCase):
           eval_metrics=(metric_fn, {}))
       candidate = _Candidate(ensemble_spec=spec, adanet_loss=tf.constant(i))
       candidates.append(candidate)
-    metrics = _IterationMetrics(candidates, subnetwork_specs=[])
+    metrics = _IterationMetrics(1, candidates, subnetwork_specs=[])
 
     with self.test_session() as sess:
       metrics_fn = (
@@ -224,7 +224,7 @@ class MetricsTest(tu.AdanetTestCase):
         metric = tf.metrics.Mean()
         metric(best_candidate_index)
         return {"ensemble_metric": metric}
-      expected = {"ensemble_metric": best_candidate_index}
+      expected = {"ensemble_metric": best_candidate_index, "iteration": 1}
     else:
       expected = {}
     self.assertEqual(actual, expected)
