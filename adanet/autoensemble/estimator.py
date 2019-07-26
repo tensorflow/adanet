@@ -42,6 +42,22 @@ def _default_logits(estimator_spec):
   return estimator_spec.predictions
 
 
+class _SecondaryTrainOpRunnerHook(tf_compat.SessionRunHook):
+  """A hook for running a train op separate from the main session run call."""
+
+  def __init__(self, train_op):
+    """Initializes a `_SecondaryTrainOpRunnerHook`.
+
+    Args:
+      train_op: The secondary train op to execute before runs.
+    """
+
+    self._train_op = train_op
+
+  def before_run(self, run_context):
+    run_context.session.run(self._train_op)
+
+
 class AutoEnsembleSubestimator(
     collections.namedtuple("AutoEnsembleSubestimator",
                            ["estimator", "train_input_fn"])):
@@ -55,7 +71,10 @@ class AutoEnsembleSubestimator(
       slices of the training data. The function should construct and return one
       of the following:
        * A `tf.data.Dataset` object: Outputs of `Dataset` object must be a tuple
-         `(features, labels)` with same constraints as below.
+         `(features, labels)` with same constraints as below. NOTE: A Dataset
+         must return *at least* two batches before hitting the end-of-input,
+         otherwise all of training terminates.
+         TODO: Figure out how to handle single-batch datasets.
        * A tuple `(features, labels)`: Where `features` is a `tf.Tensor` or a
          dictionary of string feature name to `Tensor` and `labels` is a
          `Tensor` or a dictionary of string label name to `Tensor`. Both
@@ -116,19 +135,30 @@ class _BuilderFromSubestimator(Builder):
         subestimator_features, subestimator_labels = inputs
 
       # Construct subnetwork graph first because of dependencies on scope.
-      _, train_op = call_model_fn_template(subestimator_features,
-                                           subestimator_labels, mode, summary)
+      _, bagging_train_op_spec = call_model_fn_template(subestimator_features,
+                                                        subestimator_labels,
+                                                        mode, summary)
       # Graph for ensemble learning gets model_fn_1 for scope.
       logits, _ = call_model_fn_template(features, labels, mode, summary)
+
+      # Run train op in a hook so that exceptions can be intercepted by the
+      # AdaNet framework instead of the Estimator's monitored training session.
+      hooks = bagging_train_op_spec.hooks + (_SecondaryTrainOpRunnerHook(
+          bagging_train_op_spec.train_op),)
+      train_op_spec = TrainOpSpec(
+          train_op=tf.no_op(),
+          chief_hooks=bagging_train_op_spec.chief_hooks,
+          hooks=hooks)
     else:
-      logits, train_op = call_model_fn_template(features, labels, mode, summary)
+      logits, train_op_spec = call_model_fn_template(features, labels, mode,
+                                                     summary)
 
     # TODO: Replace with variance complexity measure.
     complexity = tf.constant(0.)
     return Subnetwork(
         logits=logits,
         last_layer=logits,
-        shared={"train_op": train_op},
+        shared={"train_op": train_op_spec},
         complexity=complexity)
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,

@@ -20,6 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import contextlib
 import json
 import os
 
@@ -254,19 +255,35 @@ class _TrainingHookRunnerHook(tf_compat.SessionRunHook):
   def begin(self):
     self._hook.begin()
 
+  @contextlib.contextmanager
+  def _session_run_context(self):
+    """Intercepts input out of range errors to gracefully stop spec training."""
+
+    try:
+      yield
+    except (tf.errors.OutOfRangeError, StopIteration) as e:
+      logging.info("Now stopping '%s' training after hitting end of input",
+                   self._spec.name)
+      self._train_manager.request_stop(self._spec,
+                                       "OutOfRangeError: {}".format(e))
+
   def after_create_session(self, session, coord):
-    self._hook.after_create_session(session, coord)
+    with self._session_run_context():
+      self._hook.after_create_session(session, coord)
 
   def before_run(self, run_context):
     if self._train_manager.should_train(self._spec):
-      return self._hook.before_run(run_context)
+      with self._session_run_context():
+        return self._hook.before_run(run_context)
 
   def after_run(self, run_context, run_values):
     if self._train_manager.should_train(self._spec):
-      self._hook.after_run(run_context, run_values)
+      with self._session_run_context():
+        self._hook.after_run(run_context, run_values)
 
   def end(self, session):
-    self._hook.end(session)
+    with self._session_run_context():
+      self._hook.end(session)
 
 
 # TODO: Replace candidates with ensemble_specs.

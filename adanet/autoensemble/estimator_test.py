@@ -66,7 +66,8 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
               },
           "want_loss":
               .209,
-      }, {
+      },
+      {
           "testcase_name":
               "list_candidate_pool",
           "candidate_pool":
@@ -83,7 +84,8 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
               ],
           "want_loss":
               .209,
-      }, {
+      },
+      {
           "testcase_name":
               "candidate_pool_lambda",
           "candidate_pool":
@@ -104,7 +106,8 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
               },
           "want_loss":
               .209,
-      }, {
+      },
+      {
           "testcase_name":
               "bagging",
           "candidate_pool":
@@ -130,9 +133,43 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
           # change to the TensorFlow graph.
           "want_loss":
               0.095,
+      },
+      {
+          "testcase_name":
+              "bagging_out_of_range_error",
+          "max_train_steps":
+              15,
+          "candidate_pool":
+              lambda head, feature_columns, optimizer: {
+                  "same_train_data":
+                      AutoEnsembleSubestimator(
+                          tf.estimator.LinearEstimator(
+                              head=head,
+                              feature_columns=feature_columns,
+                              optimizer=optimizer)),
+                  "different_train_data":
+                      AutoEnsembleSubestimator(
+                          tf.estimator.DNNEstimator(
+                              head=head,
+                              feature_columns=feature_columns,
+                              optimizer=optimizer,
+                              hidden_units=[3]),
+                          # TODO: Dataset must have at least 2 batches,
+                          # otherwise all of training terminates.
+                          train_input_fn=lambda: tf.data.Dataset.
+                          from_tensor_slices(({
+                              "input_1": [[0., 1.], [0., 1.]]
+                          }, [[1.], [1.]])).batch(1),
+                      ),
+              },
+          "want_loss":
+              0.233,
       })
   # pylint: enable=g-long-lambda
-  def test_auto_ensemble_estimator_lifecycle(self, candidate_pool, want_loss):
+  def test_auto_ensemble_estimator_lifecycle(self,
+                                             candidate_pool,
+                                             want_loss,
+                                             max_train_steps=30):
     features = {"input_1": [[1., 0.]]}
     labels = [[1.]]
 
@@ -165,11 +202,12 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
         config=run_config)
 
     # Train for three iterations.
-    estimator.train(input_fn=train_input_fn, max_steps=30)
+    estimator.train(input_fn=train_input_fn, max_steps=max_train_steps)
 
     # Evaluate.
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=1)
 
+    self.assertAllClose(max_train_steps, eval_results["global_step"])
     self.assertAllClose(want_loss, eval_results["loss"], atol=.2)
 
     # Predict.

@@ -16,6 +16,7 @@ limitations under the License.
 # Current version (0.8.0.dev)
  * Under development.
  * TODO: Add official Keras Model support, including Keras layers, Sequential, and Model subclasses for defining subnetworks.
+ * Stop individual subnetwork training on `OutOfRangeError` raised during bagging.
  * Gracefully handle NaN losses from ensembles during training. When an ensemble or subnetwork has a NaN loss during training, its training is marked as terminated. As long as one ensemble (and therefore underlying subnetworks) does not have a NaN loss, training will continue.
  * Train forever if `max_steps` and `steps` are both `None`.
 

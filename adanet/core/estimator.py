@@ -689,6 +689,58 @@ class Estimator(tf.estimator.Estimator):
             steps=None,
             max_steps=None,
             saving_listeners=None):
+    # pyformat: disable
+    """Trains a model given training data :code:`input_fn`.
+
+    NOTE: If a given input_fn raises an :code:`OutOfRangeError`, then *all* of
+    training will exit. The best practice is to make the training dataset repeat
+    forever, in order to perform model search for more than one iteration.
+
+    Args:
+      input_fn: A function that provides input data for training as minibatches.
+        See [Premade Estimators](
+        https://tensorflow.org/guide/premade_estimators#create_input_functions)
+        for more information. The function should construct and return one of
+        the following:
+          * A :code:`tf.data.Dataset` object: Outputs of `Dataset` object must
+            be a tuple `(features, labels)` with same constraints as below.
+          * A tuple `(features, labels)`: Where `features` is a
+            :code:`tf.Tensor` or a dictionary of string feature name to
+            `Tensor` and `labels` is a :code:`Tensor` or a dictionary of string
+            label name to `Tensor`. Both `features` and `labels` are consumed by
+            `model_fn`. They should satisfy the expectation of `model_fn` from
+            inputs.
+      hooks: List of :code:`tf.train.SessionRunHook` subclass instances. Used
+        for callbacks inside the training loop.
+      steps: Number of steps for which to train the model. If :code:`None`,
+        train forever or train until `input_fn` generates the
+        :code:`tf.errors.OutOfRange` error or :code:`StopIteration` exception.
+        `steps` works incrementally. If you call two times `train(steps=10)`
+        then training occurs in total 20 steps. If :code:`OutOfRange` or
+        :code:`StopIteration` occurs in the middle, training stops before 20
+        steps. If you don't want to have incremental behavior please set
+        `max_steps` instead. If set, `max_steps` must be :code:`None`.
+      max_steps: Number of total steps for which to train model. If
+        :code:`None`, train forever or train until `input_fn` generates the
+        :code:`tf.errors.OutOfRange` error or :code:`StopIteration` exception.
+        If set, `steps` must be `None`. If :code:`OutOfRange` or
+        :code:`StopIteration` occurs in the middle, training stops before
+        `max_steps` steps. Two calls to `train(steps=100)` means 200 training
+        iterations. On the other hand, two calls to `train(max_steps=100)`
+        means that the second call will not do any iteration since first call
+        did all 100 steps.
+      saving_listeners: list of :code:`CheckpointSaverListener` objects. Used
+        for callbacks that run immediately before or after checkpoint savings.
+
+    Returns:
+      `self`, for chaining.
+
+    Raises:
+      ValueError: If both `steps` and `max_steps` are not `None`.
+      ValueError: If either `steps` or `max_steps <= 0`.
+    """
+    # pyformat: enable
+
     if (steps is not None) and (max_steps is not None):
       raise ValueError("Can not provide both steps and max_steps.")
     if steps is not None and steps <= 0:
