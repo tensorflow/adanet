@@ -251,11 +251,12 @@ class TPUEstimatorTest(tu.AdanetTestCase):
           "predictions": tf_compat.v1.metrics.mean(predictions["predictions"])
       }
 
+    max_steps = 100
     estimator = TPUEstimator(
         head=tu.head(),
         subnetwork_generator=SimpleGenerator(
             [_DNNBuilder("dnn", use_tpu=use_tpu)]),
-        max_iteration_steps=100,
+        max_iteration_steps=max_steps,
         model_dir=self.test_subdirectory,
         metric_fn=metric_fn,
         config=config,
@@ -265,9 +266,10 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     xor_labels = [[1.], [0.], [1.], [0.]]
     train_input_fn = tu.dummy_input_fn(xor_features, xor_labels)
 
-    estimator.train(input_fn=train_input_fn, max_steps=100)
+    estimator.train(input_fn=train_input_fn, max_steps=max_steps)
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=1)
     self.assertAlmostEqual(want_loss, eval_results["loss"], places=2)
+    self.assertEqual(max_steps, eval_results["global_step"])
 
     subnetwork_subdir = os.path.join(self.test_subdirectory,
                                      "subnetwork/t0_dnn")
