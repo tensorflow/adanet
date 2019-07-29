@@ -86,6 +86,8 @@ class _TrainManager(object):
     """Registers that given spec should no longer train."""
 
     self._is_training[spec.name] = False
+    if self._is_done_training(spec):
+      return
     with tf.io.gfile.GFile(self._filename_for(spec), "w") as record_file:
       # TODO: Consider making these messages be some kind of Enum. There
       # might be a case where we want to parse these files. For example, in
