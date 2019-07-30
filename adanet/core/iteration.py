@@ -47,7 +47,8 @@ class _TrainManager(object):
   runs and robust to preemptions.
   """
 
-  def __init__(self, subnetwork_specs, ensemble_specs, train_manager_dir):
+  def __init__(self, subnetwork_specs, ensemble_specs, train_manager_dir,
+               is_chief):
     """Initializes a _TrainManager instance.
 
     Args:
@@ -56,6 +57,7 @@ class _TrainManager(object):
       train_manager_dir: Directory for storing metadata about training. When a
         spec should no longer be trained, a JSON file with its name and metadata
         is written to this directory, to persist across runs and preemptions.
+      is_chief: Boolean whether the current worker is a chief.
     """
 
     if not tf.io.gfile.exists(train_manager_dir):
@@ -66,6 +68,8 @@ class _TrainManager(object):
         spec.name: not self._is_done_training(spec)
         for spec in subnetwork_specs + ensemble_specs
     }
+
+    self._is_chief = is_chief
 
   def should_train(self, spec):
     """Whether the given spec should keep training."""
@@ -86,14 +90,17 @@ class _TrainManager(object):
     """Registers that given spec should no longer train."""
 
     self._is_training[spec.name] = False
-    if self._is_done_training(spec):
-      return
-    with tf.io.gfile.GFile(self._filename_for(spec), "w") as record_file:
-      # TODO: Consider making these messages be some kind of Enum. There
-      # might be a case where we want to parse these files. For example, in
-      # iteration n+1, maybe we no longer even want to build NaN candidates.
-      message = {"message": message}
-      record_file.write(json.dumps(message))
+
+    # Only write to disk if chief worker, otherwise there is a risk of conflicts
+    # and race conditions during writes.
+    if self._is_chief and not self._is_done_training(spec):
+      with tf.io.gfile.GFile(self._filename_for(spec), "w") as record_file:
+        # TODO: Consider making these messages be some kind of Enum.
+        # There # might be a case where we want to parse these files. For
+        # example, in iteration n+1, maybe we no longer even want to build
+        # NaN candidates.
+        message = {"message": message}
+        record_file.write(json.dumps(message))
 
   def is_over(self):
     """Whether all specs are done training and the iteration is over."""
@@ -703,7 +710,7 @@ class _IterationBuilder(object):
                                        "t{}".format(iteration_number))
       train_manager, training_chief_hooks, training_hooks = self._create_hooks(
           base_global_step, subnetwork_specs, candidates, num_subnetworks,
-          rebuilding, train_manager_dir)
+          rebuilding, train_manager_dir, config.is_chief)
       # Iteration summaries.
       summary = self._summary_maker(
           namespace=None, scope=None, skip_summary=skip_summaries)
@@ -839,7 +846,7 @@ class _IterationBuilder(object):
                   dtype=tf.int64))
 
   def _create_hooks(self, base_global_step, subnetwork_specs, candidates,
-                    num_subnetworks, rebuilding, train_manager_dir):
+                    num_subnetworks, rebuilding, train_manager_dir, is_chief):
     """Returns the hooks to monitor and train this iteration.
 
     Args:
@@ -851,6 +858,7 @@ class _IterationBuilder(object):
       rebuilding: Boolean whether the iteration is being rebuilt only to restore
         the previous best subnetworks and ensembles.
       train_manager_dir: Directory for the TrainManager to store spec metadata.
+      is_chief: Whether the current worker is chief.
 
     Returns:
       A 3-tuple of a _TrainManager for monitoring training, a list of
@@ -861,7 +869,7 @@ class _IterationBuilder(object):
     training_chief_hooks, training_hooks = [], []
     ensemble_specs = [c.ensemble_spec for c in candidates]
     train_manager = _TrainManager(subnetwork_specs, ensemble_specs,
-                                  train_manager_dir)
+                                  train_manager_dir, is_chief)
     if not self._use_tpu:
       # On TPU, the global step gets incremented in an op since it doesn't have
       # hook run granularity of CPU and GPU training.

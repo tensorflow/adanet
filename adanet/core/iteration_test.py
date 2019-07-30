@@ -123,7 +123,9 @@ class IterationTest(tu.AdanetTestCase):
           best_candidate_index=best_candidate_index,
           summaries=[],
           subnetwork_reports=subnetwork_reports,
-          train_manager=_TrainManager([], [], self.test_subdirectory))
+          train_manager=_TrainManager([], [],
+                                      self.test_subdirectory,
+                                      is_chief=True))
       self.assertEqual(iteration.number, number)
       self.assertEqual(iteration.candidates, candidates)
       self.assertEqual(iteration.estimator_spec, estimator_spec)
@@ -177,7 +179,9 @@ class IterationTest(tu.AdanetTestCase):
             best_candidate_index=best_candidate_index,
             summaries=[],
             subnetwork_reports=subnetwork_reports(),
-            train_manager=_TrainManager([], [], self.test_subdirectory))
+            train_manager=_TrainManager([], [],
+                                        self.test_subdirectory,
+                                        is_chief=True))
 
 
 class _FakeBuilder(SubnetworkBuilder):
