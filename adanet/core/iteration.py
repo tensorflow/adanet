@@ -136,7 +136,10 @@ class _NanLossHook(tf_compat.SessionRunHook):
     if loss is None or not np.isnan(loss):
       return
     logging.warning("'%s' diverged with loss = NaN.", self._spec.name)
-    self._train_manager.request_stop(self._spec, "NaN loss during training.")
+    raise tf_compat.v1.train.NanLossDuringTrainingError
+    # TODO: Re-enable once we know that evaluation won't
+    # fail from NaNs.
+    # self._train_manager.request_stop(self._spec, "NaN loss during training.")
 
 
 class _TrainingLimitHook(tf_compat.SessionRunHook):
