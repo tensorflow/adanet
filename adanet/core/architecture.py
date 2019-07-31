@@ -108,7 +108,8 @@ class _Architecture(object):
   def serialize(self, global_step):
     """Returns a string serialization of this object."""
 
-    assert global_step
+    # TODO: Confirm that it makes sense to have global step of 0.
+    assert global_step is not None
     ensemble_arch = {
         "ensemble_candidate_name": self.ensemble_candidate_name,
         "global_step": global_step,
