@@ -22,7 +22,6 @@ from __future__ import print_function
 import contextlib
 import errno
 import inspect
-import json
 import os
 import time
 
@@ -280,35 +279,6 @@ class _HookContextDecorator(tf_compat.SessionRunHook):
   def end(self, session):
     with self._context():
       self._hook.end(session)
-
-
-@contextlib.contextmanager
-def _temp_tf_config(temp_model_dir):
-  """Temporarily modifies the TF_CONFIG variable for the graph growing phase."""
-
-  actual_tf_config_string = os.environ.get("TF_CONFIG", "")
-  if not actual_tf_config_string:
-    yield
-    return
-
-  temp_tf_config = json.loads(actual_tf_config_string)
-  temp_tf_config["model_dir"] = temp_model_dir
-  cluster_spec = None
-  if "cluster" in temp_tf_config:
-    temp_tf_config["cluster"].pop("ps", None)
-    temp_tf_config["cluster"].pop("worker", None)
-    cluster_spec = temp_tf_config["cluster"]
-  # If cluster_spec is empty or None, set the current task to have type "worker"
-  # and index 0. This is enforced by RunConfig when running locally.
-  if not cluster_spec:
-    if "task" in temp_tf_config:
-      temp_tf_config["task"]["type"] = "worker"
-      temp_tf_config["task"]["index"] = 0
-  os.environ["TF_CONFIG"] = json.dumps(temp_tf_config)
-  try:
-    yield
-  finally:
-    os.environ["TF_CONFIG"] = actual_tf_config_string
 
 
 def _cleaned_hooks(hooks):
@@ -789,7 +759,8 @@ class Estimator(tf.estimator.Estimator):
           # As the chief, store the train hooks and make a placeholder input_fn
           # in order to use them when preparing the next iteration.
           self._train_hooks = hooks or []
-          self._prepare_next_iteration(input_fn, current_iteration)
+          with self._force_replication_strategy():
+            self._prepare_next_iteration(input_fn, current_iteration)
 
         # This inner loop serves mainly for synchronizing the workers with the
         # chief during distributed training. Workers that finish training early
@@ -863,15 +834,31 @@ class Estimator(tf.estimator.Estimator):
     self._evaluation_checkpoint_path = None
     return result
 
-  @contextlib.contextmanager
-  def _export_placement_strategy(self):
-    """Sets placement_strategy to always be ReplicationStrategy for exports.
+  def _export_all_saved_models(self,
+                               export_dir_base,
+                               input_receiver_fn_map,
+                               assets_extra=None,
+                               as_text=False,
+                               checkpoint_path=None,
+                               strip_default_attrs=True):
+    with self._force_replication_strategy():
+      return super(Estimator, self)._export_all_saved_models(
+          export_dir_base,
+          input_receiver_fn_map,
+          assets_extra=assets_extra,
+          as_text=as_text,
+          checkpoint_path=checkpoint_path,
+          strip_default_attrs=strip_default_attrs)
 
-    Estimator's export saved model functions always create a new local Session,
-    even during distributed training. In such cases, RoundRobinReplication will
-    try to place ops on the cluster devices but will fail since the local
-    session does not have access to them. Instead, we always export the model
-    using ReplicationStrategy.
+  @contextlib.contextmanager
+  def _force_replication_strategy(self):
+    """Sets placement_strategy to always be ReplicationStrategy.
+
+    This is useful during the bookkeeping phase and when Estimator's export
+    saved model functions are called. In both of these cases, local tf.Sessions
+    are created which do not have access to the cluster. Therefore,
+    RoundRobinReplicationStrategy will fail when it tries to place ops on
+    cluster devices which the local tf.Sessions cannot access.
 
     Yields:
       Nothing. Simply returns control back to the caller.
@@ -883,22 +870,6 @@ class Estimator(tf.estimator.Estimator):
       yield
     finally:
       self._iteration_builder.placement_strategy = temp_placement_strategy
-
-  def _export_all_saved_models(self,
-                               export_dir_base,
-                               input_receiver_fn_map,
-                               assets_extra=None,
-                               as_text=False,
-                               checkpoint_path=None,
-                               strip_default_attrs=True):
-    with self._export_placement_strategy():
-      return super(Estimator, self)._export_all_saved_models(
-          export_dir_base,
-          input_receiver_fn_map,
-          assets_extra=assets_extra,
-          as_text=as_text,
-          checkpoint_path=checkpoint_path,
-          strip_default_attrs=strip_default_attrs)
 
   def _call_adanet_model_fn(self, input_fn, mode, config):
     """Calls model_fn with the given mode and parameters."""
@@ -959,39 +930,38 @@ class Estimator(tf.estimator.Estimator):
     # be unique. So we use the UTC time when creating it.
     time_in_millis = int(time.time() * 1000)
     temp_model_sub_dir = os.path.join(temp_model_dir, str(time_in_millis))
-    with _temp_tf_config(temp_model_sub_dir):
-      temp_run_config = self._create_temp_run_config(temp_model_sub_dir)
-      self._prepare_next_iteration_state = self._Keys.EVALUATE_ENSEMBLES
-      if self._evaluator:
-        evaluator_input_fn = self._evaluator.input_fn
-      else:
-        evaluator_input_fn = train_input_fn
-      self._call_adanet_model_fn(evaluator_input_fn, tf.estimator.ModeKeys.EVAL,
-                                 temp_run_config)
-      logging.info("Done evaluating candidates.")
+    temp_run_config = self.config.replace(model_dir=temp_model_sub_dir)
+    self._prepare_next_iteration_state = self._Keys.EVALUATE_ENSEMBLES
+    if self._evaluator:
+      evaluator_input_fn = self._evaluator.input_fn
+    else:
+      evaluator_input_fn = train_input_fn
+    self._call_adanet_model_fn(evaluator_input_fn, tf.estimator.ModeKeys.EVAL,
+                               temp_run_config)
+    logging.info("Done evaluating candidates.")
 
-      # Then materialize and store the subnetwork reports.
-      if self._report_materializer:
-        logging.info("Materializing reports...")
-        self._prepare_next_iteration_state = self._Keys.MATERIALIZE_REPORT
-        self._call_adanet_model_fn(self._report_materializer.input_fn,
-                                   tf.estimator.ModeKeys.EVAL, temp_run_config)
-        logging.info("Done materializing reports.")
+    # Then materialize and store the subnetwork reports.
+    if self._report_materializer:
+      logging.info("Materializing reports...")
+      self._prepare_next_iteration_state = self._Keys.MATERIALIZE_REPORT
+      self._call_adanet_model_fn(self._report_materializer.input_fn,
+                                 tf.estimator.ModeKeys.EVAL, temp_run_config)
+      logging.info("Done materializing reports.")
 
-      self._best_ensemble_index = None
+    self._best_ensemble_index = None
 
-      # Finally, create the graph for the next iteration and overwrite the model
-      # directory checkpoint with the expanded graph.
-      logging.info("Adapting graph and incrementing iteration number...")
-      self._prepare_next_iteration_state = self._Keys.INCREMENT_ITERATION
-      temp_estimator = self._create_temp_estimator(temp_run_config)
-      # Do not train with any saving_listeners since this is just a temporary
-      # estimator.
-      temp_estimator.train(
-          input_fn=train_input_fn,
-          max_steps=1,
-          hooks=self._decorate_hooks(_cleaned_hooks(self._train_hooks)),
-          saving_listeners=None)
+    # Finally, create the graph for the next iteration and overwrite the model
+    # directory checkpoint with the expanded graph.
+    logging.info("Adapting graph and incrementing iteration number...")
+    self._prepare_next_iteration_state = self._Keys.INCREMENT_ITERATION
+    temp_estimator = self._create_temp_estimator(temp_run_config)
+    # Do not train with any saving_listeners since this is just a temporary
+    # estimator.
+    temp_estimator.train(
+        input_fn=train_input_fn,
+        max_steps=1,
+        hooks=self._decorate_hooks(_cleaned_hooks(self._train_hooks)),
+        saving_listeners=None)
 
     _delete_directory(temp_model_dir)
     self._prepare_next_iteration_state = None

@@ -53,7 +53,7 @@ import tensorflow as tf
 from tensorflow.contrib.boosted_trees.estimator_batch.estimator import CoreGradientBoostedDecisionTreeEstimator
 from tensorflow.contrib.boosted_trees.proto import learner_pb2
 from tensorflow.contrib.boosted_trees.python.utils import losses as bt_losses
-
+from tensorflow.python.ops import partitioned_variables
 from tensorflow.python.training import session_manager as session_manager_lib
 from tensorflow_estimator.python.estimator.canned import head as head_lib
 
@@ -107,11 +107,34 @@ def _monkey_patch_distributed_training_times():
 
   old_delay_secs_per_worker = training_lib._DELAY_SECS_PER_WORKER  # pylint: disable=protected-access
   old_session_manager = session_manager_lib.SessionManager
+  old_min_max_variable_partitioner = (
+      partitioned_variables.min_max_variable_partitioner)
 
   # monkey-patch global attributes.
   session_manager_lib.SessionManager = SessionManager
   # Override default delay per worker to speed up tests.
   training_lib._DELAY_SECS_PER_WORKER = .2  # pylint: disable=protected-access
+
+  # NOTE: DNNEstimator uses min-max partitioner under the hood which will not
+  # partition layers unless they are above a certain size. In order to test that
+  # we handle partitioned variables correctly in distributed training we patch
+  # the min size to be significantly lower. For more context, see b/133435012
+  # and b/136958627. For some reason, creating a custom DNN using a fixed
+  # partitioner does not cause the issues described in the bugs so we must test
+  # DNNEstimator.
+  def patched_min_max_variable_partitioner(max_partitions=1,
+                                           axis=0,
+                                           min_slice_size=64,
+                                           bytes_per_string_element=16):
+    del min_slice_size  # Unused, min_slice_size is patched to be constant.
+    return old_min_max_variable_partitioner(
+        max_partitions=max_partitions,
+        axis=axis,
+        min_slice_size=64,
+        bytes_per_string_element=bytes_per_string_element)
+
+  partitioned_variables.min_max_variable_partitioner = (
+      patched_min_max_variable_partitioner)
 
   try:
     yield
@@ -119,6 +142,8 @@ def _monkey_patch_distributed_training_times():
     # Revert monkey-patches.
     session_manager_lib.SessionManager = old_session_manager
     training_lib._DELAY_SECS_PER_WORKER = old_delay_secs_per_worker  # pylint: disable=protected-access
+    partitioned_variables.min_max_variable_partitioner = (
+        old_min_max_variable_partitioner)
 
 
 class _DNNBuilder(Builder):
@@ -246,7 +271,7 @@ def train_and_evaluate_estimator():
                 feature_columns=feature_columns,
                 optimizer=lambda: tf_compat.v1.train.AdamOptimizer(
                     learning_rate=.001),
-                hidden_units=[5]),
+                hidden_units=[10, 10]),
     }
     # pylint: enable=g-long-lambda
 
