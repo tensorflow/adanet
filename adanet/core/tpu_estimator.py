@@ -20,6 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import contextlib
 import functools
 
 from adanet import tf_compat
@@ -179,7 +180,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
     temp_model_dir = config.model_dir
     return tf.contrib.tpu.TPUEstimator(
         model_fn=self._adanet_model_fn,
-        params={},
+        params={"is_growing_phase": True},
         config=config,
         model_dir=temp_model_dir,
         use_tpu=self._use_tpu,
@@ -189,7 +190,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         eval_batch_size=self._eval_batch_size,
         embedding_config_spec=self._embedding_config_spec)
 
-  def _call_adanet_model_fn(self, input_fn, mode, config):
+  @contextlib.contextmanager
+  def _call_input_fn_in_new_graph(self, input_fn, mode, config):
     """See the `Estimator` base class for details."""
 
     # Bind parameters to input_fn since the parent's input_fn is not expected to
@@ -203,17 +205,21 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
     if "config" in input_fn_args:
       kwargs["config"] = config
     input_fn = functools.partial(input_fn, **kwargs)
-    super(TPUEstimator, self)._call_adanet_model_fn(input_fn, mode, config)
+    with super(TPUEstimator,
+               self)._call_input_fn_in_new_graph(input_fn, mode, config) as res:
+      yield res
 
   def _create_estimator_spec(self, current_iteration, mode,
-                             iteration_number_tensor, previous_iteration_vars):
+                             iteration_number_tensor, previous_iteration_vars,
+                             is_growing_phase):
     """See the `Estimator` base class for details."""
 
     if not self._use_tpu:
       return super(TPUEstimator,
                    self)._create_estimator_spec(current_iteration, mode,
                                                 iteration_number_tensor,
-                                                previous_iteration_vars)
+                                                previous_iteration_vars,
+                                                is_growing_phase)
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     iteration_estimator_spec = current_iteration.estimator_spec
@@ -221,7 +227,7 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         mode=mode,
         predictions=iteration_estimator_spec.predictions,
         loss=iteration_estimator_spec.loss,
-        train_op=self._train_op(iteration_estimator_spec),
+        train_op=self._train_op(iteration_estimator_spec, is_growing_phase),
         host_call=self._create_host_call(current_iteration, training),
         eval_metrics=iteration_estimator_spec.eval_metrics,
         export_outputs=iteration_estimator_spec.export_outputs,
@@ -231,17 +237,20 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         training_hooks=self._decorate_hooks(
             self._training_hooks(current_iteration, training,
                                  iteration_number_tensor,
-                                 previous_iteration_vars)),
+                                 previous_iteration_vars, is_growing_phase),
+            is_growing_phase),
         evaluation_hooks=self._evaluation_hooks(current_iteration, training))
 
   def _training_hooks(self, current_iteration, training,
-                      iteration_number_tensor, previous_iteration_vars):
+                      iteration_number_tensor, previous_iteration_vars,
+                      is_growing_phase):
     """See the `Estimator` base class for details."""
 
     training_hooks = super(TPUEstimator,
                            self)._training_hooks(current_iteration, training,
                                                  iteration_number_tensor,
-                                                 previous_iteration_vars)
+                                                 previous_iteration_vars,
+                                                 is_growing_phase)
     if self._use_tpu:
       # Remove summary hooks on TPU since summaries are saved via host_call.
       training_hooks = [
