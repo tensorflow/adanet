@@ -121,7 +121,10 @@ class _EvalMetricSaverHook(tf_compat.SessionRunHook):
     metric_fn, tensors = self._eval_metrics
     tensors = [tf_compat.v1.placeholder(t.dtype, t.shape) for t in tensors]
     eval_metric_ops = metric_fn(*tensors)
-    self._eval_metric_tensors = {k: v[0] for k, v in eval_metric_ops.items()}
+    self._eval_metric_tensors = {}
+    for key in sorted(eval_metric_ops):
+      value = tf_compat.metric_op(eval_metric_ops[key])
+      self._eval_metric_tensors[key] = value[0]
 
   def _dict_to_str(self, dictionary):
     """Get a `str` representation of a `dict`.

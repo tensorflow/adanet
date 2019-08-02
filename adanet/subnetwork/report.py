@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import collections
 
+from adanet import tf_compat
 import six
 import tensorflow as tf
 
@@ -90,6 +91,7 @@ class Report(
     # Validate metrics
     metrics_copy = {}
     for key, value in metrics.items():
+      value = tf_compat.metric_op(value)
       if not isinstance(value, tuple):
         raise ValueError(
             "metric '{}' has invalid type {}. Must be a tuple.".format(

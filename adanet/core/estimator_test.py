@@ -720,6 +720,11 @@ class EstimatorTest(tu.AdanetTestCase):
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
 
+    def _metric_fn(predictions):
+      mean = tf.keras.metrics.Mean()
+      mean.update_state(predictions["predictions"])
+      return {"keras_mean": mean}
+
     default_ensembler_kwargs = {
         "mixture_weight_type": mixture_weight_type,
         "mixture_weight_initializer": tf_compat.v1.zeros_initializer(),
@@ -737,6 +742,7 @@ class EstimatorTest(tu.AdanetTestCase):
         ensemble_strategies=ensemble_strategies,
         report_materializer=report_materializer,
         replicate_ensemble_in_training=replicate_ensemble_in_training,
+        metric_fn=_metric_fn,
         model_dir=self.test_subdirectory,
         config=run_config,
         **default_ensembler_kwargs)
@@ -1366,6 +1372,14 @@ class _EvalMetricsHead(object):
         train_op=train_op_fn(1))
 
 
+def _mean_keras_metric(value):
+  """Returns the mean of given value as a Keras metric."""
+
+  mean = tf.keras.metrics.Mean()
+  mean.update_state(value)
+  return mean
+
+
 class EstimatorSummaryWriterTest(tu.AdanetTestCase):
   """Test that Tensorboard summaries get written correctly."""
 
@@ -1497,35 +1511,43 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
           "mixture_weight_norms/adanet/"
           "adanet_weighted_ensemble/subnetwork_0", ensemble_subdir)
 
+  # pylint: disable=g-long-lambda
   @parameterized.named_parameters(
       {
           "testcase_name": "none_metrics",
           "head": _EvalMetricsHead(None),
           "want_summaries": [],
           "want_loss": -1.791,
-      },
-      {
+      }, {
           "testcase_name":
               "metrics_fn",
           "head":
               _EvalMetricsHead(None),
-          # pylint: disable=g-long-lambda
           "metric_fn":
               lambda predictions: {
                   "avg": tf_compat.v1.metrics.mean(predictions)
               },
-          # pylint: enable=g-long-lambda
           "want_summaries": ["avg"],
           "want_loss":
               -1.791,
-      },
-      {
+      }, {
+          "testcase_name":
+              "keras_metrics_fn",
+          "head":
+              _EvalMetricsHead(None),
+          "metric_fn":
+              lambda predictions: {
+                  "avg": _mean_keras_metric(predictions)
+              },
+          "want_summaries": ["avg"],
+          "want_loss":
+              -1.791,
+      }, {
           "testcase_name": "empty_metrics",
           "head": _EvalMetricsHead({}),
           "want_summaries": [],
           "want_loss": -1.791,
-      },
-      {
+      }, {
           "testcase_name":
               "evaluation_name",
           "head":
@@ -1541,8 +1563,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
               "subnetwork/t0_dnn/eval_continuous",
           "ensemble_subdir":
               "ensemble/t0_dnn_grow_complexity_regularized/eval_continuous",
-      },
-      {
+      }, {
           "testcase_name":
               "regression_head",
           "head":
@@ -1551,8 +1572,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
           "want_summaries": ["average_loss"],
           "want_loss":
               .256,
-      },
-      {
+      }, {
           "testcase_name":
               "binary_classification_head",
           "head":
@@ -1563,8 +1583,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
           "want_summaries": ["average_loss", "accuracy", "recall"],
           "want_loss":
               0.122,
-      },
-      {
+      }, {
           "testcase_name":
               "all_metrics",
           "head":
@@ -1588,6 +1607,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
           "want_loss":
               -1.791,
       })
+  # pylint: enable=g-long-lambda
   def test_eval_metrics(
       self,
       head,

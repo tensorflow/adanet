@@ -143,3 +143,38 @@ def random_normal(*args, **kwargs):
     return tf.random.normal(*args, **kwargs)
   except AttributeError:
     return tf.random_normal(*args, **kwargs)
+
+
+def metric_op(metric):
+  """Converts Keras metrics into a metric op tuple.
+
+  NOTE: If this method is called in for loop, the runtime is O(n^2). However
+  the number of eval metrics at any given time should be small enough that
+  this does not affect performance. Any impact is only during graph construction
+  time, and therefore has no effect on steps/s.
+
+  Args:
+    metric: Either a `tf.keras.metric.Metric` instance or a tuple of Tensor
+      value and update op.
+
+  Returns:
+    A tuple of metric Tensor value and update op.
+  """
+
+  if not isinstance(metric, tf.keras.metrics.Metric):
+    return metric
+  vars_to_add = set()
+  vars_to_add.update(metric.variables)
+  metric = (metric.result(), metric.updates[0])
+  _update_variable_collection(tf.GraphKeys.LOCAL_VARIABLES, vars_to_add)
+  _update_variable_collection(tf.GraphKeys.METRIC_VARIABLES, vars_to_add)
+  return metric
+
+
+def _update_variable_collection(collection_name, vars_to_add):
+  """Add variables to collection."""
+  collection = set(tf.get_collection(collection_name))
+  # Skip variables that are in the collection already: O(n) runtime.
+  vars_to_add = vars_to_add - collection
+  for v in vars_to_add:
+    tf.add_to_collection(collection_name, v)

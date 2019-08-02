@@ -316,6 +316,7 @@ py_test(
         ":report_materializer",
         ":testing_utils",
         "//adanet/subnetwork",
+        "//adanet/tf_compat",
         "@absl_py//absl/testing:parameterized",
     ],
 )

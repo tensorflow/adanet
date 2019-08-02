@@ -23,6 +23,7 @@ import math
 
 from absl import logging
 from adanet import subnetwork
+from adanet import tf_compat
 import tensorflow as tf
 
 
@@ -96,13 +97,13 @@ class ReportMaterializer(object):
     metric_update_ops = []
     for subnetwork_report in subnetwork_reports.values():
       for metric_tuple in subnetwork_report.metrics.values():
-        metric_update_ops.append(metric_tuple[1])
+        metric_update_ops.append(tf_compat.metric_op(metric_tuple)[1])
 
     # Extract the Tensors to be materialized.
     tensors_to_materialize = {}
     for name, subnetwork_report in subnetwork_reports.items():
       metrics = {
-          metric_key: metric_tuple[0]
+          metric_key: tf_compat.metric_op(metric_tuple)[0]
           for metric_key, metric_tuple in subnetwork_report.metrics.items()
       }
       tensors_to_materialize[name] = {

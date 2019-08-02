@@ -36,6 +36,7 @@ py_library(
     name = "report",
     srcs = ["report.py"],
     deps = [
+        "//adanet/tf_compat",
         "@six_archive//:six",
     ],
 )

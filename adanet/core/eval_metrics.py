@@ -417,6 +417,6 @@ class _IterationMetrics(object):
     for metric_fn, args in zip(metric_fns, metric_fn_args):
       eval_metric_ops = call_eval_metrics((metric_fn, args))
       for metric_name in sorted(eval_metric_ops):
-        metric_op = eval_metric_ops[metric_name]
+        metric_op = tf_compat.metric_op(eval_metric_ops[metric_name])
         grouped_metrics[metric_name].append(metric_op)
     return grouped_metrics
