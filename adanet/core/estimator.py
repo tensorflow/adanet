@@ -45,6 +45,7 @@ import six
 import tensorflow as tf
 
 # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.util import deprecation
 from tensorflow_estimator.python.estimator import util
 # pylint: enable=g-direct-tensorflow-import
 
@@ -244,44 +245,37 @@ class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
       self._checkpoint_overwritten = True
 
 
-class _HookContextDecorator(tf_compat.SessionRunHook):
-  """Decorates a SessionRunHook's public methods to run within a context."""
+class _HookDecorator(tf_compat.SessionRunHook):
+  """Decorates a SessionRunHook to only run methods for the given phase."""
 
-  def __init__(self, hook, context, is_growing_phase):
-    """Initializes a _HookContextDecorator instance.
+  def __init__(self, hook, is_growing_phase):
+    """Initializes a _HookDecorator instance.
 
     Args:
       hook: The SessionRunHook to decorate.
-      context: The context to enter before calling the hook's public methods.
       is_growing_phase: Whether we are in the AdaNet graph growing phase. If so,
         only hook.begin() and hook.end() will be called.
     """
     self._hook = hook
-    self._context = context
     self._is_growing_phase = is_growing_phase
 
   def begin(self):
-    with self._context():
-      self._hook.begin()
+    self._hook.begin()
 
   def after_create_session(self, session, coord):
     if not self._is_growing_phase:
-      with self._context():
-        self._hook.after_create_session(session, coord)
+      self._hook.after_create_session(session, coord)
 
   def before_run(self, run_context):
     if not self._is_growing_phase:
-      with self._context():
-        return self._hook.before_run(run_context)
+      return self._hook.before_run(run_context)
 
   def after_run(self, run_context, run_values):
     if not self._is_growing_phase:
-      with self._context():
-        self._hook.after_run(run_context, run_values)
+      self._hook.after_run(run_context, run_values)
 
   def end(self, session):
-    with self._context():
-      self._hook.end(session)
+    self._hook.end(session)
 
 
 def _cleaned_hooks(hooks):
@@ -505,7 +499,6 @@ class Estimator(tf.estimator.Estimator):
           "For distributed training, a model_dir must be specified.")
 
     self._subnetwork_generator = subnetwork_generator
-    self._adanet_loss_decay = adanet_loss_decay
 
     # Overwrite superclass's assert that members are not overwritten in order
     # to overwrite public methods. Note that we are doing something that is not
@@ -513,7 +506,6 @@ class Estimator(tf.estimator.Estimator):
     tf.estimator.Estimator._assert_members_are_not_overridden = staticmethod(  # pylint: disable=protected-access
         lambda _: None)
 
-    self._evaluation_checkpoint_path = None
     self._evaluator = evaluator
     self._report_materializer = report_materializer
 
@@ -522,8 +514,6 @@ class Estimator(tf.estimator.Estimator):
     self._max_worker_delay_secs = max_worker_delay_secs
     self._worker_wait_secs = worker_wait_secs
     self._worker_wait_timeout_secs = worker_wait_timeout_secs
-
-    self._evaluation_name = None
 
     # Added for backwards compatibility.
     default_ensembler_args = [
@@ -584,8 +574,7 @@ class Estimator(tf.estimator.Estimator):
         head=head, metric_fn=metric_fn, use_tpu=self._use_tpu)
 
     # TODO: Merge CandidateBuilder into SubnetworkManager.
-    candidate_builder = _CandidateBuilder(
-        adanet_loss_decay=self._adanet_loss_decay)
+    candidate_builder = _CandidateBuilder(adanet_loss_decay=adanet_loss_decay)
     subnetwork_manager = _SubnetworkManager(
         head=head, metric_fn=metric_fn, use_tpu=self._use_tpu)
     if not placement_strategy:
@@ -608,9 +597,6 @@ class Estimator(tf.estimator.Estimator):
 
     report_dir = report_dir or os.path.join(self._model_dir, "report")
     self._report_accessor = _ReportAccessor(report_dir)
-
-    # Stateful properties.
-    self._inside_adanet_training_loop = False
 
   def _summary_maker(self, scope=None, skip_summary=False, namespace=None):
     """Constructs a `_ScopedSummary`."""
@@ -641,16 +627,6 @@ class Estimator(tf.estimator.Estimator):
       return 0
     return tf.train.load_variable(latest_checkpoint,
                                   tf_compat.v1.GraphKeys.GLOBAL_STEP)
-
-  @contextlib.contextmanager
-  def _train_loop_context(self):
-    """Tracks where the context is within the AdaNet train loop."""
-
-    self._inside_adanet_training_loop = True
-    try:
-      yield
-    finally:
-      self._inside_adanet_training_loop = False
 
   def train(self,
             input_fn,
@@ -721,14 +697,20 @@ class Estimator(tf.estimator.Estimator):
     # Each iteration of this AdaNet loop represents an `_Iteration`. The
     # current iteration number is stored as a variable in the checkpoint so
     # that training can be stopped and started at anytime.
-    with monkey_patch_default_variable_placement_strategy(
-    ), self._train_loop_context():
+    with monkey_patch_default_variable_placement_strategy():
       while True:
         current_iteration = self._latest_checkpoint_iteration_number()
         logging.info("Beginning training AdaNet iteration %s",
                      current_iteration)
         self._iteration_ended = False
-        result = super(Estimator, self).train(
+
+        # Delegate training to a temporary estimator instead of super to make
+        # passing arguments more functional (via params).
+        temp_estimator = self._create_temp_estimator(
+            self.config, params={
+                "is_inside_training_loop": True,
+            })
+        result = temp_estimator.train(
             input_fn=input_fn,
             hooks=self._decorate_hooks(hooks or [], is_growing_phase=False),
             max_steps=max_steps,
@@ -820,32 +802,90 @@ class Estimator(tf.estimator.Estimator):
 
     # Ensure that the read to get the iteration number and read to restore
     # variable values come from the same checkpoint during evaluation.
-    self._evaluation_checkpoint_path = checkpoint_path
-    self._evaluation_name = name
-    result = super(Estimator, self).evaluate(
+    params = {
+        "evaluation_checkpoint_path": checkpoint_path,
+        "evaluation_name": name,
+    }
+
+    # Delegate evaluation to a temporary estimator instead of super to make
+    # passing arguments more functional (via params).
+    temp_estimator = self._create_temp_estimator(self.config, params=params)
+    result = temp_estimator.evaluate(
         input_fn,
         steps=steps,
         hooks=hooks,
         checkpoint_path=checkpoint_path,
         name=name)
-    self._evaluation_checkpoint_path = None
     return result
 
-  def _export_all_saved_models(self,
-                               export_dir_base,
-                               input_receiver_fn_map,
-                               assets_extra=None,
-                               as_text=False,
-                               checkpoint_path=None,
-                               strip_default_attrs=True):
+  def predict(self,
+              input_fn,
+              predict_keys=None,
+              hooks=None,
+              checkpoint_path=None,
+              yield_single_examples=True):
+    # Delegate predicting to a temporary estimator instead of super to make
+    # passing arguments more functional (via params).
+    temp_estimator = self._create_temp_estimator(self.config, params={})
+    return temp_estimator.predict(input_fn, predict_keys, hooks,
+                                  checkpoint_path, yield_single_examples)
+
+  @deprecation.deprecated(
+      None, "This function has been renamed, use `export_saved_model` instead.")
+  def export_savedmodel(self,
+                        export_dir_base,
+                        serving_input_receiver_fn,
+                        assets_extra=None,
+                        as_text=False,
+                        checkpoint_path=None,
+                        strip_default_attrs=False):
+    # Delegate exporting to a temporary estimator instead of super to make
+    # passing arguments more functional (via params).
+    temp_estimator = self._create_temp_estimator(self.config, params={})
     with self._force_replication_strategy():
-      return super(Estimator, self)._export_all_saved_models(
-          export_dir_base,
-          input_receiver_fn_map,
+      return temp_estimator.export_savedmodel(
+          export_dir_base=export_dir_base,
+          serving_input_receiver_fn=serving_input_receiver_fn,
           assets_extra=assets_extra,
           as_text=as_text,
           checkpoint_path=checkpoint_path,
           strip_default_attrs=strip_default_attrs)
+
+  def export_saved_model(self,
+                         export_dir_base,
+                         serving_input_receiver_fn,
+                         assets_extra=None,
+                         as_text=False,
+                         checkpoint_path=None,
+                         experimental_mode=tf.estimator.ModeKeys.PREDICT):
+    # Delegate exporting to a temporary estimator instead of super to make
+    # passing arguments more functional (via params).
+    temp_estimator = self._create_temp_estimator(self.config, params={})
+    with self._force_replication_strategy():
+      return temp_estimator.export_saved_model(
+          export_dir_base=export_dir_base,
+          serving_input_receiver_fn=serving_input_receiver_fn,
+          assets_extra=assets_extra,
+          as_text=as_text,
+          checkpoint_path=checkpoint_path,
+          experimental_mode=experimental_mode)
+
+  def experimental_export_all_saved_models(self,
+                                           export_dir_base,
+                                           input_receiver_fn_map,
+                                           assets_extra=None,
+                                           as_text=False,
+                                           checkpoint_path=None):
+    # Delegate exporting to a temporary estimator instead of super to make
+    # passing arguments more functional (via params).
+    temp_estimator = self._create_temp_estimator(self.config, params={})
+    with self._force_replication_strategy():
+      return temp_estimator.experimental_export_all_saved_models(
+          export_dir_base=export_dir_base,
+          input_receiver_fn_map=input_receiver_fn_map,
+          assets_extra=assets_extra,
+          as_text=as_text,
+          checkpoint_path=checkpoint_path)
 
   @contextlib.contextmanager
   def _force_replication_strategy(self):
@@ -914,13 +954,11 @@ class Estimator(tf.estimator.Estimator):
         session_config=config.session_config,
         protocol=config.protocol)
 
-  def _create_temp_estimator(self, config):
+  def _create_temp_estimator(self, config, params):
     """Creates a temp `Estimator` to grow the graph for the next iteration."""
 
     return tf.estimator.Estimator(
-        model_fn=self._adanet_model_fn,
-        config=config,
-        params={"is_growing_phase": True})
+        model_fn=self._adanet_model_fn, config=config, params=params)
 
   def _execute_bookkeeping_phase(self, train_input_fn, iteration_number,
                                  train_hooks):
@@ -1032,7 +1070,12 @@ class Estimator(tf.estimator.Estimator):
     time_in_millis = int(time.time() * 1000)
     temp_model_sub_dir = os.path.join(temp_model_dir, str(time_in_millis))
     temp_run_config = config.replace(model_dir=temp_model_sub_dir)
-    temp_estimator = self._create_temp_estimator(temp_run_config)
+    temp_estimator = self._create_temp_estimator(
+        config=temp_run_config,
+        params={
+            "is_growing_phase": True,
+            "is_inside_training_loop": True,
+        })
     # Do not train with any saving_listeners since this is just a temporary
     # estimator.
     temp_estimator.train(
@@ -1050,17 +1093,6 @@ class Estimator(tf.estimator.Estimator):
 
     frozen_checkpoint = os.path.join(self.model_dir, "architecture")
     return "{}-{}.json".format(frozen_checkpoint, iteration_number)
-
-  @contextlib.contextmanager
-  def _reset_state_context(self):
-    """Resets stateful properties before delegating control to the user."""
-
-    inside_training_loop = self._inside_adanet_training_loop
-    self._inside_adanet_training_loop = False
-    try:
-      yield
-    finally:
-      self._inside_adanet_training_loop = inside_training_loop
 
   def _get_best_ensemble_index(self, current_iteration, input_hooks):
     """Returns the best candidate ensemble's index in this iteration.
@@ -1203,9 +1235,7 @@ class Estimator(tf.estimator.Estimator):
       if isinstance(hook, _OverwriteCheckpointHook):
         assert is_growing_phase
         is_growing_phase_for_hook = False
-      decorated_hooks.append(
-          _HookContextDecorator(hook, self._reset_state_context,
-                                is_growing_phase_for_hook))
+      decorated_hooks.append(_HookDecorator(hook, is_growing_phase_for_hook))
     return decorated_hooks
 
   def _training_chief_hooks(self, current_iteration, training):
@@ -1270,12 +1300,13 @@ class Estimator(tf.estimator.Estimator):
                                    previous_iteration_vars, self.config))
     return training_hooks
 
-  def _evaluation_hooks(self, current_iteration, training):
+  def _evaluation_hooks(self, current_iteration, training, evaluation_name):
     """Returns evaluation hooks for this iteration.
 
     Args:
       current_iteration: Current `_Iteration`.
       training: Whether in training mode.
+      evaluation_name: String name to append to the eval directory.
 
     Returns:
       A list of `SessionRunHook` instances.
@@ -1289,19 +1320,22 @@ class Estimator(tf.estimator.Estimator):
           self._create_eval_metric_saver_hook(
               subnetwork_spec.eval_metrics,
               subnetwork_spec.name,
-              kind="subnetwork"))
+              kind="subnetwork",
+              evaluation_name=evaluation_name))
     for candidate in current_iteration.candidates:
       evaluation_hooks.append(
           self._create_eval_metric_saver_hook(
               candidate.ensemble_spec.eval_metrics,
               candidate.ensemble_spec.name,
-              kind="ensemble"))
+              kind="ensemble",
+              evaluation_name=evaluation_name))
     return evaluation_hooks
 
-  def _create_eval_metric_saver_hook(self, eval_metrics, name, kind):
+  def _create_eval_metric_saver_hook(self, eval_metrics, name, kind,
+                                     evaluation_name):
     eval_subdir = "eval"
-    if self._evaluation_name:
-      eval_subdir = "eval_{}".format(self._evaluation_name)
+    if evaluation_name:
+      eval_subdir = "eval_{}".format(evaluation_name)
     return _EvalMetricSaverHook(
         name=name,
         kind=kind,
@@ -1520,7 +1554,7 @@ class Estimator(tf.estimator.Estimator):
 
   def _create_estimator_spec(self, current_iteration, mode,
                              iteration_number_tensor, previous_iteration_vars,
-                             is_growing_phase):
+                             is_growing_phase, evaluation_name):
     """Creates the EstimatorSpec which will be returned by _adanet_model_fn."""
 
     training = mode == tf.estimator.ModeKeys.TRAIN
@@ -1539,7 +1573,8 @@ class Estimator(tf.estimator.Estimator):
                                  iteration_number_tensor,
                                  previous_iteration_vars, is_growing_phase),
             is_growing_phase),
-        evaluation_hooks=self._evaluation_hooks(current_iteration, training),
+        evaluation_hooks=self._evaluation_hooks(current_iteration, training,
+                                                evaluation_name),
         scaffold=tf_compat.v1.train.Scaffold(summary_op=tf.constant("")),
         export_outputs=iteration_estimator_spec.export_outputs)
 
@@ -1556,7 +1591,13 @@ class Estimator(tf.estimator.Estimator):
       generate_args["config"] = config
     return self._subnetwork_generator.generate_candidates(**generate_args)
 
-  def _create_iteration(self, features, labels, mode, config, is_growing_phase):
+  def _create_iteration(self,
+                        features,
+                        labels,
+                        mode,
+                        config,
+                        is_growing_phase,
+                        evaluation_checkpoint_path=None):
     """Constructs the TF ops and variables for the current iteration.
 
     Args:
@@ -1567,32 +1608,22 @@ class Estimator(tf.estimator.Estimator):
         `ModeKeys`.
       config: The current `tf.estimator.RunConfig`.
       is_growing_phase: Whether we are in the AdaNet graph growing phase.
+      evaluation_checkpoint_path: Path of the evaluation checkpoint to use. When
+        `None`, this method uses the latest checkpoint instead.
 
     Returns:
       A two-tuple of the current `_Iteration`, and list of variables from
         the previous iteration for restoring during the graph growing phase.
-
-    Raises:
-      UserWarning: When calling model_fn directly in TRAIN mode.
     """
-
-    training = mode == tf.estimator.ModeKeys.TRAIN
-    if training and not self._inside_adanet_training_loop:
-      raise UserWarning(
-          "The adanet.Estimator's model_fn should not be called directly in "
-          "TRAIN mode, because its behavior is undefined outside the context "
-          "of its `train` method. If you are trying to add custom metrics "
-          "with `tf.contrib.estimator.add_metrics`, pass the `metric_fn` to "
-          "this `Estimator's` constructor instead.")
 
     iteration_number = self._latest_checkpoint_iteration_number()
 
     # Use the evaluation checkpoint path to get both the iteration number and
     # variable values to avoid any race conditions between the first and second
     # checkpoint reads.
-    if mode == tf.estimator.ModeKeys.EVAL and self._evaluation_checkpoint_path:
-      iteration_number = tf.train.load_variable(
-          self._evaluation_checkpoint_path, self._Keys.CURRENT_ITERATION)
+    if mode == tf.estimator.ModeKeys.EVAL and evaluation_checkpoint_path:
+      iteration_number = tf.train.load_variable(evaluation_checkpoint_path,
+                                                self._Keys.CURRENT_ITERATION)
 
     if is_growing_phase:
       assert mode == tf.estimator.ModeKeys.TRAIN
@@ -1692,10 +1723,28 @@ class Estimator(tf.estimator.Estimator):
       UserWarning: When calling model_fn directly in TRAIN mode.
     """
 
+    # Unpack params.
     is_growing_phase = params.get("is_growing_phase", False)
+    is_inside_training_loop = params.get("is_inside_training_loop", False)
+    evaluation_checkpoint_path = params.get("evaluation_checkpoint_path", None)
+    evaluation_name = params.get("evaluation_name", None)
+
+    training = mode == tf.estimator.ModeKeys.TRAIN
+    if training and not is_inside_training_loop:
+      raise UserWarning(
+          "The adanet.Estimator's model_fn should not be called directly in "
+          "TRAIN mode, because its behavior is undefined outside the context "
+          "of its `train` method. If you are trying to add custom metrics "
+          "with `tf.contrib.estimator.add_metrics`, pass the `metric_fn` to "
+          "this `Estimator's` constructor instead.")
 
     current_iteration, previous_iteration_vars = self._create_iteration(
-        features, labels, mode, config, is_growing_phase)
+        features,
+        labels,
+        mode,
+        config,
+        is_growing_phase,
+        evaluation_checkpoint_path=evaluation_checkpoint_path)
 
     # Variable which allows us to read the current iteration from a checkpoint.
     # This must be created here so it is available when calling
@@ -1707,7 +1756,10 @@ class Estimator(tf.estimator.Estimator):
         initializer=tf_compat.v1.zeros_initializer(),
         trainable=False)
 
-    return self._create_estimator_spec(current_iteration, mode,
-                                       iteration_number_tensor,
-                                       previous_iteration_vars,
-                                       is_growing_phase)
+    return self._create_estimator_spec(
+        current_iteration,
+        mode,
+        iteration_number_tensor,
+        previous_iteration_vars,
+        is_growing_phase,
+        evaluation_name=evaluation_name)

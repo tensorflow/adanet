@@ -174,13 +174,13 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         session_config=self._original_config.session_config,
         protocol=self._original_config.protocol)
 
-  def _create_temp_estimator(self, config):
+  def _create_temp_estimator(self, config, params):
     """See the `Estimator` base class for details."""
 
     temp_model_dir = config.model_dir
     return tf.contrib.tpu.TPUEstimator(
         model_fn=self._adanet_model_fn,
-        params={"is_growing_phase": True},
+        params=params,
         config=config,
         model_dir=temp_model_dir,
         use_tpu=self._use_tpu,
@@ -211,18 +211,23 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
 
   def _create_estimator_spec(self, current_iteration, mode,
                              iteration_number_tensor, previous_iteration_vars,
-                             is_growing_phase):
+                             is_growing_phase, evaluation_name):
     """See the `Estimator` base class for details."""
 
     if not self._use_tpu:
-      return super(TPUEstimator,
-                   self)._create_estimator_spec(current_iteration, mode,
-                                                iteration_number_tensor,
-                                                previous_iteration_vars,
-                                                is_growing_phase)
+      return super(TPUEstimator, self)._create_estimator_spec(
+          current_iteration, mode, iteration_number_tensor,
+          previous_iteration_vars, is_growing_phase, evaluation_name)
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     iteration_estimator_spec = current_iteration.estimator_spec
+    training_hooks = self._training_hooks(current_iteration, training,
+                                          iteration_number_tensor,
+                                          previous_iteration_vars,
+                                          is_growing_phase)
+    training_hooks = self._decorate_hooks(training_hooks, is_growing_phase)
+    evaluation_hooks = self._evaluation_hooks(current_iteration, training,
+                                              evaluation_name)
     return tf_compat.TPUEstimatorSpec(
         mode=mode,
         predictions=iteration_estimator_spec.predictions,
@@ -234,12 +239,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
         # Return a constant summary_op, otherwise `Estimator` creates summary
         # ops that do not work on TPU.
         scaffold_fn=lambda: tf.train.Scaffold(summary_op=tf.constant("")),
-        training_hooks=self._decorate_hooks(
-            self._training_hooks(current_iteration, training,
-                                 iteration_number_tensor,
-                                 previous_iteration_vars, is_growing_phase),
-            is_growing_phase),
-        evaluation_hooks=self._evaluation_hooks(current_iteration, training))
+        training_hooks=training_hooks,
+        evaluation_hooks=evaluation_hooks)
 
   def _training_hooks(self, current_iteration, training,
                       iteration_number_tensor, previous_iteration_vars,

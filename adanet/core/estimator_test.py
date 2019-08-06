@@ -1969,19 +1969,29 @@ class EstimatorExportSavedModelTest(tu.AdanetTestCase):
       """Input fn for serving export, starting from serialized example."""
       serialized_example = tf_compat.v1.placeholder(
           dtype=tf.string, shape=(None), name="serialized_example")
+      tensor_features = {}
       for key, value in features.items():
-        features[key] = tf.constant(value)
+        tensor_features[key] = tf.constant(value)
       return tf.estimator.export.ServingInputReceiver(
-          features=features, receiver_tensors=serialized_example)
+          features=tensor_features, receiver_tensors=serialized_example)
 
     # Fake the number of PS replicas so RoundRobinStrategy will be used.
     estimator._config._num_ps_replicas = 2
     # If we're still using RoundRobinStrategy, this call will fail by trying
     # to place ops on non-existent devices.
+    # Check all three export methods.
     estimator.export_saved_model(
         export_dir_base=self.test_subdirectory,
         serving_input_receiver_fn=serving_input_fn,
         experimental_mode=tf.estimator.ModeKeys.PREDICT)
+    estimator.export_savedmodel(
+        export_dir_base=self.test_subdirectory,
+        serving_input_receiver_fn=serving_input_fn)
+    estimator.experimental_export_all_saved_models(
+        export_dir_base=self.test_subdirectory,
+        input_receiver_fn_map={
+            tf.estimator.ModeKeys.PREDICT: serving_input_fn,
+        })
 
 
 class EstimatorReportTest(tu.AdanetTestCase):
