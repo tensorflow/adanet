@@ -805,6 +805,7 @@ class Estimator(tf.estimator.Estimator):
     params = {
         "evaluation_checkpoint_path": checkpoint_path,
         "evaluation_name": name,
+        "best_ensemble_index": self._compute_best_ensemble_index(),
     }
 
     # Delegate evaluation to a temporary estimator instead of super to make
@@ -826,7 +827,11 @@ class Estimator(tf.estimator.Estimator):
               yield_single_examples=True):
     # Delegate predicting to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
-    temp_estimator = self._create_temp_estimator(self.config, params={})
+    temp_estimator = self._create_temp_estimator(
+        self.config,
+        params={
+            "best_ensemble_index": self._compute_best_ensemble_index(),
+        })
     return temp_estimator.predict(input_fn, predict_keys, hooks,
                                   checkpoint_path, yield_single_examples)
 
@@ -841,7 +846,11 @@ class Estimator(tf.estimator.Estimator):
                         strip_default_attrs=False):
     # Delegate exporting to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
-    temp_estimator = self._create_temp_estimator(self.config, params={})
+    temp_estimator = self._create_temp_estimator(
+        self.config,
+        params={
+            "best_ensemble_index": self._compute_best_ensemble_index(),
+        })
     with self._force_replication_strategy():
       return temp_estimator.export_savedmodel(
           export_dir_base=export_dir_base,
@@ -860,7 +869,11 @@ class Estimator(tf.estimator.Estimator):
                          experimental_mode=tf.estimator.ModeKeys.PREDICT):
     # Delegate exporting to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
-    temp_estimator = self._create_temp_estimator(self.config, params={})
+    temp_estimator = self._create_temp_estimator(
+        self.config,
+        params={
+            "best_ensemble_index": self._compute_best_ensemble_index(),
+        })
     with self._force_replication_strategy():
       return temp_estimator.export_saved_model(
           export_dir_base=export_dir_base,
@@ -878,7 +891,11 @@ class Estimator(tf.estimator.Estimator):
                                            checkpoint_path=None):
     # Delegate exporting to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
-    temp_estimator = self._create_temp_estimator(self.config, params={})
+    temp_estimator = self._create_temp_estimator(
+        self.config,
+        params={
+            "best_ensemble_index": self._compute_best_ensemble_index(),
+        })
     with self._force_replication_strategy():
       return temp_estimator.experimental_export_all_saved_models(
           export_dir_base=export_dir_base,
@@ -886,6 +903,14 @@ class Estimator(tf.estimator.Estimator):
           assets_extra=assets_extra,
           as_text=as_text,
           checkpoint_path=checkpoint_path)
+
+  def _compute_best_ensemble_index(self):
+    """Runs the Evaluator to obtain the best ensemble index among candidates."""
+
+    if self._evaluator:
+      return self._execute_candidate_evaluation_phase(
+          self._evaluator.input_fn, export_best_architecture=False)
+    return None
 
   @contextlib.contextmanager
   def _force_replication_strategy(self):
@@ -985,20 +1010,18 @@ class Estimator(tf.estimator.Estimator):
     else:
       evaluator_input_fn = train_input_fn
     best_ensemble_index = self._execute_candidate_evaluation_phase(
-        evaluator_input_fn, iteration_number, export_best_architecture=True)
+        evaluator_input_fn, export_best_architecture=True)
     self._execute_report_materialization_phase(best_ensemble_index)
     self._execute_graph_growing_phase(train_input_fn, train_hooks)
 
     logging.info("Finished preparing iteration %s.", next_iteration_number)
 
   def _execute_candidate_evaluation_phase(self, evaluator_input_fn,
-                                          iteration_number,
                                           export_best_architecture):
     """Evaluates and chooses the best ensemble for this iteration.
 
     Args:
       evaluator_input_fn: The input_fn for evaluation.
-      iteration_number: Integer current iteration number.
       export_best_architecture: Boolean whether to persist the best ensemble's
         architecture to the model_dir.
 
@@ -1020,6 +1043,7 @@ class Estimator(tf.estimator.Estimator):
       architecture = current_iteration.candidates[
           best_ensemble_index].ensemble_spec.architecture
     if export_best_architecture:
+      iteration_number = self._latest_checkpoint_iteration_number()
       new_architecture_filename = self._architecture_filename(iteration_number)
       logging.info("Exporting best ensemble architecture to %s",
                    new_architecture_filename)
@@ -1110,19 +1134,16 @@ class Estimator(tf.estimator.Estimator):
 
     # Skip the evaluation phase when there is only one candidate subnetwork.
     if len(current_iteration.candidates) == 1:
-      logging.info(
-          "As the only candidate, '%s' is moving onto the next iteration.",
-          current_iteration.candidates[0].ensemble_spec.name)
+      logging.info("'%s' is the only ensemble",
+                   current_iteration.candidates[0].ensemble_spec.name)
       return 0
 
     # The zero-th index candidate at iteration t>0 is always the
     # previous_ensemble.
     if current_iteration.number > 0 and self._force_grow and (len(
         current_iteration.candidates) == 2):
-      logging.info(
-          "As the only candidate with `force_grow` enabled, '%s' is moving"
-          "onto the next iteration.",
-          current_iteration.candidates[1].ensemble_spec.name)
+      logging.info("With `force_grow` enabled, '%s' is the only ensemble",
+                   current_iteration.candidates[1].ensemble_spec.name)
       return 1
 
     latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
@@ -1173,7 +1194,7 @@ class Estimator(tf.estimator.Estimator):
         index = np.argmin(adanet_losses)
     logging.info("Finished ensemble evaluation for iteration %s",
                  current_iteration.number)
-    logging.info("'%s' at index %s is moving onto the next iteration",
+    logging.info("'%s' at index %s is the best ensemble",
                  current_iteration.candidates[index].ensemble_spec.name, index)
     return index
 
@@ -1597,7 +1618,8 @@ class Estimator(tf.estimator.Estimator):
                         mode,
                         config,
                         is_growing_phase,
-                        evaluation_checkpoint_path=None):
+                        evaluation_checkpoint_path=None,
+                        best_ensemble_index_override=None):
     """Constructs the TF ops and variables for the current iteration.
 
     Args:
@@ -1610,6 +1632,9 @@ class Estimator(tf.estimator.Estimator):
       is_growing_phase: Whether we are in the AdaNet graph growing phase.
       evaluation_checkpoint_path: Path of the evaluation checkpoint to use. When
         `None`, this method uses the latest checkpoint instead.
+      best_ensemble_index_override: Integer index to identify the latest
+        iteration's best ensemble candidate instead of computing the best
+        ensemble index dynamically conditional on the ensemble AdaNet losses.
 
     Returns:
       A two-tuple of the current `_Iteration`, and list of variables from
@@ -1700,7 +1725,8 @@ class Estimator(tf.estimator.Estimator):
           mode=mode,
           config=config,
           previous_ensemble_summary=previous_ensemble_summary,
-          previous_ensemble_spec=previous_ensemble_spec)
+          previous_ensemble_spec=previous_ensemble_spec,
+          best_ensemble_index_override=best_ensemble_index_override)
 
     return current_iteration, previous_iteration_vars
 
@@ -1728,6 +1754,7 @@ class Estimator(tf.estimator.Estimator):
     is_inside_training_loop = params.get("is_inside_training_loop", False)
     evaluation_checkpoint_path = params.get("evaluation_checkpoint_path", None)
     evaluation_name = params.get("evaluation_name", None)
+    best_ensemble_index = params.get("best_ensemble_index", None)
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     if training and not is_inside_training_loop:
@@ -1744,7 +1771,8 @@ class Estimator(tf.estimator.Estimator):
         mode,
         config,
         is_growing_phase,
-        evaluation_checkpoint_path=evaluation_checkpoint_path)
+        evaluation_checkpoint_path=evaluation_checkpoint_path,
+        best_ensemble_index_override=best_ensemble_index)
 
     # Variable which allows us to read the current iteration from a checkpoint.
     # This must be created here so it is available when calling

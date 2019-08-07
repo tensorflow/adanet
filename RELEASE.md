@@ -16,6 +16,7 @@ limitations under the License.
 # Current version (0.8.0.dev)
  * Under development.
  * TODO: Add official Keras Model support, including Keras layers, Sequential, and Model subclasses for defining subnetworks.
+ * **BREAKING CHANGE**: When supplied, run the `adanet.Evaluator` before `Estimator#evaluate`, `Estimator#predict`, and `Estimator#export_saved_model`. This can have the effect of changing the best candidate chosen at the final round. When the user passes an Evaluator, we run it to establish the best candidate during evaluation, predict, and export_saved_model. Previously they used the adanet_loss moving average collected during training. While the previous ensemble would have been established by the Evaluator, the current set of candidate ensembles that were not done training would be considered according to the adanet_loss. Now when a user passes an Evaluator that, for example, uses a hold-out set, AdaNet runs it before making predictions or exporting a SavedModel to use the best new candidate according to the hold-out set.
  * Support `tf.keras.metrics.Metrics` during evaluation.
  * Stop individual subnetwork training on `OutOfRangeError` raised during bagging.
  * Gracefully handle NaN losses from ensembles during training. When an ensemble or subnetwork has a NaN loss during training, its training is marked as terminated. As long as one ensemble (and therefore underlying subnetworks) does not have a NaN loss, training will continue.

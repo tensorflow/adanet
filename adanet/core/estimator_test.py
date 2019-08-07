@@ -359,6 +359,50 @@ class _WidthLimitingDNNBuilder(_DNNBuilder):
     return indices[-self._width_limit + 1:]  # pylint: disable=invalid-unary-operand-type
 
 
+class _FakeEvaluator(object):
+  """Fakes an `adanet.Evaluator`."""
+
+  def __init__(self, input_fn):
+    self._input_fn = input_fn
+
+  @property
+  def input_fn(self):
+    """Return the input_fn."""
+    return self._input_fn
+
+  @property
+  def steps(self):
+    """Return the number of evaluation steps."""
+    return 1
+
+  def evaluate_adanet_losses(self, sess, adanet_losses):
+    """Abstract method to be overridden in subclasses."""
+
+    del sess
+    del adanet_losses
+    raise NotImplementedError
+
+
+class _AlwaysLastEvaluator(_FakeEvaluator):
+
+  def evaluate_adanet_losses(self, sess, adanet_losses):
+    """Always makes the last loss the smallest."""
+
+    losses = [np.inf] * len(adanet_losses)
+    losses[-1] = 0.
+    return losses
+
+
+class _AlwaysSecondToLastEvaluator(_FakeEvaluator):
+
+  def evaluate_adanet_losses(self, sess, adanet_losses):
+    """Always makes the second to last loss the smallest."""
+
+    losses = [np.inf] * len(adanet_losses)
+    losses[-2] = 0.
+    return losses
+
+
 class EstimatorTest(tu.AdanetTestCase):
 
   @parameterized.named_parameters(
@@ -582,7 +626,7 @@ class EstimatorTest(tu.AdanetTestCase):
           "max_iteration_steps":
               200,
           "want_loss":
-              0.31241742,
+              0.36189985,
       },
       {
           "testcase_name":
@@ -598,6 +642,38 @@ class EstimatorTest(tu.AdanetTestCase):
               200,
           "want_loss":
               0.29696745,
+      },
+      {
+          "testcase_name":
+              "evaluator_always_last",
+          "subnetwork_generator":
+              SimpleGenerator([
+                  _DNNBuilder("dnn"),
+                  _DNNBuilder("dnn2", layer_size=3),
+              ]),
+          "evaluator":
+              _AlwaysLastEvaluator(
+                  input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]])),
+          "max_iteration_steps":
+              None,
+          "want_loss":
+              0.31389591,
+      },
+      {
+          "testcase_name":
+              "evaluator_always_second_to_last",
+          "subnetwork_generator":
+              SimpleGenerator([
+                  _DNNBuilder("dnn"),
+                  _DNNBuilder("dnn2", layer_size=3),
+              ]),
+          "evaluator":
+              _AlwaysSecondToLastEvaluator(
+                  input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]])),
+          "max_iteration_steps":
+              None,
+          "want_loss":
+              0.32487726,
       },
       {
           "testcase_name":
@@ -2622,7 +2698,7 @@ class EstimatorForceGrowTest(tu.AdanetTestCase):
               Evaluator(
                   input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1),
           "want_subnetworks":
-              2,
+              3,
       })
   def test_force_grow(self,
                       builders,

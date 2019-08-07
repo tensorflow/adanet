@@ -493,7 +493,8 @@ class _IterationBuilder(object):
                       previous_ensemble_summary=None,
                       previous_ensemble_spec=None,
                       rebuilding=False,
-                      rebuilding_ensembler_name=None):
+                      rebuilding_ensembler_name=None,
+                      best_ensemble_index_override=None):
     """Builds and returns AdaNet iteration t.
 
     This method uses the generated the candidate subnetworks given the ensemble
@@ -519,6 +520,9 @@ class _IterationBuilder(object):
         the previous best subnetworks and ensembles.
       rebuilding_ensembler_name: Optional ensembler to restrict to, only
         relevant when rebuilding is set as True.
+      best_ensemble_index_override: Integer index to identify the best ensemble
+        candidate instead of computing the best ensemble index dynamically
+        conditional on the ensemble AdaNet losses.
 
     Returns:
       An _Iteration instance.
@@ -702,7 +706,8 @@ class _IterationBuilder(object):
                   ensemble_spec.adanet_loss)
 
       # Dynamically select the outputs of best candidate.
-      best_candidate_index = self._best_candidate_index(candidates)
+      best_candidate_index = self._best_candidate_index(
+          candidates, best_ensemble_index_override)
       best_predictions = self._best_predictions(candidates,
                                                 best_candidate_index)
       best_loss = self._best_loss(candidates, best_candidate_index, mode)
@@ -932,10 +937,14 @@ class _IterationBuilder(object):
     for hook in spec.train_op.hooks:
       training_hooks.append(_TrainingHookRunnerHook(train_manager, spec, hook))
 
-  def _best_candidate_index(self, candidates):
+  def _best_candidate_index(self, candidates, best_ensemble_index_override):
     """Returns the index of the best candidate in the list.
 
-    The best candidate is the one with the smallest AdaNet loss.
+    The best candidate is the one with the smallest AdaNet loss, unless
+    `best_ensemble_index_override` is given.
+
+    TODO: Best ensemble index should always be static during EVAL
+    and PREDICT modes.
 
     In case a candidate has a NaN loss, their loss is immediately set to
     infinite, so that they are not selected. As long as one candidate ensemble
@@ -944,12 +953,17 @@ class _IterationBuilder(object):
 
     Args:
       candidates: List of `_Candidate` instances to choose from.
+      best_ensemble_index_override: Integer index to return instead of computing
+        the best ensemble index dynamically.
 
     Returns:
       An integer `Tensor` representing the index of the best candidate.
     """
 
     with tf_compat.v1.variable_scope("best_candidate_index"):
+      if best_ensemble_index_override is not None:
+        return tf.constant(best_ensemble_index_override)
+
       if len(candidates) == 1:
         return tf.constant(0)
       adanet_losses = [candidate.adanet_loss for candidate in candidates]

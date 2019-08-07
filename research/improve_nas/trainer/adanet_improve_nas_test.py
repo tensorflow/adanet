@@ -33,13 +33,13 @@ class AdaNetQuetzalBuilderTest(parameterized.TestCase, tf.test.TestCase):
       "testcase_name": "simple_generator",
       "hparams_string": ("optimizer=sgd,boosting_iterations=2,generator=simple,"
                          "initial_learning_rate=.1,use_aux_head=False,"
-                         "num_cells=3,num_conv_filters=2,"),
+                         "num_cells=3,num_conv_filters=2,use_evaluator=False"),
   }, {
       "testcase_name": "dynamic_generator",
       "hparams_string":
           ("optimizer=sgd,boosting_iterations=1,generator=dynamic,"
            "initial_learning_rate=.1,use_aux_head=False,"
-           "num_cells=3,num_conv_filters=2,"),
+           "num_cells=3,num_conv_filters=2,use_evaluator=False"),
   })
   def test_estimator(self,
                      hparams_string,
@@ -76,7 +76,7 @@ class AdaNetQuetzalBuilderTest(parameterized.TestCase, tf.test.TestCase):
         hparams=hparams,
         train_steps=10,
         seed=seed)
-    eval_metrics = estimator.evaluate(input_fn=test_input_fn, steps=10)
+    eval_metrics = estimator.evaluate(input_fn=test_input_fn, steps=1)
 
     self.assertGreater(eval_metrics["loss"], 0.0)
 

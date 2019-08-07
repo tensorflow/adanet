@@ -86,12 +86,14 @@ class Builder(object):
     else:
       raise ValueError("Invalid generator: `%s`" % hparams.generator)
 
-    evaluator = adanet.Evaluator(
-        input_fn=data_provider.get_input_fn(
-            partition="train",
-            mode=tf.estimator.ModeKeys.EVAL,
-            batch_size=hparams.evaluator_batch_size),
-        steps=hparams.evaluator_steps)
+    evaluator = None
+    if hparams.use_evaluator:
+      evaluator = adanet.Evaluator(
+          input_fn=data_provider.get_input_fn(
+              partition="train",
+              mode=tf.estimator.ModeKeys.EVAL,
+              batch_size=hparams.evaluator_batch_size),
+          steps=hparams.evaluator_steps)
 
     return adanet.Estimator(
         head=data_provider.get_head(),
@@ -162,6 +164,8 @@ class Builder(object):
         reduction layer.
     - use_bounded_activation: NASNet cell parameter. Whether to use bounded
         activations.
+    - use_evaluator: Boolean whether to use the adanet.Evaluator to choose the
+        best ensemble at each round.
 
     Args:
       default_batch_size: The default batch_size specified for training.
@@ -206,6 +210,7 @@ class Builder(object):
         batch_size=default_batch_size,
         learn_mixture_weights=False,
         mixture_weight_type=adanet.MixtureWeightType.SCALAR,
+        use_evaluator=True,
     )
     if hparams_string:
       hparams = hparams.parse(hparams_string)
