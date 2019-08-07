@@ -413,6 +413,8 @@ class EstimatorTest(tu.AdanetTestCase):
           "steps": 1,
           "max_steps": None,
           "want_loss": 0.49899703,
+          "want_iteration": 0,
+          "want_global_step": 1,
       },
       {
           "testcase_name": "none_max_iteration_steps",
@@ -421,6 +423,8 @@ class EstimatorTest(tu.AdanetTestCase):
           "steps": 300,
           "max_steps": None,
           "want_loss": 0.32487726,
+          "want_iteration": 0,
+          "want_global_step": 300,
       },
       {
           "testcase_name": "single_builder_max_steps",
@@ -428,6 +432,8 @@ class EstimatorTest(tu.AdanetTestCase):
           "max_iteration_steps": 200,
           "max_steps": 300,
           "want_loss": 0.32420248,
+          "want_iteration": 1,
+          "want_global_step": 300,
       },
       {
           "testcase_name": "single_builder_steps",
@@ -436,6 +442,18 @@ class EstimatorTest(tu.AdanetTestCase):
           "steps": 300,
           "max_steps": None,
           "want_loss": 0.32420248,
+          "want_iteration": 1,
+          "want_global_step": 300,
+      },
+      {
+          "testcase_name": "single_builder_two_max_iteration_fewer_max_steps",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 200,
+          "max_iterations": 2,
+          "max_steps": 300,
+          "want_loss": 0.32420248,
+          "want_iteration": 1,
+          "want_global_step": 300,
       },
       {
           "testcase_name": "single_builder_no_bias",
@@ -443,6 +461,8 @@ class EstimatorTest(tu.AdanetTestCase):
           "max_iteration_steps": 200,
           "use_bias": False,
           "want_loss": 0.496736,
+          "want_iteration": 1,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -462,6 +482,9 @@ class EstimatorTest(tu.AdanetTestCase):
               False,
           "want_loss":
               0.496736,
+          "want_iteration":
+              1,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -483,6 +506,9 @@ class EstimatorTest(tu.AdanetTestCase):
               False,
           "want_loss":
               0.496736,
+          "want_iteration":
+              1,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -496,6 +522,9 @@ class EstimatorTest(tu.AdanetTestCase):
               MixtureWeightType.SCALAR,
           "want_loss":
               0.32317898,
+          "want_iteration":
+              1,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -509,6 +538,9 @@ class EstimatorTest(tu.AdanetTestCase):
               MixtureWeightType.VECTOR,
           "want_loss":
               0.32317898,
+          "want_iteration":
+              1,
+          "want_global_step": 300,
       },
       {
           "testcase_name": "single_builder_replicate_ensemble_in_training",
@@ -517,6 +549,8 @@ class EstimatorTest(tu.AdanetTestCase):
           "max_iteration_steps": 200,
           "max_steps": 300,
           "want_loss": 0.32420215,
+          "want_iteration": 1,
+          "want_global_step": 300,
       },
       {
           "testcase_name": "single_builder_with_hook",
@@ -524,12 +558,16 @@ class EstimatorTest(tu.AdanetTestCase):
           "max_iteration_steps": 200,
           "hooks": [tu.ModifierSessionRunHook()],
           "want_loss": 0.32420248,
+          "want_iteration": 1,
+          "want_global_step": 300,
       },
       {
           "testcase_name": "high_max_iteration_steps",
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": 500,
           "want_loss": 0.32487726,
+          "want_iteration": 0,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -542,6 +580,9 @@ class EstimatorTest(tu.AdanetTestCase):
               200,
           "want_loss":
               0.27713922,
+          "want_iteration":
+              1,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -554,6 +595,72 @@ class EstimatorTest(tu.AdanetTestCase):
               200,
           "want_loss":
               0.29696745,
+          "want_iteration":
+              1,
+          "want_global_step": 300,
+      },
+      {
+          "testcase_name":
+              "two_builders_one_max_iteration_none_steps_and_none_max_steps",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "max_iteration_steps":
+              200,
+          "max_iterations":
+              1,
+          "steps":
+              None,
+          "max_steps":
+              None,
+          "want_loss":
+              0.35249719,
+          "want_iteration":
+              0,
+          "want_global_step": 200,
+      },
+      {
+          "testcase_name":
+              "two_builders_one_max_iteration_two_hundred_steps",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "max_iteration_steps":
+              200,
+          "max_iterations":
+              1,
+          "steps":
+              300,
+          "max_steps":
+              None,
+          "want_loss":
+              0.35249719,
+          "want_iteration":
+              0,
+          "want_global_step": 200,
+      },
+      {
+          "testcase_name":
+              "two_builders_two_max_iteration_none_steps_and_none_max_steps",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "max_iteration_steps":
+              200,
+          "max_iterations":
+              2,
+          "steps":
+              None,
+          "max_steps":
+              None,
+          "want_loss":
+              0.26503286,
+          "want_iteration":
+              1,
+          "want_global_step": 400,
       },
       {
           "testcase_name":
@@ -566,6 +673,9 @@ class EstimatorTest(tu.AdanetTestCase):
               100,
           "want_loss":
               0.26433355,
+          "want_iteration":
+              2,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -576,6 +686,9 @@ class EstimatorTest(tu.AdanetTestCase):
               75,
           "want_loss":
               0.32001898,
+          "want_iteration":
+              3,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -587,6 +700,9 @@ class EstimatorTest(tu.AdanetTestCase):
               75,
           "want_loss":
               0.38592532,
+          "want_iteration":
+              3,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -598,6 +714,9 @@ class EstimatorTest(tu.AdanetTestCase):
               75,
           "want_loss":
               0.43492866,
+          "want_iteration":
+              3,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -612,6 +731,9 @@ class EstimatorTest(tu.AdanetTestCase):
               75,
           "want_loss":
               0.32001898,
+          "want_iteration":
+              3,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -627,6 +749,9 @@ class EstimatorTest(tu.AdanetTestCase):
               200,
           "want_loss":
               0.36189985,
+          "want_iteration":
+              1,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -642,6 +767,9 @@ class EstimatorTest(tu.AdanetTestCase):
               200,
           "want_loss":
               0.29696745,
+          "want_iteration":
+              1,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -658,6 +786,9 @@ class EstimatorTest(tu.AdanetTestCase):
               None,
           "want_loss":
               0.31389591,
+          "want_iteration":
+              0,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -674,6 +805,9 @@ class EstimatorTest(tu.AdanetTestCase):
               None,
           "want_loss":
               0.32487726,
+          "want_iteration":
+              0,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -689,6 +823,9 @@ class EstimatorTest(tu.AdanetTestCase):
               200,
           "want_loss":
               0.29696745,
+          "want_iteration":
+              1,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -702,6 +839,9 @@ class EstimatorTest(tu.AdanetTestCase):
               200,
           "want_loss":
               0.29196805,
+          "want_iteration":
+              1,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -719,6 +859,9 @@ class EstimatorTest(tu.AdanetTestCase):
               200,
           "want_loss":
               0.23053232,
+          "want_iteration":
+              1,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -732,6 +875,9 @@ class EstimatorTest(tu.AdanetTestCase):
               200,
           "want_loss":
               0.35249719,
+          "want_iteration":
+              1,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -744,7 +890,10 @@ class EstimatorTest(tu.AdanetTestCase):
           "max_iteration_steps":
               100,
           "want_loss":
-              0.36163166
+              0.36163166,
+          "want_iteration":
+              2,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -760,6 +909,9 @@ class EstimatorTest(tu.AdanetTestCase):
               100,
           "want_loss":
               0.24838975,
+          "want_iteration":
+              2,
+          "want_global_step": 300,
       },
       {
           "testcase_name":
@@ -776,10 +928,15 @@ class EstimatorTest(tu.AdanetTestCase):
               100,
           "want_loss":
               0.32219219,
+          "want_iteration":
+              2,
+          "want_global_step": 300,
       })
   def test_lifecycle(self,
                      subnetwork_generator,
                      want_loss,
+                     want_iteration,
+                     want_global_step,
                      max_iteration_steps,
                      mixture_weight_type=MixtureWeightType.MATRIX,
                      evaluator=None,
@@ -791,7 +948,8 @@ class EstimatorTest(tu.AdanetTestCase):
                      max_steps=300,
                      steps=None,
                      report_materializer=None,
-                     train_input_fn=None):
+                     train_input_fn=None,
+                     max_iterations=None):
     """Train entire estimator lifecycle using XOR dataset."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
@@ -821,6 +979,7 @@ class EstimatorTest(tu.AdanetTestCase):
         metric_fn=_metric_fn,
         model_dir=self.test_subdirectory,
         config=run_config,
+        max_iterations=max_iterations,
         **default_ensembler_kwargs)
 
     if not train_input_fn:
@@ -835,7 +994,8 @@ class EstimatorTest(tu.AdanetTestCase):
         input_fn=train_input_fn, steps=10, hooks=hooks)
     logging.info("%s", eval_results)
     self.assertAlmostEqual(want_loss, eval_results["loss"], places=3)
-    self.assertEqual(max_steps or steps, eval_results["global_step"])
+    self.assertEqual(want_global_step, eval_results["global_step"])
+    self.assertEqual(want_iteration, eval_results["iteration"])
 
     # Predict.
     predictions = estimator.predict(
@@ -940,6 +1100,20 @@ class EstimatorTest(tu.AdanetTestCase):
           "want_error": ValueError,
       },
       {
+          "testcase_name": "negative_max_iterations",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 1,
+          "max_iterations": -1,
+          "want_error": ValueError,
+      },
+      {
+          "testcase_name": "zero_max_iterations",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 1,
+          "max_iterations": 0,
+          "want_error": ValueError,
+      },
+      {
           "testcase_name": "steps_and_max_steps",
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": 1,
@@ -998,7 +1172,8 @@ class EstimatorTest(tu.AdanetTestCase):
                        max_iteration_steps,
                        want_error,
                        steps=None,
-                       max_steps=10):
+                       max_steps=10,
+                       max_iterations=None):
     report_materializer = ReportMaterializer(
         input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
     with self.assertRaises(want_error):
@@ -1011,6 +1186,7 @@ class EstimatorTest(tu.AdanetTestCase):
           warm_start_mixture_weights=True,
           max_iteration_steps=max_iteration_steps,
           use_bias=True,
+          max_iterations=max_iterations,
           model_dir=self.test_subdirectory)
       train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
       estimator.train(input_fn=train_input_fn, steps=steps, max_steps=max_steps)

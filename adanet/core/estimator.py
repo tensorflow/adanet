@@ -445,6 +445,12 @@ class Estimator(tf.estimator.Estimator):
       per run.
     global_step_combiner_fn: Function for combining each subnetwork's
       iteration step into the global step.
+    max_iterations: Integer maximum number of AdaNet iterations (a.k.a. rounds)
+      of generating new subnetworks and ensembles, training them, and evaluating
+      them against the current best ensemble. When :code:`None`, AdaNet will
+      keep iterating until `Estimator#train` terminates. Otherwise, if
+      :code:`max_iteratios` is supplied and is met or exceeded during training,
+      training will terminate even before `steps` or `max_steps`.
     **kwargs: Extra keyword args passed to the parent.
 
   Returns:
@@ -455,6 +461,7 @@ class Estimator(tf.estimator.Estimator):
     :code:`ValueError`: If :code:`max_iteration_steps` is <= 0.
     :code:`ValueError`: If :code:`model_dir` is not specified during distributed
       training.
+    :code:`ValueError`: If :code:`max_iterations` is <= 0.
   """
   # pyformat: enable
 
@@ -485,10 +492,13 @@ class Estimator(tf.estimator.Estimator):
                enable_ensemble_summaries=True,
                enable_subnetwork_summaries=True,
                global_step_combiner_fn=tf.math.reduce_mean,
+               max_iterations=None,
                **kwargs):
     if subnetwork_generator is None:
       raise ValueError("subnetwork_generator can't be None.")
     if max_iteration_steps is not None and max_iteration_steps <= 0.:
+      raise ValueError("max_iteration_steps must be > 0 or None.")
+    if max_iterations is not None and max_iterations <= 0.:
       raise ValueError("max_iteration_steps must be > 0 or None.")
     is_distributed_training = config and config.num_worker_replicas > 1
     is_model_dir_specified = model_dir or (config and config.model_dir)
@@ -514,6 +524,7 @@ class Estimator(tf.estimator.Estimator):
     self._max_worker_delay_secs = max_worker_delay_secs
     self._worker_wait_secs = worker_wait_secs
     self._worker_wait_timeout_secs = worker_wait_timeout_secs
+    self._max_iterations = max_iterations
 
     # Added for backwards compatibility.
     default_ensembler_args = [
@@ -691,14 +702,16 @@ class Estimator(tf.estimator.Estimator):
     if steps is not None and steps <= 0:
       raise ValueError("Must specify steps > 0, given: {}".format(steps))
 
+    latest_global_steps = self._latest_checkpoint_global_step()
     if steps is not None:
-      max_steps = self._latest_checkpoint_global_step() + steps
+      max_steps = latest_global_steps + steps
 
     # Each iteration of this AdaNet loop represents an `_Iteration`. The
     # current iteration number is stored as a variable in the checkpoint so
     # that training can be stopped and started at anytime.
     with monkey_patch_default_variable_placement_strategy():
       while True:
+        latest_global_steps = self._latest_checkpoint_global_step()
         current_iteration = self._latest_checkpoint_iteration_number()
         logging.info("Beginning training AdaNet iteration %s",
                      current_iteration)
@@ -729,6 +742,16 @@ class Estimator(tf.estimator.Estimator):
         # exit training.
         if not self._iteration_ended:
           logging.info("Training stop requested")
+          return result
+
+        max_iterations = self._max_iterations
+        if max_iterations and current_iteration + 1 >= max_iterations:
+          logging.info(
+              "Training ended after exceeding maximum AdaNet iterations")
+          if steps is not None and global_steps - latest_global_steps < steps:
+            logging.warning(
+                "Both `max_iterations` and `steps` were specified, but "
+                "`max_iterations` takes precedence over `steps`")
           return result
 
         logging.info("Beginning bookkeeping phase for iteration %s",
