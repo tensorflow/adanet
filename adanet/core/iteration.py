@@ -224,17 +224,15 @@ class _GlobalStepSetterHook(tf_compat.SessionRunHook):
     self._subnetwork_specs = subnetwork_specs
     self._base_global_step = base_global_step
     self._global_step_combiner_fn = global_step_combiner_fn
-    self._steps = [s.step.read_value() for s in subnetwork_specs]
 
   def begin(self):
+    steps = [
+        self._base_global_step + s.step.read_value()
+        for s in self._subnetwork_specs
+    ]
+    updated_global_step = self._global_step_combiner_fn(steps)
     global_step = tf_compat.v1.train.get_global_step()
-    self._assign_global_step_op = global_step.assign(
-        tf.cast(
-            self._base_global_step + self._global_step_combiner_fn(self._steps),
-            dtype=tf.int64))
-
-  def after_create_session(self, session, coord):
-    self._step_values = session.run(self._steps)
+    self._assign_global_step_op = global_step.assign(updated_global_step)
 
   def after_run(self, run_context, run_values):
     # Global step cannot be retrieved via SessionRunArgs and before_run due to
