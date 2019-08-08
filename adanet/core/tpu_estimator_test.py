@@ -207,7 +207,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
           "subnetwork_generator":
               SimpleGenerator([_DNNBuilder("dnn", use_tpu=False)]),
           "want_loss":
-              .27357,
+              0.41315794,
       },
   )
   def test_tpu_estimator_simple_lifecycle(self, use_tpu, subnetwork_generator,
@@ -216,12 +216,12 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     estimator = TPUEstimator(
         head=tu.head(),
         subnetwork_generator=subnetwork_generator,
-        max_iteration_steps=100,
+        max_iteration_steps=10,
         model_dir=self.test_subdirectory,
         config=config,
         use_tpu=use_tpu,
         train_batch_size=64 if use_tpu else 0)
-    max_steps = 300
+    max_steps = 30
 
     xor_features = [[1., 0.], [0., 0], [0., 1.], [1., 1.]]
     xor_labels = [[1.], [0.], [1.], [0.]]
@@ -266,16 +266,19 @@ class TPUEstimatorTest(tu.AdanetTestCase):
       {
           "testcase_name": "not_use_tpu",
           "use_tpu": False,
-          "want_loss": .31239,
+          "want_loss": 0.55584925,
           "want_adanet_loss": .64416,
-          "want_eval_summary_loss": .31239,
-          "want_predictions": .45473,
+          "want_eval_summary_loss": 0.555849,
+          "want_predictions": 0.46818,
       },
   )
   def test_tpu_estimator_summaries(self, use_tpu, want_loss, want_adanet_loss,
                                    want_eval_summary_loss, want_predictions):
+    max_steps = 10
     config = tf.contrib.tpu.RunConfig(
-        tf_random_seed=42, save_summary_steps=100, log_step_count_steps=100)
+        tf_random_seed=42,
+        save_summary_steps=max_steps,
+        log_step_count_steps=max_steps)
     assert config.log_step_count_steps
 
     def metric_fn(predictions):
@@ -283,7 +286,6 @@ class TPUEstimatorTest(tu.AdanetTestCase):
           "predictions": tf_compat.v1.metrics.mean(predictions["predictions"])
       }
 
-    max_steps = 100
     estimator = TPUEstimator(
         head=tu.head(),
         subnetwork_generator=SimpleGenerator(

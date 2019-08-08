@@ -105,6 +105,7 @@ py_library(
 py_test(
     name = "tpu_estimator_test",
     srcs = ["tpu_estimator_test.py"],
+    shard_count = 10,
     deps = [
         ":testing_utils",
         ":tpu_estimator",
