@@ -23,27 +23,56 @@ import math
 
 from absl import logging
 from adanet import tf_compat
+import numpy as np
 import tensorflow as tf
 
 
+# TODO: Remove uses of Evaluator once AdaNet Ranker is implemented.
 class Evaluator(object):
-  """Evaluates candidate ensemble performance.
+  """Evaluates candidate ensemble performance."""
 
-  Args:
-    input_fn: Input function returning a tuple of: features - Dictionary of
-      string feature name to `Tensor`. labels - `Tensor` of labels.
-    steps: Number of steps for which to evaluate the ensembles. If an
-      `OutOfRangeError` occurs, evaluation stops. If set to None, will iterate
-      the dataset until all inputs are exhausted.
+  class Objective(object):
+    """The Evaluator objective for the metric being optimized.
 
-  Returns:
-    An :class:`adanet.Evaluator` instance.
-  """
+    Two objectives are currently supported:
+      - MINIMIZE: Lower is better for the metric being optimized.
+      - MAXIMIZE: Higher is better for the metric being optimized.
+    """
 
-  def __init__(self, input_fn, steps=None):
+    MINIMIZE = "minimize"
+    MAXIMIZE = "maximize"
+
+  def __init__(self,
+               input_fn,
+               metric_name="adanet_loss",
+               objective=Objective.MINIMIZE,
+               steps=None):
+    """Initializes a new Evaluator instance.
+
+    Args:
+      input_fn: Input function returning a tuple of: features - Dictionary of
+        string feature name to `Tensor`. labels - `Tensor` of labels.
+      metric_name: The name of the evaluation metrics to use when choosing the
+        best ensemble. Must refer to a valid evaluation metric.
+      objective: Either `Objective.MINIMIZE` or `Objective.MAXIMIZE`.
+      steps: Number of steps for which to evaluate the ensembles. If an
+        `OutOfRangeError` occurs, evaluation stops. If set to None, will iterate
+        the dataset until all inputs are exhausted.
+
+    Returns:
+      An :class:`adanet.Evaluator` instance.
+    """
     self._input_fn = input_fn
     self._steps = steps
-    super(Evaluator, self).__init__()
+    self._metric_name = metric_name
+    self._objective = objective
+    if objective == self.Objective.MINIMIZE:
+      self._objective_fn = np.nanargmin
+    elif objective == self.Objective.MAXIMIZE:
+      self._objective_fn = np.nanargmax
+    else:
+      raise ValueError(
+          "Evaluator objective must be one of MINIMIZE or MAXIMIZE.")
 
   @property
   def input_fn(self):
@@ -55,7 +84,17 @@ class Evaluator(object):
     """Return the number of evaluation steps."""
     return self._steps
 
-  def evaluate_adanet_losses(self, sess, adanet_losses):
+  @property
+  def metric_name(self):
+    """Returns the name of the metric being optimized."""
+    return self._metric_name
+
+  @property
+  def objective_fn(self):
+    """Returns a fn which selects the best metric based on the objective."""
+    return self._objective_fn
+
+  def evaluate(self, sess, ensemble_metrics):
     """Evaluates the given AdaNet objectives on the data from `input_fn`.
 
     The candidates are fed the same batches of features and labels as
@@ -64,10 +103,11 @@ class Evaluator(object):
 
     Args:
       sess: `Session` instance with most recent variable values loaded.
-      adanet_losses: List of AdaNet loss `Tensors`.
+      ensemble_metrics: A list dictionaries of `tf.metrics` for each candidate
+        ensemble.
 
     Returns:
-      List of evaluated AdaNet losses.
+      List of evaluated metrics.
     """
 
     evals_completed = 0
@@ -78,9 +118,8 @@ class Evaluator(object):
     else:
       logging_frequency = math.floor(self.steps / 10.)
 
-    adanet_losses = [
-        tf_compat.v1.metrics.mean(adanet_loss) for adanet_loss in adanet_losses
-    ]
+    objective_metrics = [em[self._metric_name] for em in ensemble_metrics]
+
     sess.run(tf_compat.v1.local_variables_initializer())
     while True:
       if self.steps is not None and evals_completed == self.steps:
@@ -91,12 +130,11 @@ class Evaluator(object):
             self.steps == evals_completed):
           logging.info("Ensemble evaluation [%d/%s]", evals_completed,
                        self.steps or "??")
-        sess.run(adanet_losses)
+        sess.run(objective_metrics)
       except tf.errors.OutOfRangeError:
         logging.info("Encountered end of input after %d evaluations",
                      evals_completed)
         break
 
-    # Losses are metric op tuples. Evaluating the first element is idempotent.
-    adanet_losses = [loss[0] for loss in adanet_losses]
-    return sess.run(adanet_losses)
+    # Evaluating the first element is idempotent for metric tuples.
+    return sess.run([metric[0] for metric in objective_metrics])

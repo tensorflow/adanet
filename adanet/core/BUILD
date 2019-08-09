@@ -30,6 +30,7 @@ py_library(
         ":architecture",
         ":candidate",
         ":ensemble_builder",
+        ":eval_metrics",
         ":iteration",
         ":report_accessor",
         ":summary",
@@ -169,6 +170,8 @@ py_test(
     name = "evaluator_test",
     srcs = ["evaluator_test.py"],
     deps = [
+        ":candidate",
+        ":ensemble_builder",
         ":evaluator",
         ":testing_utils",
         "@absl_py//absl/testing:parameterized",

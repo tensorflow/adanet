@@ -375,30 +375,43 @@ class _FakeEvaluator(object):
     """Return the number of evaluation steps."""
     return 1
 
-  def evaluate_adanet_losses(self, sess, adanet_losses):
+  @property
+  def metric_name(self):
+    """Returns the name of the metric being optimized."""
+    return "adanet_loss"
+
+  @property
+  def objective_fn(self):
+    """Always returns the minimize objective."""
+    return np.nanargmin
+
+  def evaluate(self, sess, ensemble_metrics):
     """Abstract method to be overridden in subclasses."""
 
-    del sess
-    del adanet_losses
+    del sess, ensemble_metrics  # Unused.
     raise NotImplementedError
 
 
 class _AlwaysLastEvaluator(_FakeEvaluator):
 
-  def evaluate_adanet_losses(self, sess, adanet_losses):
+  def evaluate(self, sess, ensemble_metrics):
     """Always makes the last loss the smallest."""
 
-    losses = [np.inf] * len(adanet_losses)
+    del sess  # Unused.
+
+    losses = [np.inf] * len(ensemble_metrics)
     losses[-1] = 0.
     return losses
 
 
 class _AlwaysSecondToLastEvaluator(_FakeEvaluator):
 
-  def evaluate_adanet_losses(self, sess, adanet_losses):
+  def evaluate(self, sess, ensemble_metrics):
     """Always makes the second to last loss the smallest."""
 
-    losses = [np.inf] * len(adanet_losses)
+    del sess  # Unused.
+
+    losses = [np.inf] * len(ensemble_metrics)
     losses[-2] = 0.
     return losses
 

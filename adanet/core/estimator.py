@@ -31,6 +31,7 @@ from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _CandidateBuilder
 from adanet.core.ensemble_builder import _EnsembleBuilder
 from adanet.core.ensemble_builder import _SubnetworkManager
+from adanet.core.eval_metrics import call_eval_metrics
 from adanet.core.iteration import _IterationBuilder
 from adanet.core.report_accessor import _ReportAccessor
 from adanet.core.summary import _ScopedSummary
@@ -1186,24 +1187,27 @@ class Estimator(tf.estimator.Estimator):
       saver.restore(sess, latest_checkpoint)
 
       tf_compat.v1.train.start_queue_runners(sess=sess, coord=coord)
+      ensemble_metrics = []
+      for candidate in current_iteration.candidates:
+        metrics = call_eval_metrics(candidate.ensemble_spec.eval_metrics)
+        metrics["adanet_loss"] = tf_compat.v1.metrics.mean(
+            candidate.ensemble_spec.adanet_loss)
+        ensemble_metrics.append(metrics)
       if self._evaluator:
-        adanet_losses = [
-            c.ensemble_spec.adanet_loss for c in current_iteration.candidates
-        ]
-        adanet_losses = self._evaluator.evaluate_adanet_losses(
-            sess, adanet_losses)
+        metric_name = self._evaluator.metric_name
+        metrics = self._evaluator.evaluate(sess, ensemble_metrics)
+        objective_fn = self._evaluator.objective_fn
       else:
-        adanet_losses = sess.run(
+        metric_name = "adanet_loss"
+        metrics = sess.run(
             [c.adanet_loss for c in current_iteration.candidates])
-      # Replace NaNs with Infs since so that NaN loss candidates are never
-      # chosen.
-      adanet_losses = [np.inf if np.isnan(l) else l for l in adanet_losses]
+        objective_fn = np.nanargmin
+
       values = []
       for i in range(len(current_iteration.candidates)):
-        metric_name = "adanet_loss"
         ensemble_name = current_iteration.candidates[i].ensemble_spec.name
         values.append("{}/{} = {:.6f}".format(metric_name, ensemble_name,
-                                              adanet_losses[i]))
+                                              metrics[i]))
       logging.info("Computed ensemble metrics: %s", ", ".join(values))
       if self._force_grow and current_iteration.number > 0:
         logging.info(
@@ -1211,10 +1215,10 @@ class Estimator(tf.estimator.Estimator):
             "the performance of the previous ensemble will be ignored.")
         # NOTE: The zero-th index candidate at iteration t>0 is always the
         # previous_ensemble.
-        adanet_losses = adanet_losses[1:]
-        index = np.argmin(adanet_losses) + 1
+        metrics = metrics[1:]
+        index = objective_fn(metrics) + 1
       else:
-        index = np.argmin(adanet_losses)
+        index = objective_fn(metrics)
     logging.info("Finished ensemble evaluation for iteration %s",
                  current_iteration.number)
     logging.info("'%s' at index %s is the best ensemble",
