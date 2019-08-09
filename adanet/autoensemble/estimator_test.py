@@ -132,7 +132,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
           # TODO: Figure out why this test's loss changes with every
           # change to the TensorFlow graph.
           "want_loss":
-              0.095,
+              0.2,
       },
       {
           "testcase_name":
