@@ -262,6 +262,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
       self.assertIsNotNone(prediction["predictions"])
 
 
+
   @parameterized.named_parameters(
       {
           "testcase_name": "not_use_tpu",

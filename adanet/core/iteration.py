@@ -136,7 +136,6 @@ class _NanLossHook(tf_compat.SessionRunHook):
     if loss is None or not np.isnan(loss):
       return
     logging.warning("'%s' diverged with loss = NaN.", self._spec.name)
-    raise tf_compat.v1.train.NanLossDuringTrainingError
     # TODO: Re-enable once we know that evaluation won't
     # fail from NaNs.
     # self._train_manager.request_stop(self._spec, "NaN loss during training.")
@@ -965,11 +964,11 @@ class _IterationBuilder(object):
       if len(candidates) == 1:
         return tf.constant(0)
       adanet_losses = [candidate.adanet_loss for candidate in candidates]
-      # Replace NaNs with Infs since so that NaN loss candidates are never
-      # chosen.
+      # Replace NaNs with -Infs so that NaN loss candidates are always chosen,
+      # causing tf.estimator.Estimator to raise a NanLossDuringTrainingError.
       adanet_losses = tf.where(
           tf_compat.v1.is_nan(adanet_losses),
-          tf.ones_like(adanet_losses) * np.inf, adanet_losses)
+          tf.ones_like(adanet_losses) * -np.inf, adanet_losses)
       return tf.argmin(input=adanet_losses, axis=0)
 
   def _best_predictions(self, candidates, best_candidate_index):
