@@ -225,7 +225,8 @@ class TPUEstimator(Estimator, tf.contrib.tpu.TPUEstimator):
                                           iteration_number_tensor,
                                           previous_iteration_vars,
                                           is_growing_phase)
-    training_hooks = self._decorate_hooks(training_hooks, is_growing_phase)
+    if is_growing_phase:
+      training_hooks = self._process_hooks_for_growing_phase(training_hooks)
     evaluation_hooks = self._evaluation_hooks(current_iteration, training,
                                               evaluation_name)
     return tf_compat.TPUEstimatorSpec(

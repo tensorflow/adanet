@@ -246,66 +246,22 @@ class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
       self._checkpoint_overwritten = True
 
 
-class _HookDecorator(tf_compat.SessionRunHook):
-  """Decorates a SessionRunHook to only run methods for the given phase."""
+class _GraphGrowingHookDecorator(tf_compat.SessionRunHook):
+  """Decorates a SessionRunHook to only run begin() and end() methods."""
 
-  def __init__(self, hook, is_growing_phase):
-    """Initializes a _HookDecorator instance.
+  def __init__(self, hook):
+    """Initializes a _GraphGrowingHookDecorator instance.
 
     Args:
       hook: The SessionRunHook to decorate.
-      is_growing_phase: Whether we are in the AdaNet graph growing phase. If so,
-        only hook.begin() and hook.end() will be called.
     """
     self._hook = hook
-    self._is_growing_phase = is_growing_phase
 
   def begin(self):
     self._hook.begin()
 
-  def after_create_session(self, session, coord):
-    if not self._is_growing_phase:
-      self._hook.after_create_session(session, coord)
-
-  def before_run(self, run_context):
-    if not self._is_growing_phase:
-      return self._hook.before_run(run_context)
-
-  def after_run(self, run_context, run_values):
-    if not self._is_growing_phase:
-      self._hook.after_run(run_context, run_values)
-
   def end(self, session):
     self._hook.end(session)
-
-
-def _cleaned_hooks(hooks):
-  """Cleans hooks for b/122795064.
-
-  CheckpointSaverHooks are stateful and will carry a Saver across graphs
-  causing errors. To fix this, we reset the saver between iterations.
-
-  Remove all CheckpointSaverHooks since they are not intended to run between
-  training runs and will cause errors.
-
-  Args:
-    hooks: List of `SessionRunHooks`.
-
-  Returns:
-    Cleans list of hooks.
-  """
-
-  if not hooks:
-    return hooks
-
-  for hook in hooks:
-    if isinstance(hook, tf_compat.CheckpointSaverHook):
-      hook._saver = None  # pylint: disable=protected-access
-
-  return [
-      hook for hook in hooks
-      if not isinstance(hook, tf_compat.CheckpointSaverHook)
-  ]
 
 
 def _delete_directory(directory):
@@ -726,10 +682,9 @@ class Estimator(tf.estimator.Estimator):
             })
         result = temp_estimator.train(
             input_fn=input_fn,
-            hooks=self._decorate_hooks(hooks or [], is_growing_phase=False),
+            hooks=hooks,
             max_steps=max_steps,
             saving_listeners=saving_listeners)
-
         logging.info("Finished training Adanet iteration %s", current_iteration)
 
         # If training ended because the maximum number of training steps
@@ -1129,8 +1084,7 @@ class Estimator(tf.estimator.Estimator):
     temp_estimator.train(
         input_fn=train_input_fn,
         max_steps=1,
-        hooks=self._decorate_hooks(
-            _cleaned_hooks(train_hooks), is_growing_phase=True),
+        hooks=self._process_hooks_for_growing_phase(train_hooks),
         saving_listeners=None)
 
     _delete_directory(temp_model_dir)
@@ -1272,19 +1226,36 @@ class Estimator(tf.estimator.Estimator):
     logging.info("Finished saving subnetwork reports for iteration %s",
                  current_iteration.number)
 
-  def _decorate_hooks(self, hooks, is_growing_phase):
-    """Decorate hooks to reset AdaNet state before calling their methods."""
+  def _process_hooks_for_growing_phase(self, hooks):
+    """Processes hooks which will run during the graph growing phase.
 
-    decorated_hooks = []
+    In particular the following things are done:
+      - CheckpointSaverHooks are filtered out since they are not intended to
+        run between training runs and will cause errors. We also reset the
+        CheckpointSaverHooks' Saver between iterations, see b/122795064 for more
+        details.
+      - Decorate the remaining hooks with _GraphGrowingHookDecorator to only run
+        the begin() and end() methods during the graph growing phase.
+
+    Args:
+      hooks: The list of `SessionRunHooks` to process.
+
+    Returns:
+      The processed hooks which should run during the growing phase.
+    """
+
+    processed_hooks = []
     for hook in hooks:
-      is_growing_phase_for_hook = is_growing_phase
-      # Set is_growing_phase=False for OverwriteCheckpointHook so the hook's
-      # before_run method is called to overwrite the checkpoint.
-      if isinstance(hook, _OverwriteCheckpointHook):
-        assert is_growing_phase
-        is_growing_phase_for_hook = False
-      decorated_hooks.append(_HookDecorator(hook, is_growing_phase_for_hook))
-    return decorated_hooks
+      # Reset CheckpointSaverHooks' Saver and filter out.
+      if isinstance(hook, tf_compat.CheckpointSaverHook):
+        hook._saver = None  # pylint: disable=protected-access
+        continue
+      # Do not decorate the _OverwriteCheckpointHook since it should always
+      # run during the graph growing phase.
+      if not isinstance(hook, _OverwriteCheckpointHook):
+        hook = _GraphGrowingHookDecorator(hook)
+      processed_hooks.append(hook)
+    return processed_hooks
 
   def _training_chief_hooks(self, current_iteration, training):
     """Returns chief-only training hooks to be run this iteration.
@@ -1607,20 +1578,24 @@ class Estimator(tf.estimator.Estimator):
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     iteration_estimator_spec = current_iteration.estimator_spec
+    training_chief_hooks = self._training_chief_hooks(current_iteration,
+                                                      training)
+    training_hooks = self._training_hooks(current_iteration, training,
+                                          iteration_number_tensor,
+                                          previous_iteration_vars,
+                                          is_growing_phase)
+    if is_growing_phase:
+      training_chief_hooks = self._process_hooks_for_growing_phase(
+          training_chief_hooks)
+      training_hooks = self._process_hooks_for_growing_phase(training_hooks)
     return tf.estimator.EstimatorSpec(
         mode=mode,
         predictions=iteration_estimator_spec.predictions,
         loss=iteration_estimator_spec.loss,
         train_op=self._train_op(iteration_estimator_spec, is_growing_phase),
         eval_metric_ops=iteration_estimator_spec.eval_metric_ops,
-        training_chief_hooks=self._decorate_hooks(
-            self._training_chief_hooks(current_iteration, training),
-            is_growing_phase),
-        training_hooks=self._decorate_hooks(
-            self._training_hooks(current_iteration, training,
-                                 iteration_number_tensor,
-                                 previous_iteration_vars, is_growing_phase),
-            is_growing_phase),
+        training_chief_hooks=training_chief_hooks,
+        training_hooks=training_hooks,
         evaluation_hooks=self._evaluation_hooks(current_iteration, training,
                                                 evaluation_name),
         scaffold=tf_compat.v1.train.Scaffold(summary_op=tf.constant("")),

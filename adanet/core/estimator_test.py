@@ -2997,6 +2997,36 @@ class EstimatorEvaluateDuringTrainHookTest(tu.AdanetTestCase):
         input_fn=train_input_fn, max_steps=3, hooks=[EvalTrainHook()])
 
 
+class CheckpointSaverHookDuringTrainingTest(tu.AdanetTestCase):
+  """Tests b/139057887."""
+
+  def test_checkpoint_saver_hooks_not_decorated_during_training(self):
+    run_config = tf.estimator.RunConfig(tf_random_seed=42)
+    subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
+    estimator = Estimator(
+        head=tu.head(),
+        subnetwork_generator=subnetwork_generator,
+        max_iteration_steps=1,
+        model_dir=self.test_subdirectory,
+        config=run_config)
+    train_input_fn = tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS)
+
+    saver_hook = tf_compat.v1.train.CheckpointSaverHook(
+        checkpoint_dir=self.test_subdirectory, save_steps=10)
+    listener = tf_compat.v1.train.CheckpointSaverListener()
+    estimator.train(
+        input_fn=train_input_fn,
+        max_steps=3,
+        hooks=[saver_hook],
+        saving_listeners=[listener])
+
+    # If CheckpointSaverHook was not recognized during training then all
+    # saving_listeners would be attached to a default CheckpointSaverHook that
+    # Estimator creates.
+    self.assertLen(saver_hook._listeners, 1)
+    self.assertIs(saver_hook._listeners[0], listener)
+
+
 class EstimatorTFLearnRunConfigTest(tu.AdanetTestCase):
   """Tests b/129483642 for tf.contrib.learn.RunConfig.
 
