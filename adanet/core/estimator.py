@@ -685,6 +685,11 @@ class Estimator(tf.estimator.Estimator):
             hooks=hooks,
             max_steps=max_steps,
             saving_listeners=saving_listeners)
+        # In TensorFlow v1.14.0 and below, saving listeners are attached to the
+        # first CheckpointSaverHook each time train is called. Instead, we pass
+        # in the saving_listeners in the first AdaNet iteration only.
+        if not tf_compat.version_greater_or_equal("1.15.0"):
+          saving_listeners = None
         logging.info("Finished training Adanet iteration %s", current_iteration)
 
         # If training ended because the maximum number of training steps
