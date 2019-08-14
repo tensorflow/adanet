@@ -9,6 +9,7 @@
 [![Travis](https://travis-ci.org/tensorflow/adanet.svg?branch=master)](https://travis-ci.org/tensorflow/adanet)
 [![codecov](https://codecov.io/gh/tensorflow/adanet/branch/master/graph/badge.svg)](https://codecov.io/gh/tensorflow/adanet)
 [![Gitter](https://badges.gitter.im/tensorflow/adanet.svg)](https://gitter.im/tensorflow/adanet?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Downloads](https://pepy.tech/badge/adanet)](https://pepy.tech/project/adanet)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/tensorflow/adanet/blob/master/LICENSE)
 
 **AdaNet** is a lightweight TensorFlow-based framework for automatically learning high-quality models with minimal expert intervention. AdaNet builds on recent AutoML efforts to be fast and flexible while providing learning guarantees. Importantly, AdaNet provides a general framework for not only learning a neural network architecture, but also for learning to ensemble to obtain even better models.
@@ -40,7 +41,7 @@ AdaNet provides the following AutoML features:
  * Regression, binary and multi-class classification, and multi-head task support.
  * A [`tf.estimator.Estimator`](https://www.tensorflow.org/guide/estimators) API for training, evaluation, prediction, and serving models.
  * The [`adanet.AutoEnsembleEstimator`](https://github.com/tensorflow/adanet/blob/master/adanet/autoensemble/estimator.py) for learning to ensemble user-defined `tf.estimator.Estimators`.
- * The ability to define subnetworks that change structure over time using [`tf.keras.layers`](https://www.tensorflow.org/guide/keras#functional_api) via the [`adanet.subnetwork` API](https://github.com/tensorflow/adanet/blob/master/adanet/subnetwork/generator.py).
+ * The ability to define subnetworks that change structure over time using [`tf.layers`](https://www.tensorflow.org/api_docs/python/tf/layers) via the [`adanet.subnetwork` API](https://github.com/tensorflow/adanet/blob/master/adanet/subnetwork/generator.py).
  * CPU, GPU, and TPU support.
  * [Distributed multi-server training](https://cloud.google.com/blog/products/gcp/easy-distributed-training-with-tensorflow-using-tfestimatortrain-and-evaluate-on-cloud-ml-engine).
  * TensorBoard integration.
