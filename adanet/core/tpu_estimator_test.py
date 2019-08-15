@@ -119,7 +119,7 @@ class _DNNBuilder(Builder):
     optimizer = tf.train.GradientDescentOptimizer(
         learning_rate=self._learning_rate)
     if self._use_tpu:
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = tf.tpu.CrossShardOptimizer(optimizer)
     return optimizer.minimize(loss, var_list=var_list)
 
   def build_subnetwork_report(self):
@@ -212,7 +212,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
   )
   def test_tpu_estimator_simple_lifecycle(self, use_tpu, subnetwork_generator,
                                           want_loss):
-    config = tf.contrib.tpu.RunConfig(master="", tf_random_seed=42)
+    config = tf.estimator.tpu.RunConfig(master="", tf_random_seed=42)
     estimator = TPUEstimator(
         head=tu.head(),
         subnetwork_generator=subnetwork_generator,
@@ -276,7 +276,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
   def test_tpu_estimator_summaries(self, use_tpu, want_loss, want_adanet_loss,
                                    want_eval_summary_loss, want_predictions):
     max_steps = 10
-    config = tf.contrib.tpu.RunConfig(
+    config = tf.estimator.tpu.RunConfig(
         tf_random_seed=42,
         save_summary_steps=max_steps,
         log_step_count_steps=max_steps)
