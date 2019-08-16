@@ -31,7 +31,7 @@ from tensorflow.python.util import function_utils  # pylint: disable=g-direct-te
 
 
 # pylint: disable=g-classes-have-attributes
-class TPUEstimator(Estimator, tf.estimator.tpu.TPUEstimator):
+class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
   """An :class:`adanet.Estimator` capable of training and evaluating on TPU.
 
   Unless :code:`use_tpu=False`, training will run on TPU. However, certain parts
@@ -62,9 +62,9 @@ class TPUEstimator(Estimator, tf.estimator.tpu.TPUEstimator):
     use_tpu: Boolean to enable *both* training and evaluating on TPU. Defaults
       to :code:`True` and is only provided to allow debugging models on CPU/GPU.
       Use :class:`adanet.Estimator` instead if you do not plan to run on TPU.
-    train_batch_size: See :class:`tf.estimator.tpu.TPUEstimator`.
-    eval_batch_size: See :class:`tf.estimator.tpu.TPUEstimator`.
-    embedding_config_spec: See :class:`tf.estimator.tpu.TPUEstimator`.
+    train_batch_size: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
+    eval_batch_size: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
+    embedding_config_spec: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
     debug: See :class:`adanet.Estimator`.
     enable_ensemble_summaries: See :class:`adanet.Estimator`.
     enable_subnetwork_summaries: See :class:`adanet.Estimator`.
@@ -106,7 +106,7 @@ class TPUEstimator(Estimator, tf.estimator.tpu.TPUEstimator):
 
     # TPUEstimator modifies config under the hood. We keep track of it here so
     # we can use it during the bookkeeping phase and when predict() is called.
-    self._original_config = config or tf.estimator.tpu.RunConfig()
+    self._original_config = config or tf_compat.v1.estimator.tpu.RunConfig()
     self._train_batch_size = train_batch_size or 0
     self._eval_batch_size = eval_batch_size or train_batch_size or 0
     self._embedding_config_spec = embedding_config_spec
@@ -148,7 +148,7 @@ class TPUEstimator(Estimator, tf.estimator.tpu.TPUEstimator):
     tf.logging.warning(
         "The adanet.TPUEstimator does not support predicting on TPU. "
         "Instead, all predictions are run on CPU.")
-    tpu_estimator = tf.estimator.tpu.TPUEstimator(
+    tpu_estimator = tf_compat.v1.estimator.tpu.TPUEstimator(
         model_fn=self._adanet_model_fn,
         model_dir=self.model_dir,
         config=self._original_config,
@@ -165,7 +165,7 @@ class TPUEstimator(Estimator, tf.estimator.tpu.TPUEstimator):
   def _create_temp_run_config(self, temp_model_dir):
     """See the `Estimator` base class for details."""
 
-    return tf.estimator.tpu.RunConfig(
+    return tf_compat.v1.estimator.tpu.RunConfig(
         model_dir=temp_model_dir,
         tpu_config=self._original_config.tpu_config,
         evaluation_master=self._original_config.evaluation_master,
@@ -179,7 +179,7 @@ class TPUEstimator(Estimator, tf.estimator.tpu.TPUEstimator):
     """See the `Estimator` base class for details."""
 
     temp_model_dir = config.model_dir
-    return tf.estimator.tpu.TPUEstimator(
+    return tf_compat.v1.estimator.tpu.TPUEstimator(
         model_fn=self._adanet_model_fn,
         params=params,
         config=config,
@@ -230,7 +230,7 @@ class TPUEstimator(Estimator, tf.estimator.tpu.TPUEstimator):
       training_hooks = self._process_hooks_for_growing_phase(training_hooks)
     evaluation_hooks = self._evaluation_hooks(current_iteration, training,
                                               evaluation_name)
-    return tf_compat.TPUEstimatorSpec(
+    return tf_compat.v1.estimator.tpu.TPUEstimatorSpec(
         mode=mode,
         predictions=iteration_estimator_spec.predictions,
         loss=iteration_estimator_spec.loss,
