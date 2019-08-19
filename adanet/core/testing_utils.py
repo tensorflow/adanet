@@ -32,6 +32,7 @@ from adanet.ensemble import ComplexityRegularized
 from adanet.ensemble import WeightedSubnetwork
 from adanet.subnetwork import Subnetwork
 import tensorflow as tf
+from tensorflow_estimator.python.estimator.head import regression_head
 
 
 def dummy_tensor(shape=(), random_seed=42):
@@ -223,8 +224,8 @@ def dataset_input_fn(features=8., labels=9.):
 
 
 def head():
-  return tf.contrib.estimator.regression_head(
-      loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE)
+  return regression_head.RegressionHead(
+      loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
 
 
 class ModifierSessionRunHook(tf_compat.SessionRunHook):

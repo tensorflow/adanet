@@ -36,6 +36,8 @@ from adanet.subnetwork import Subnetwork
 import tensorflow as tf_v1
 import tensorflow as tf
 # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
 from tensorflow.python.training import training as train
 from tensorflow.python.training import training_util
 # pylint: enable=g-direct-tensorflow-import
@@ -282,6 +284,7 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
           "want_ensemble_trainable_vars": 2,
           "want_subnetwork_trainable_vars": 4,
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_build_ensemble_spec(
       self,
       want_logits,
@@ -478,60 +481,65 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
             want_adanet_loss, sess.run(ensemble_spec.adanet_loss), places=3)
 
 
-def _make_metrics(sess,
-                  metric_fn,
-                  mode=tf.estimator.ModeKeys.EVAL,
-                  multi_head=False):
-
-  if multi_head:
-    head = multi_head_lib.MultiHead(heads=[
-        binary_class_head.BinaryClassHead(
-            name="head1", loss_reduction=tf_compat.SUM),
-        binary_class_head.BinaryClassHead(
-            name="head2", loss_reduction=tf_compat.SUM)
-    ])
-    labels = {"head1": tf.constant([0, 1]), "head2": tf.constant([0, 1])}
-  else:
-    head = binary_class_head.BinaryClassHead(loss_reduction=tf_compat.SUM)
-    labels = tf.constant([0, 1])
-  features = {"x": tf.constant([[1.], [2.]])}
-  builder = _EnsembleBuilder(head, metric_fn=metric_fn)
-  subnetwork_manager = _SubnetworkManager(head, metric_fn=metric_fn)
-  subnetwork_builder = _Builder(
-      lambda unused0, unused1: tf.no_op(),
-      lambda unused0, unused1: tf.no_op(),
-      use_logits_last_layer=True)
-
-  subnetwork_spec = subnetwork_manager.build_subnetwork_spec(
-      name="test",
-      subnetwork_builder=subnetwork_builder,
-      summary=_FakeSummary(),
-      features=features,
-      mode=mode,
-      labels=labels)
-  ensemble_spec = builder.build_ensemble_spec(
-      name="test",
-      candidate=EnsembleCandidate("foo", [subnetwork_builder], None),
-      ensembler=ComplexityRegularizedEnsembler(
-          mixture_weight_type=MixtureWeightType.SCALAR),
-      subnetwork_specs=[subnetwork_spec],
-      summary=_FakeSummary(),
-      features=features,
-      iteration_number=0,
-      labels=labels,
-      mode=mode)
-  subnetwork_metric_ops = call_eval_metrics(subnetwork_spec.eval_metrics)
-  ensemble_metric_ops = call_eval_metrics(ensemble_spec.eval_metrics)
-  sess.run((tf_compat.v1.global_variables_initializer(),
-            tf_compat.v1.local_variables_initializer()))
-  sess.run((subnetwork_metric_ops, ensemble_metric_ops))
-  # Return the idempotent tensor part of the (tensor, op) metrics tuple.
-  return {
-      k: sess.run(subnetwork_metric_ops[k][0]) for k in subnetwork_metric_ops
-  }, {k: sess.run(ensemble_metric_ops[k][0]) for k in ensemble_metric_ops}
-
-
 class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
+
+  def _make_metrics(self,
+                    metric_fn,
+                    mode=tf.estimator.ModeKeys.EVAL,
+                    multi_head=False,
+                    sess=None):
+
+    with context.graph_mode():
+      if multi_head:
+        head = multi_head_lib.MultiHead(heads=[
+            binary_class_head.BinaryClassHead(
+                name="head1", loss_reduction=tf_compat.SUM),
+            binary_class_head.BinaryClassHead(
+                name="head2", loss_reduction=tf_compat.SUM)
+        ])
+        labels = {"head1": tf.constant([0, 1]), "head2": tf.constant([0, 1])}
+      else:
+        head = binary_class_head.BinaryClassHead(loss_reduction=tf_compat.SUM)
+        labels = tf.constant([0, 1])
+      features = {"x": tf.constant([[1.], [2.]])}
+      builder = _EnsembleBuilder(head, metric_fn=metric_fn)
+      subnetwork_manager = _SubnetworkManager(head, metric_fn=metric_fn)
+      subnetwork_builder = _Builder(
+          lambda unused0, unused1: tf.no_op(),
+          lambda unused0, unused1: tf.no_op(),
+          use_logits_last_layer=True)
+
+      subnetwork_spec = subnetwork_manager.build_subnetwork_spec(
+          name="test",
+          subnetwork_builder=subnetwork_builder,
+          summary=_FakeSummary(),
+          features=features,
+          mode=mode,
+          labels=labels)
+      ensemble_spec = builder.build_ensemble_spec(
+          name="test",
+          candidate=EnsembleCandidate("foo", [subnetwork_builder], None),
+          ensembler=ComplexityRegularizedEnsembler(
+              mixture_weight_type=MixtureWeightType.SCALAR),
+          subnetwork_specs=[subnetwork_spec],
+          summary=_FakeSummary(),
+          features=features,
+          iteration_number=0,
+          labels=labels,
+          mode=mode)
+      subnetwork_metric_ops = call_eval_metrics(subnetwork_spec.eval_metrics)
+      ensemble_metric_ops = call_eval_metrics(ensemble_spec.eval_metrics)
+      evaluate = self.evaluate
+      if sess is not None:
+        evaluate = sess.run
+      evaluate((tf_compat.v1.global_variables_initializer(),
+                tf_compat.v1.local_variables_initializer()))
+      evaluate((subnetwork_metric_ops, ensemble_metric_ops))
+      # Return the idempotent tensor part of the (tensor, op) metrics tuple.
+      return {
+          k: evaluate(subnetwork_metric_ops[k][0])
+          for k in subnetwork_metric_ops
+      }, {k: evaluate(ensemble_metric_ops[k][0]) for k in ensemble_metric_ops}
 
   def setUp(self):
     super(EnsembleBuilderMetricFnTest, self).setUp()
@@ -545,6 +553,7 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
           "testcase_name": "mode_predict",
           "mode": tf.estimator.ModeKeys.PREDICT,
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_only_adds_metrics_when_evaluating(self, mode):
     """Ensures that metrics are only added during evaluation.
 
@@ -557,18 +566,16 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
     def metric_fn(features):
       return {"mean_x": tf_compat.v1.metrics.mean(features["x"])}
 
-    with self.test_session() as sess:
-      subnetwork_metrics, ensemble_metrics = _make_metrics(
-          sess, metric_fn, mode)
+    subnetwork_metrics, ensemble_metrics = self._make_metrics(metric_fn, mode)
 
     self.assertEmpty(subnetwork_metrics)
     self.assertEmpty(ensemble_metrics)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_should_add_metrics(self):
 
     def _test_metric_fn(metric_fn):
-      with self.test_session() as sess:
-        subnetwork_metrics, ensemble_metrics = _make_metrics(sess, metric_fn)
+      subnetwork_metrics, ensemble_metrics = self._make_metrics(metric_fn)
       self.assertIn("mean_x", subnetwork_metrics)
       self.assertIn("mean_x", ensemble_metrics)
       self.assertEqual(1.5, subnetwork_metrics["mean_x"])
@@ -583,6 +590,7 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
     # TODO: Add support for tf.keras.metrics.Mean like `add_metrics`.
     _test_metric_fn(metric_fn_1)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_should_error_out_for_not_recognized_args(self):
     head = binary_class_head.BinaryClassHead(loss_reduction=tf_compat.SUM)
 
@@ -593,6 +601,7 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
     with self.assertRaisesRegexp(ValueError, "not_recognized"):
       _EnsembleBuilder(head, metric_fn=metric_fn)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_all_supported_args(self):
 
     def metric_fn(features, predictions, labels):
@@ -601,9 +610,9 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
       self.assertIn("logistic", predictions)
       return {}
 
-    with self.test_session() as sess:
-      _make_metrics(sess, metric_fn)
+    self._make_metrics(metric_fn)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_all_supported_args_in_different_order(self):
 
     def metric_fn(labels, features, predictions):
@@ -612,14 +621,13 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
       self.assertIn("logistic", predictions)
       return {}
 
-    with self.test_session() as sess:
-      _make_metrics(sess, metric_fn)
+    self._make_metrics(metric_fn)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_all_args_are_optional(self):
 
     def _test_metric_fn(metric_fn):
-      with self.test_session() as sess:
-        subnetwork_metrics, ensemble_metrics = _make_metrics(sess, metric_fn)
+      subnetwork_metrics, ensemble_metrics = self._make_metrics(metric_fn)
       self.assertEqual(2., subnetwork_metrics["two"])
       self.assertEqual(2., ensemble_metrics["two"])
 
@@ -629,18 +637,17 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
     # TODO: Add support for tf.keras.metrics.Mean like `add_metrics`.
     _test_metric_fn(metric_fn_1)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_overrides_existing_metrics(self):
 
     def _test_metric_fn(metric_fn):
-      with self.test_session() as sess:
-        subnetwork_metrics, ensemble_metrics = _make_metrics(
-            sess, metric_fn=None)
+      subnetwork_metrics, ensemble_metrics = self._make_metrics(metric_fn=None)
       self.assertNotEqual(2., subnetwork_metrics["average_loss"])
       self.assertNotEqual(2., ensemble_metrics["average_loss"])
 
       with tf.Graph().as_default() as g, self.test_session(g) as sess:
-        subnetwork_metrics, ensemble_metrics = _make_metrics(
-            sess, metric_fn=metric_fn)
+        subnetwork_metrics, ensemble_metrics = self._make_metrics(
+            metric_fn=metric_fn, sess=sess)
       self.assertEqual(2., subnetwork_metrics["average_loss"])
       self.assertEqual(2., ensemble_metrics["average_loss"])
 
@@ -650,6 +657,7 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
     # TODO: Add support for tf.keras.metrics.Mean like `add_metrics`.
     _test_metric_fn(metric_fn_1)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_multi_head(self):
     """Tests b/123084079."""
 
@@ -658,9 +666,9 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
       self.assertIn(("head2", "logits"), predictions)
       return {}
 
-    with self.test_session() as sess:
-      _make_metrics(sess, metric_fn, multi_head=True)
+    self._make_metrics(metric_fn, multi_head=True)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_operation_metrics(self):
 
     def metric_fn():
@@ -674,11 +682,11 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
       op = tf.group(tf_compat.v1.assign_add(var, 1))
       return {"operation_metric": (var, op)}
 
-    with self.test_session() as sess:
-      subnetwork_metrics, ensemble_metrics = _make_metrics(sess, metric_fn)
-      self.assertEqual(1., subnetwork_metrics["operation_metric"])
-      self.assertEqual(1., ensemble_metrics["operation_metric"])
+    subnetwork_metrics, ensemble_metrics = self._make_metrics(metric_fn)
+    self.assertEqual(1., subnetwork_metrics["operation_metric"])
+    self.assertEqual(1., ensemble_metrics["operation_metric"])
 
+  @test_util.run_in_graph_and_eager_modes
   def test_eval_metric_different_shape_op(self):
 
     def metric_fn():
@@ -693,10 +701,9 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
       metric = tf.reshape(var[0] + var[1], [])
       return {"different_shape_metric": (metric, op)}
 
-    with self.test_session() as sess:
-      subnetwork_metrics, ensemble_metrics = _make_metrics(sess, metric_fn)
-      self.assertEqual(3., subnetwork_metrics["different_shape_metric"])
-      self.assertEqual(3., ensemble_metrics["different_shape_metric"])
+    subnetwork_metrics, ensemble_metrics = self._make_metrics(metric_fn)
+    self.assertEqual(3., subnetwork_metrics["different_shape_metric"])
+    self.assertEqual(3., ensemble_metrics["different_shape_metric"])
 
 
 if __name__ == "__main__":

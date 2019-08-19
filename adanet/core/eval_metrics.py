@@ -184,7 +184,7 @@ class _SubnetworkMetrics(object):
                           "Writing eval metrics to variables for TPU", 1)
       wrapped_metrics = {}
       for i, key in enumerate(sorted(metrics)):
-        tensor, op = metrics[key]
+        tensor, op = tf_compat.metric_op(metrics[key])
         # key cannot be in var name since it may contain illegal chars.
         var = tf_compat.v1.get_variable(
             "metric_{}".format(i),

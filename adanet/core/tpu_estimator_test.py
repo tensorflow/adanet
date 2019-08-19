@@ -214,7 +214,8 @@ class TPUEstimatorTest(tu.AdanetTestCase):
                                           want_loss):
     config = tf_compat.v1.estimator.tpu.RunConfig(master="", tf_random_seed=42)
     estimator = TPUEstimator(
-        head=tu.head(),
+        head=tf.contrib.estimator.regression_head(
+            loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE),
         subnetwork_generator=subnetwork_generator,
         max_iteration_steps=10,
         model_dir=self.test_subdirectory,
@@ -288,7 +289,8 @@ class TPUEstimatorTest(tu.AdanetTestCase):
       }
 
     estimator = TPUEstimator(
-        head=tu.head(),
+        head=tf.contrib.estimator.regression_head(
+            loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE),
         subnetwork_generator=SimpleGenerator(
             [_DNNBuilder("dnn", use_tpu=use_tpu)]),
         max_iteration_steps=max_steps,

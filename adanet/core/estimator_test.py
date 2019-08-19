@@ -45,18 +45,14 @@ from adanet.subnetwork import Subnetwork
 from adanet.subnetwork import TrainOpSpec
 import numpy as np
 import tensorflow as tf
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
+from tensorflow_estimator.python.estimator.export import export
 from tensorflow_estimator.python.estimator.head import binary_class_head
 from tensorflow_estimator.python.estimator.head import multi_head as multi_head_lib
 from tensorflow_estimator.python.estimator.head import regression_head
-
-# Module path changed. Try importing from new and old location to maintain
-# backwards compatibility.
-# pylint: disable=g-import-not-at-top
-try:
-  from tensorflow_estimator.python.estimator.export import export
-except ImportError:
-  from tensorflow.python.estimator.export import export
-# pylint: enable=g-import-not-at-top
 
 logging.set_verbosity(logging.INFO)
 
@@ -497,7 +493,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.496736,
           "want_iteration":
               1,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -521,7 +518,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.496736,
           "want_iteration":
               1,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -537,7 +535,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.32317898,
           "want_iteration":
               1,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -553,7 +552,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.32317898,
           "want_iteration":
               1,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name": "single_builder_replicate_ensemble_in_training",
@@ -595,7 +595,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.27713922,
           "want_iteration":
               1,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -610,7 +611,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.29696745,
           "want_iteration":
               1,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -631,7 +633,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.35249719,
           "want_iteration":
               0,
-          "want_global_step": 200,
+          "want_global_step":
+              200,
       },
       {
           "testcase_name":
@@ -652,7 +655,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.35249719,
           "want_iteration":
               0,
-          "want_global_step": 200,
+          "want_global_step":
+              200,
       },
       {
           "testcase_name":
@@ -673,7 +677,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.26503286,
           "want_iteration":
               1,
-          "want_global_step": 400,
+          "want_global_step":
+              400,
       },
       {
           "testcase_name":
@@ -688,7 +693,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.26433355,
           "want_iteration":
               2,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -701,7 +707,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.32001898,
           "want_iteration":
               3,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -715,7 +722,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.38592532,
           "want_iteration":
               3,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -729,7 +737,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.43492866,
           "want_iteration":
               3,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -746,7 +755,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.32001898,
           "want_iteration":
               3,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -764,7 +774,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.36189985,
           "want_iteration":
               1,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -782,7 +793,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.29696745,
           "want_iteration":
               1,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -801,7 +813,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.31389591,
           "want_iteration":
               0,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -820,7 +833,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.32487726,
           "want_iteration":
               0,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -838,7 +852,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.29696745,
           "want_iteration":
               1,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -854,7 +869,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.29196805,
           "want_iteration":
               1,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -874,7 +890,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.23053232,
           "want_iteration":
               1,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -890,7 +907,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.35249719,
           "want_iteration":
               1,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -906,7 +924,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.36163166,
           "want_iteration":
               2,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -924,7 +943,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.24838975,
           "want_iteration":
               2,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       },
       {
           "testcase_name":
@@ -943,7 +963,8 @@ class EstimatorTest(tu.AdanetTestCase):
               0.32219219,
           "want_iteration":
               2,
-          "want_global_step": 300,
+          "want_global_step":
+              300,
       })
   def test_lifecycle(self,
                      subnetwork_generator,
@@ -2113,6 +2134,7 @@ class EstimatorExportSavedModelTest(tu.AdanetTestCase):
         serving_input_receiver_fn=serving_input_fn,
         experimental_mode=tf.estimator.ModeKeys.PREDICT)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_export_saved_model_for_eval(self):
     """Tests SavedModel exporting functionality for eval (b/110991908)."""
 
@@ -2166,7 +2188,7 @@ class EstimatorExportSavedModelTest(tu.AdanetTestCase):
 
     subdir = tf.io.gfile.listdir(export_dir_base)[0]
 
-    with self.test_session() as sess:
+    with context.graph_mode(), self.test_session() as sess:
       meta_graph_def = tf_compat.v1.saved_model.loader.load(
           sess, ["eval"], os.path.join(export_dir_base, subdir))
       signature_def = meta_graph_def.signature_def.get("eval")

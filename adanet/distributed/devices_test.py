@@ -21,13 +21,19 @@ from absl.testing import parameterized
 from adanet.distributed.devices import monkey_patch_default_variable_placement_strategy
 
 import tensorflow as tf
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
 
 
 class DevicesTest(parameterized.TestCase, tf.test.TestCase):
 
+  @test_util.run_in_graph_and_eager_modes
   def test_monkey_patch_default_variable_placement_strategy_no_ps(self):
-    with monkey_patch_default_variable_placement_strategy():
-      device_fn = tf.compat.v1.train.replica_device_setter(ps_tasks=0)
+    with context.graph_mode():
+      with monkey_patch_default_variable_placement_strategy():
+        device_fn = tf.compat.v1.train.replica_device_setter(ps_tasks=0)
     self.assertIsNone(device_fn)
 
   @parameterized.named_parameters(
@@ -82,24 +88,26 @@ class DevicesTest(parameterized.TestCase, tf.test.TestCase):
           "after_want_ps":
               ["/job:ps/task:4", "/job:ps/task:3", "/job:ps/task:2"],
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_monkey_patch_default_variable_placement_strategy(
       self, num_tasks, op_names, before_want_ps, after_want_ps):
     """Checks that ps placement is based on var name."""
 
-    var_ops = [tf.Variable(0., name=op_name).op for op_name in op_names]
-    before_device_fn = tf.compat.v1.train.replica_device_setter(
-        ps_tasks=num_tasks)
-    self.assertEqual(before_want_ps, [before_device_fn(op) for op in var_ops])
-
-    with monkey_patch_default_variable_placement_strategy():
-      after_device_fn = tf.compat.v1.train.replica_device_setter(
+    with context.graph_mode():
+      var_ops = [tf.Variable(0., name=op_name).op for op_name in op_names]
+      before_device_fn = tf.compat.v1.train.replica_device_setter(
           ps_tasks=num_tasks)
-    self.assertEqual(after_want_ps, [after_device_fn(op) for op in var_ops])
+      self.assertEqual(before_want_ps, [before_device_fn(op) for op in var_ops])
 
-    # Check that monkey-patch is only for the context.
-    before_device_fn = tf.compat.v1.train.replica_device_setter(
-        ps_tasks=num_tasks)
-    self.assertEqual(before_want_ps, [before_device_fn(op) for op in var_ops])
+      with monkey_patch_default_variable_placement_strategy():
+        after_device_fn = tf.compat.v1.train.replica_device_setter(
+            ps_tasks=num_tasks)
+      self.assertEqual(after_want_ps, [after_device_fn(op) for op in var_ops])
+
+      # Check that monkey-patch is only for the context.
+      before_device_fn = tf.compat.v1.train.replica_device_setter(
+          ps_tasks=num_tasks)
+      self.assertEqual(before_want_ps, [before_device_fn(op) for op in var_ops])
 
 
 if __name__ == "__main__":

@@ -38,6 +38,10 @@ from adanet.subnetwork import Report as SubnetworkReport
 from adanet.subnetwork import Subnetwork
 from adanet.subnetwork import TrainOpSpec
 import tensorflow as tf
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
 from tensorflow_estimator.python.estimator.head import binary_class_head
 from tensorflow_estimator.python.estimator.head import regression_head
 
@@ -104,6 +108,7 @@ class IterationTest(tu.AdanetTestCase):
                           })
               },
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_new(self,
                number,
                candidates,
@@ -114,23 +119,22 @@ class IterationTest(tu.AdanetTestCase):
       subnetwork_reports = {}
     else:
       subnetwork_reports = subnetwork_reports_fn()
-    with self.test_session():
-      iteration = _Iteration(
-          number=number,
-          candidates=candidates,
-          subnetwork_specs=None,
-          estimator_spec=estimator_spec,
-          best_candidate_index=best_candidate_index,
-          summaries=[],
-          subnetwork_reports=subnetwork_reports,
-          train_manager=_TrainManager([], [],
-                                      self.test_subdirectory,
-                                      is_chief=True))
-      self.assertEqual(iteration.number, number)
-      self.assertEqual(iteration.candidates, candidates)
-      self.assertEqual(iteration.estimator_spec, estimator_spec)
-      self.assertEqual(iteration.best_candidate_index, best_candidate_index)
-      self.assertEqual(iteration.subnetwork_reports, subnetwork_reports)
+    iteration = _Iteration(
+        number=number,
+        candidates=candidates,
+        subnetwork_specs=None,
+        estimator_spec=estimator_spec,
+        best_candidate_index=best_candidate_index,
+        summaries=[],
+        subnetwork_reports=subnetwork_reports,
+        train_manager=_TrainManager([], [],
+                                    self.test_subdirectory,
+                                    is_chief=True))
+    self.assertEqual(iteration.number, number)
+    self.assertEqual(iteration.candidates, candidates)
+    self.assertEqual(iteration.estimator_spec, estimator_spec)
+    self.assertEqual(iteration.best_candidate_index, best_candidate_index)
+    self.assertEqual(iteration.subnetwork_reports, subnetwork_reports)
 
   @parameterized.named_parameters(
       {
@@ -163,25 +167,25 @@ class IterationTest(tu.AdanetTestCase):
           "testcase_name": "none_subnetwork_reports",
           "subnetwork_reports": lambda: None,
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_new_errors(self,
                       number=0,
                       candidates=lambda: [_dummy_candidate()],
                       estimator_spec=tu.dummy_estimator_spec(),
                       best_candidate_index=0,
                       subnetwork_reports=lambda: []):
-    with self.test_session():
-      with self.assertRaises(ValueError):
-        _Iteration(
-            number=number,
-            candidates=candidates(),
-            subnetwork_specs=None,
-            estimator_spec=estimator_spec,
-            best_candidate_index=best_candidate_index,
-            summaries=[],
-            subnetwork_reports=subnetwork_reports(),
-            train_manager=_TrainManager([], [],
-                                        self.test_subdirectory,
-                                        is_chief=True))
+    with self.assertRaises(ValueError):
+      _Iteration(
+          number=number,
+          candidates=candidates(),
+          subnetwork_specs=None,
+          estimator_spec=estimator_spec,
+          best_candidate_index=best_candidate_index,
+          summaries=[],
+          subnetwork_reports=subnetwork_reports(),
+          train_manager=_TrainManager([], [],
+                                      self.test_subdirectory,
+                                      is_chief=True))
 
 
 class _FakeBuilder(SubnetworkBuilder):
@@ -353,16 +357,16 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "testcase_name": "zero_max_steps",
           "max_steps": 0,
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_init_errors(self, max_steps):
-    with self.test_session():
-      with self.assertRaises(ValueError):
-        _IterationBuilder(
-            _FakeCandidateBuilder(),
-            _FakeSubnetworkManager(),
-            _FakeEnsembleBuilder(),
-            summary_maker=_ScopedSummary,
-            ensemblers=[_FakeEnsembler()],
-            max_steps=max_steps)
+    with self.assertRaises(ValueError):
+      _IterationBuilder(
+          _FakeCandidateBuilder(),
+          _FakeSubnetworkManager(),
+          _FakeEnsembleBuilder(),
+          summary_maker=_ScopedSummary,
+          ensemblers=[_FakeEnsembler()],
+          max_steps=max_steps)
 
   # pylint: disable=g-long-lambda
   @parameterized.named_parameters(
@@ -700,6 +704,7 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "want_best_candidate_index": 0,
           "want_chief_hooks": True,
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_build_iteration(self,
                            ensemble_builder,
                            subnetwork_builders,
@@ -714,45 +719,48 @@ class IterationBuilderTest(tu.AdanetTestCase):
                            mode=tf.estimator.ModeKeys.TRAIN,
                            summary_maker=_ScopedSummary,
                            want_chief_hooks=False):
-    tf_compat.v1.train.create_global_step()
-    builder = _IterationBuilder(
-        _FakeCandidateBuilder(),
-        _FakeSubnetworkManager(),
-        ensemble_builder,
-        summary_maker=summary_maker,
-        ensemblers=[_FakeEnsembler()],
-        max_steps=1)
-    iteration = builder.build_iteration(
-        base_global_step=0,
-        iteration_number=0,
-        ensemble_candidates=[
-            EnsembleCandidate(b.name, [b], None) for b in subnetwork_builders
-        ],
-        subnetwork_builders=subnetwork_builders,
-        features=features(),
-        labels=labels(),
-        mode=mode,
-        config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
-        previous_ensemble_spec=previous_ensemble_spec())
-    with self.test_session() as sess:
+    with context.graph_mode():
+      tf_compat.v1.train.create_global_step()
+      builder = _IterationBuilder(
+          _FakeCandidateBuilder(),
+          _FakeSubnetworkManager(),
+          ensemble_builder,
+          summary_maker=summary_maker,
+          ensemblers=[_FakeEnsembler()],
+          max_steps=1)
+      iteration = builder.build_iteration(
+          base_global_step=0,
+          iteration_number=0,
+          ensemble_candidates=[
+              EnsembleCandidate(b.name, [b], None) for b in subnetwork_builders
+          ],
+          subnetwork_builders=subnetwork_builders,
+          features=features(),
+          labels=labels(),
+          mode=mode,
+          config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
+          previous_ensemble_spec=previous_ensemble_spec())
       init = tf.group(tf_compat.v1.global_variables_initializer(),
                       tf_compat.v1.local_variables_initializer())
-      sess.run(init)
+      self.evaluate(init)
       estimator_spec = iteration.estimator_spec
       if want_chief_hooks:
         self.assertNotEmpty(iteration.estimator_spec.training_chief_hooks)
       self.assertAllClose(
-          want_predictions, sess.run(estimator_spec.predictions), atol=1e-3)
+          want_predictions,
+          self.evaluate(estimator_spec.predictions),
+          atol=1e-3)
       self.assertEqual(
           set(want_eval_metric_ops), set(estimator_spec.eval_metric_ops.keys()))
       self.assertEqual(want_best_candidate_index,
-                       sess.run(iteration.best_candidate_index))
+                       self.evaluate(iteration.best_candidate_index))
 
       if mode == tf.estimator.ModeKeys.PREDICT:
         self.assertIsNotNone(estimator_spec.export_outputs)
         self.assertAllClose(
             want_export_outputs,
-            sess.run(_export_output_tensors(estimator_spec.export_outputs)),
+            self.evaluate(
+                _export_output_tensors(estimator_spec.export_outputs)),
             atol=1e-3)
         self.assertEqual(iteration.estimator_spec.train_op.type,
                          tf.no_op().type)
@@ -761,10 +769,10 @@ class IterationBuilderTest(tu.AdanetTestCase):
         return
 
       self.assertAlmostEqual(
-          want_loss, sess.run(iteration.estimator_spec.loss), places=3)
+          want_loss, self.evaluate(iteration.estimator_spec.loss), places=3)
       self.assertIsNone(iteration.estimator_spec.export_outputs)
       if mode == tf.estimator.ModeKeys.TRAIN:
-        sess.run(iteration.estimator_spec.train_op)
+        self.evaluate(iteration.estimator_spec.train_op)
 
   @parameterized.named_parameters(
       {
@@ -805,6 +813,7 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "want_raises":
               TypeError,
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_build_iteration_error(self,
                                  ensemble_builder,
                                  subnetwork_builders,
@@ -821,20 +830,19 @@ class IterationBuilderTest(tu.AdanetTestCase):
         max_steps=100)
     features = [[1., -1., 0.]]
     labels = [1]
-    with self.test_session():
-      with self.assertRaises(want_raises):
-        builder.build_iteration(
-            base_global_step=0,
-            iteration_number=0,
-            ensemble_candidates=[
-                EnsembleCandidate("test", subnetwork_builders, None)
-            ],
-            subnetwork_builders=subnetwork_builders,
-            features=features,
-            labels=labels,
-            mode=mode,
-            config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
-            previous_ensemble_spec=previous_ensemble_spec_fn())
+    with self.assertRaises(want_raises):
+      builder.build_iteration(
+          base_global_step=0,
+          iteration_number=0,
+          ensemble_candidates=[
+              EnsembleCandidate("test", subnetwork_builders, None)
+          ],
+          subnetwork_builders=subnetwork_builders,
+          features=features,
+          labels=labels,
+          mode=mode,
+          config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
+          previous_ensemble_spec=previous_ensemble_spec_fn())
 
 
 class _HeadEnsembleBuilder(object):
@@ -889,6 +897,7 @@ class IterationExportOutputsTest(tu.AdanetTestCase):
           "testcase_name": "binary_classification_head",
           "head": binary_class_head.BinaryClassHead(),
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_head_export_outputs(self, head):
     ensemble_builder = _HeadEnsembleBuilder(head)
     builder = _IterationBuilder(
@@ -919,47 +928,46 @@ class IterationExportOutputsTest(tu.AdanetTestCase):
         features=features, labels=labels, mode=mode, logits=[[.5]])
     self.assertEqual(
         len(spec.export_outputs), len(iteration.estimator_spec.export_outputs))
-    with self.test_session() as sess:
-      for key in spec.export_outputs:
-        if isinstance(spec.export_outputs[key],
-                      tf.estimator.export.RegressionOutput):
-          self.assertAlmostEqual(
-              sess.run(spec.export_outputs[key].value),
-              sess.run(iteration.estimator_spec.export_outputs[key].value))
-          continue
-        if isinstance(spec.export_outputs[key],
-                      tf.estimator.export.ClassificationOutput):
-          self.assertAllClose(
-              sess.run(spec.export_outputs[key].scores),
-              sess.run(iteration.estimator_spec.export_outputs[key].scores))
+    for key in spec.export_outputs:
+      if isinstance(spec.export_outputs[key],
+                    tf.estimator.export.RegressionOutput):
+        self.assertAlmostEqual(
+            self.evaluate(spec.export_outputs[key].value),
+            self.evaluate(iteration.estimator_spec.export_outputs[key].value))
+        continue
+      if isinstance(spec.export_outputs[key],
+                    tf.estimator.export.ClassificationOutput):
+        self.assertAllClose(
+            self.evaluate(spec.export_outputs[key].scores),
+            self.evaluate(iteration.estimator_spec.export_outputs[key].scores))
+        self.assertAllEqual(
+            self.evaluate(spec.export_outputs[key].classes),
+            self.evaluate(iteration.estimator_spec.export_outputs[key].classes))
+        continue
+      if isinstance(spec.export_outputs[key],
+                    tf.estimator.export.PredictOutput):
+        if "classes" in spec.export_outputs[key].outputs:
+          # Verify string Tensor outputs separately.
           self.assertAllEqual(
-              sess.run(spec.export_outputs[key].classes),
-              sess.run(iteration.estimator_spec.export_outputs[key].classes))
-          continue
-        if isinstance(spec.export_outputs[key],
-                      tf.estimator.export.PredictOutput):
-          if "classes" in spec.export_outputs[key].outputs:
-            # Verify string Tensor outputs separately.
-            self.assertAllEqual(
-                sess.run(spec.export_outputs[key].outputs["classes"]),
-                sess.run(iteration.estimator_spec.export_outputs[key]
-                         .outputs["classes"]))
-            del spec.export_outputs[key].outputs["classes"]
-            del iteration.estimator_spec.export_outputs[key].outputs["classes"]
-          if "all_classes" in spec.export_outputs[key].outputs:
-            # Verify string Tensor outputs separately.
-            self.assertAllEqual(
-                sess.run(spec.export_outputs[key].outputs["all_classes"]),
-                sess.run(iteration.estimator_spec.export_outputs[key]
-                         .outputs["all_classes"]))
-            del spec.export_outputs[key].outputs["all_classes"]
-            del iteration.estimator_spec.export_outputs[key].outputs[
-                "all_classes"]
-          self.assertAllClose(
-              sess.run(spec.export_outputs[key].outputs),
-              sess.run(iteration.estimator_spec.export_outputs[key].outputs))
-          continue
-        self.fail("Invalid export_output for {}.".format(key))
+              self.evaluate(spec.export_outputs[key].outputs["classes"]),
+              self.evaluate(iteration.estimator_spec.export_outputs[key]
+                            .outputs["classes"]))
+          del spec.export_outputs[key].outputs["classes"]
+          del iteration.estimator_spec.export_outputs[key].outputs["classes"]
+        if "all_classes" in spec.export_outputs[key].outputs:
+          # Verify string Tensor outputs separately.
+          self.assertAllEqual(
+              self.evaluate(spec.export_outputs[key].outputs["all_classes"]),
+              self.evaluate(iteration.estimator_spec.export_outputs[key]
+                            .outputs["all_classes"]))
+          del spec.export_outputs[key].outputs["all_classes"]
+          del iteration.estimator_spec.export_outputs[key].outputs[
+              "all_classes"]
+        self.assertAllClose(
+            self.evaluate(spec.export_outputs[key].outputs),
+            self.evaluate(iteration.estimator_spec.export_outputs[key].outputs))
+        continue
+      self.fail("Invalid export_output for {}.".format(key))
 
 
 if __name__ == "__main__":

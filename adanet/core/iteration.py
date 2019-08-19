@@ -726,8 +726,6 @@ class _IterationBuilder(object):
           summary.scalar("loss", best_loss)
       iteration_metrics = _IterationMetrics(iteration_number, candidates,
                                             subnetwork_specs)
-      # All training happens in hooks so we don't need a train op.
-      train_op = tf.no_op()
       if self._use_tpu:
         estimator_spec = tf_compat.v1.estimator.tpu.TPUEstimatorSpec(
             mode=mode,
@@ -745,7 +743,8 @@ class _IterationBuilder(object):
             mode=mode,
             predictions=best_predictions,
             loss=best_loss,
-            train_op=train_op,
+            # All training happens in hooks so we don't need a train op.
+            train_op=tf.no_op(),
             eval_metric_ops=iteration_metrics.best_eval_metric_ops(
                 best_candidate_index, mode),
             export_outputs=best_export_outputs,

@@ -27,6 +27,10 @@ from adanet.core.candidate import _Candidate
 from adanet.core.candidate import _CandidateBuilder
 import adanet.core.testing_utils as tu
 import tensorflow as tf
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
 
 
 class CandidateTest(parameterized.TestCase, tf.test.TestCase):
@@ -36,6 +40,7 @@ class CandidateTest(parameterized.TestCase, tf.test.TestCase):
       "ensemble_spec": tu.dummy_ensemble_spec("foo"),
       "adanet_loss": [.1],
   })
+  @test_util.run_in_graph_and_eager_modes
   def test_new(self, ensemble_spec, adanet_loss):
     with self.test_session():
       got = _Candidate(ensemble_spec, adanet_loss)
@@ -52,6 +57,7 @@ class CandidateTest(parameterized.TestCase, tf.test.TestCase):
           "ensemble_spec": tu.dummy_ensemble_spec("foo"),
           "adanet_loss": None,
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_new_errors(self, ensemble_spec, adanet_loss):
     with self.test_session():
       with self.assertRaises(ValueError):
@@ -100,28 +106,30 @@ class CandidateBuilderTest(parameterized.TestCase, tf.test.TestCase):
           "training": False,
           "want_adanet_losses": [0.],
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_build_candidate(self, training, want_adanet_losses):
-    # A fake adanet_loss that halves at each train step: 1.0, 0.5, 0.25, ...
-    fake_adanet_loss = tf.Variable(1.)
-    fake_train_op = fake_adanet_loss.assign(fake_adanet_loss / 2)
-    fake_ensemble_spec = tu.dummy_ensemble_spec(
-        "new", adanet_loss=fake_adanet_loss, train_op=fake_train_op)
+    # `Cadidate#build_candidate` will only ever be called in graph mode.
+    with context.graph_mode():
+      # A fake adanet_loss that halves at each train step: 1.0, 0.5, 0.25, ...
+      fake_adanet_loss = tf.Variable(1.)
+      fake_train_op = fake_adanet_loss.assign(fake_adanet_loss / 2)
+      fake_ensemble_spec = tu.dummy_ensemble_spec(
+          "new", adanet_loss=fake_adanet_loss, train_op=fake_train_op)
 
-    builder = _CandidateBuilder()
-    candidate = builder.build_candidate(
-        ensemble_spec=fake_ensemble_spec,
-        training=training,
-        summary=_FakeSummary())
-    with self.test_session() as sess:
-      sess.run(tf_compat.v1.global_variables_initializer())
+      builder = _CandidateBuilder()
+      candidate = builder.build_candidate(
+          ensemble_spec=fake_ensemble_spec,
+          training=training,
+          summary=_FakeSummary())
+      self.evaluate(tf_compat.v1.global_variables_initializer())
       adanet_losses = []
       for _ in range(len(want_adanet_losses)):
-        adanet_loss = sess.run(candidate.adanet_loss)
+        adanet_loss = self.evaluate(candidate.adanet_loss)
         adanet_losses.append(adanet_loss)
-        sess.run(fake_train_op)
+        self.evaluate(fake_train_op)
 
-    # Verify that adanet_loss moving average works.
-    self.assertAllClose(want_adanet_losses, adanet_losses, atol=1e-3)
+      # Verify that adanet_loss moving average works.
+      self.assertAllClose(want_adanet_losses, adanet_losses, atol=1e-3)
 
 
 if __name__ == "__main__":

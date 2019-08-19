@@ -23,6 +23,9 @@ from adanet import ensemble
 from adanet import subnetwork
 import mock
 import tensorflow as tf
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
 
 
 class StrategyTest(tf.test.TestCase):
@@ -33,6 +36,7 @@ class StrategyTest(tf.test.TestCase):
     self.fake_builder_3 = mock.create_autospec(spec=subnetwork.Builder)
     self.fake_builder_4 = mock.create_autospec(spec=subnetwork.Builder)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_solo_strategy(self):
     want = [
         ensemble.Candidate("{}_solo".format(self.fake_builder_1.name),
@@ -45,6 +49,7 @@ class StrategyTest(tf.test.TestCase):
 
     self.assertEqual(want, got)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_solo_strategy_with_previous_ensemble_subnetwork_builders(self):
     want = [
         ensemble.Candidate("{}_solo".format(self.fake_builder_1.name),
@@ -58,6 +63,7 @@ class StrategyTest(tf.test.TestCase):
 
     self.assertEqual(want, got)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_grow_strategy(self):
     want = [
         ensemble.Candidate("{}_grow".format(self.fake_builder_1.name),
@@ -69,6 +75,7 @@ class StrategyTest(tf.test.TestCase):
         [self.fake_builder_1, self.fake_builder_2], None)
     self.assertEqual(want, got)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_grow_strategy_with_previous_ensemble_subnetwork_builders(self):
     want = [
         ensemble.Candidate("{}_grow".format(self.fake_builder_1.name),
@@ -83,6 +90,7 @@ class StrategyTest(tf.test.TestCase):
         [self.fake_builder_3, self.fake_builder_4])
     self.assertEqual(want, got)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_all_strategy(self):
     want = [
         ensemble.Candidate("all", [self.fake_builder_1, self.fake_builder_2],
@@ -92,6 +100,7 @@ class StrategyTest(tf.test.TestCase):
         [self.fake_builder_1, self.fake_builder_2], None)
     self.assertEqual(want, got)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_all_strategy_with_previous_ensemble_subnetwork_builders(self):
     want = [
         ensemble.Candidate("all", [self.fake_builder_1, self.fake_builder_2],

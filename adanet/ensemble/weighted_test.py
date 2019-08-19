@@ -29,6 +29,10 @@ from adanet import tf_compat
 from adanet.core.summary import Summary
 import mock
 import tensorflow as tf
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
 
 
 class _FakeSummary(Summary):
@@ -459,6 +463,7 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
           'expected_complexity_regularization': 1.,
           'name': 'with_bias',
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_build_ensemble(self,
                           mixture_weight_type=ensemble.MixtureWeightType.SCALAR,
                           mixture_weight_initializer=None,
@@ -561,6 +566,7 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
                             complexity_regularization)
         self.assertIsNotNone(sess.run(built_ensemble.logits))
 
+  @test_util.run_in_graph_and_eager_modes
   def test_build_ensemble_subnetwork_has_scalar_logits(self):
     logits = tf.ones(shape=(100,))
     ensemble_spec = self._build_easy_ensemble([
@@ -568,6 +574,7 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
     ])
     self.assertEqual([1], ensemble_spec.bias.shape.as_list())
 
+  @test_util.run_in_graph_and_eager_modes
   def test_build_train_op_no_op(self):
     train_op = ensemble.ComplexityRegularizedEnsembler().build_train_op(
         *[None] * 7)  # arguments unused
@@ -576,31 +583,35 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
     else:
       self.assertEqual(train_op.type, tf.no_op().type)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_build_train_op_callable_optimizer(self):
-    dummy_weight = tf.Variable(0., name='dummy_weight')
-    dummy_loss = dummy_weight * 2.
-    ensembler = ensemble.ComplexityRegularizedEnsembler(
-        optimizer=lambda: tf_compat.v1.train.GradientDescentOptimizer(.1))
-    train_op = ensembler.build_train_op(
-        self._build_easy_ensemble([self._build_subnetwork()]), dummy_loss,
-        [dummy_weight], *[None] * 4)
-    with tf_compat.v1.Session() as sess:
-      sess.run(tf_compat.v1.global_variables_initializer())
-      sess.run(train_op)
-      self.assertAllClose(-.2, sess.run(dummy_weight))
+    with context.graph_mode():
+      dummy_weight = tf.Variable(0., name='dummy_weight')
+      dummy_loss = dummy_weight * 2.
+      ensembler = ensemble.ComplexityRegularizedEnsembler(
+          optimizer=lambda: tf_compat.v1.train.GradientDescentOptimizer(.1))
+      train_op = ensembler.build_train_op(
+          self._build_easy_ensemble([self._build_subnetwork()]), dummy_loss,
+          [dummy_weight], *[None] * 4)
+      with tf_compat.v1.Session() as sess:
+        sess.run(tf_compat.v1.global_variables_initializer())
+        sess.run(train_op)
+        self.assertAllClose(-.2, sess.run(dummy_weight))
 
+  @test_util.run_in_graph_and_eager_modes
   def test_build_train_op(self):
-    dummy_weight = tf.Variable(0., name='dummy_weight')
-    dummy_loss = dummy_weight * 2.
-    ensembler = ensemble.ComplexityRegularizedEnsembler(
-        optimizer=tf_compat.v1.train.GradientDescentOptimizer(.1))
-    train_op = ensembler.build_train_op(
-        self._build_easy_ensemble([self._build_subnetwork()]), dummy_loss,
-        [dummy_weight], *[None] * 4)
-    with tf_compat.v1.Session() as sess:
-      sess.run(tf_compat.v1.global_variables_initializer())
-      sess.run(train_op)
-      self.assertAllClose(-.2, sess.run(dummy_weight))
+    with context.graph_mode():
+      dummy_weight = tf.Variable(0., name='dummy_weight')
+      dummy_loss = dummy_weight * 2.
+      ensembler = ensemble.ComplexityRegularizedEnsembler(
+          optimizer=tf_compat.v1.train.GradientDescentOptimizer(.1))
+      train_op = ensembler.build_train_op(
+          self._build_easy_ensemble([self._build_subnetwork()]), dummy_loss,
+          [dummy_weight], *[None] * 4)
+      with tf_compat.v1.Session() as sess:
+        sess.run(tf_compat.v1.global_variables_initializer())
+        sess.run(train_op)
+        self.assertAllClose(-.2, sess.run(dummy_weight))
 
   def tearDown(self):
     self.summary.clear_scalars()

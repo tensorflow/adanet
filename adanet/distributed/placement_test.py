@@ -24,10 +24,15 @@ from adanet.distributed.placement import ReplicationStrategy
 from adanet.distributed.placement import RoundRobinStrategy
 
 import tensorflow as tf
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
 
 
 class ReplicationStrategyTest(tf.test.TestCase):
 
+  @test_util.run_in_graph_and_eager_modes
   def test_strategy(self):
     strategy = ReplicationStrategy()
     num_subnetworks = 3
@@ -269,6 +274,7 @@ class RoundRobinStrategyTest(parameterized.TestCase, tf.test.TestCase):
           },
       ] for drop_remainder in [False, True]]))
   # pylint: enable=g-complex-comprehension
+  @test_util.run_in_graph_and_eager_modes
   def test_worker_methods(self, num_workers, num_subnetworks, drop_remainder,
                           want_should_build_ensemble,
                           want_should_build_subnetwork,
@@ -538,23 +544,25 @@ class RoundRobinStrategyTest(parameterized.TestCase, tf.test.TestCase):
           ],
       },
   )
+  @test_util.run_in_graph_and_eager_modes
   def test_device_methods(self,
                           num_ps,
                           num_subnetworks,
                           want_variable_devices,
                           dedicate_parameter_servers=True):
-    x = tf.constant([[1., 0.]])
-    strategy = RoundRobinStrategy(
-        dedicate_parameter_servers=dedicate_parameter_servers)
-    strategy.config = ParameterServerConfig(num_ps)
-    variable_devices = []
-    for i in range(num_subnetworks):
-      with strategy.subnetwork_devices(num_subnetworks, i):
-        subnetwork = tf.keras.Sequential()
-        subnetwork.add(tf.keras.layers.Dense(4))
-        subnetwork.add(tf.keras.layers.Dense(3))
-        subnetwork(x)
-      variable_devices.append([w.op.device for w in subnetwork.weights])
+    with context.graph_mode():
+      x = tf.constant([[1., 0.]])
+      strategy = RoundRobinStrategy(
+          dedicate_parameter_servers=dedicate_parameter_servers)
+      strategy.config = ParameterServerConfig(num_ps)
+      variable_devices = []
+      for i in range(num_subnetworks):
+        with strategy.subnetwork_devices(num_subnetworks, i):
+          subnetwork = tf.keras.Sequential()
+          subnetwork.add(tf.keras.layers.Dense(4))
+          subnetwork.add(tf.keras.layers.Dense(3))
+          subnetwork(x)
+        variable_devices.append([w.op.device for w in subnetwork.weights])
     self.assertEqual(want_variable_devices, variable_devices)
 
 
