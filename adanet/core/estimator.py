@@ -450,6 +450,8 @@ class Estimator(tf.estimator.Estimator):
                enable_subnetwork_summaries=True,
                global_step_combiner_fn=tf.math.reduce_mean,
                max_iterations=None,
+               forward_feature_keys=None,
+               sparse_default_values=None,
                **kwargs):
     if subnetwork_generator is None:
       raise ValueError("subnetwork_generator can't be None.")
@@ -595,6 +597,18 @@ class Estimator(tf.estimator.Estimator):
       return 0
     return tf.train.load_variable(latest_checkpoint,
                                   tf_compat.v1.GraphKeys.GLOBAL_STEP)
+
+  def forward_features(self,
+                       estimator,
+                       forward_feature_keys=None,
+                       sparse_default_values=None):
+    if forward_feeature_keys is not None:
+      result = tf.contrib.estimator.forward_features(super(Estimator, self),
+                                                   forward_feature_keys=forward_feature_keys,
+                                                   sparse_default_values=sparse_default_values)
+      return result
+    else:
+      raise ValueError("No key/(s) provided to forward features.")
 
   def train(self,
             input_fn,
