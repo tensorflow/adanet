@@ -11,6 +11,7 @@ py_library(
     visibility = ["//adanet:__subpackages__"],
     deps = [
         ":ensembler",
+        ":mean",
         ":strategy",
         ":weighted",
     ],
@@ -57,6 +58,26 @@ py_test(
         "//adanet/core",
         "//adanet/subnetwork",
         "//adanet/tf_compat",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+py_library(
+    name = "mean",
+    srcs = ["mean.py"],
+    deps = [
+        ":ensembler",
+        "@absl_py//absl/logging",
+    ],
+)
+
+py_test(
+    name = "mean_test",
+    srcs = ["mean_test.py"],
+    deps = [
+        ":ensemble",
+        "//adanet/core",
+        "//adanet/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
 )

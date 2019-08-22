@@ -57,6 +57,16 @@ class Ensemble(object):
   def subnetworks(self):
     """Returns an ordered :class:`Iterable` of the ensemble's subnetworks."""
 
+  @property
+  def predictions(self):
+    """Optional dict of Ensemble predictions to be merged in EstimatorSpec.
+
+    These will be additional (over the default included by the head) predictions
+    which will be included in the EstimatorSpec in `predictions` and
+    `export_outputs` (wrapped as PredictOutput).
+    """
+    return None
+
 
 class Ensembler(object):
   """An abstract ensembler."""

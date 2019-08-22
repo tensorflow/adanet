@@ -25,6 +25,12 @@ Interfaces and containers for defining ensembles.
 .. autoclass:: ComplexityRegularized
     :members:
 
+:hidden:`MeanEnsemble`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: MeanEnsemble
+    :members:
+
 :hidden:`MixtureWeightType`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -52,6 +58,12 @@ Ensemble learning definitions.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: ComplexityRegularizedEnsembler
+    :members:
+
+:hidden:`MeanEnsembler`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: MeanEnsembler
     :members:
 
 :hidden:`TrainOpSpec`

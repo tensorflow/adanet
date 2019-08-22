@@ -352,12 +352,20 @@ class _EnsembleBuilder(object):
       ensemble_loss = estimator_spec.loss
       adanet_loss = None
       if mode != tf.estimator.ModeKeys.PREDICT:
-        # TODO: Support any kind of Ensemble. Use a moving average of
-        # their train loss for the 'adanet_loss'.
-        if not isinstance(ensemble, ComplexityRegularized):
-          raise ValueError(
-              "Only ComplexityRegularized ensembles are supported.")
-        adanet_loss = estimator_spec.loss + ensemble.complexity_regularization
+        adanet_loss = estimator_spec.loss
+        # Add ensembler specific loss
+        if isinstance(ensemble, ComplexityRegularized):
+          adanet_loss += ensemble.complexity_regularization
+
+      predictions = estimator_spec.predictions
+      export_outputs = estimator_spec.export_outputs
+      if ensemble.predictions and predictions:
+        predictions.update(ensemble.predictions)
+      if ensemble.predictions and export_outputs:
+        export_outputs.update({
+            k: tf.estimator.export.PredictOutput(v)
+            for k, v in ensemble.predictions.items()
+        })
 
       ensemble_metrics = _EnsembleMetrics(use_tpu=self._use_tpu)
       if mode == tf.estimator.ModeKeys.EVAL:
@@ -415,13 +423,13 @@ class _EnsembleBuilder(object):
         architecture=architecture,
         subnetwork_builders=subnetwork_builders,
         ensemble=ensemble,
-        predictions=estimator_spec.predictions,
+        predictions=predictions,
         step=step,
         loss=ensemble_loss,
         adanet_loss=adanet_loss,
         train_op=train_op,
         eval_metrics=ensemble_metrics.eval_metrics_tuple(),
-        export_outputs=estimator_spec.export_outputs)
+        export_outputs=export_outputs)
 
 
 def _create_estimator_spec(head, features, labels, mode, logits, use_tpu):

@@ -41,6 +41,8 @@ class AdaNetTest(tf.test.TestCase):
     self.assertIsNotNone(adanet.ensemble.Strategy)
     self.assertIsNotNone(adanet.ensemble.ComplexityRegularized)
     self.assertIsNotNone(adanet.ensemble.ComplexityRegularizedEnsembler)
+    self.assertIsNotNone(adanet.ensemble.MeanEnsemble)
+    self.assertIsNotNone(adanet.ensemble.MeanEnsembler)
     self.assertIsNotNone(adanet.ensemble.MixtureWeightType)
     self.assertIsNotNone(adanet.ensemble.WeightedSubnetwork)
     self.assertIsNotNone(adanet.Ensemble)

@@ -23,6 +23,8 @@ from __future__ import print_function
 from adanet.ensemble.ensembler import Ensemble
 from adanet.ensemble.ensembler import Ensembler
 from adanet.ensemble.ensembler import TrainOpSpec
+from adanet.ensemble.mean import MeanEnsemble
+from adanet.ensemble.mean import MeanEnsembler
 from adanet.ensemble.strategy import AllStrategy
 from adanet.ensemble.strategy import Candidate
 from adanet.ensemble.strategy import GrowStrategy
@@ -44,6 +46,8 @@ __all__ = [
     "Strategy",
     "ComplexityRegularized",
     "ComplexityRegularizedEnsembler",
+    "MeanEnsemble",
+    "MeanEnsembler",
     "MixtureWeightType",
     "WeightedSubnetwork",
 ]

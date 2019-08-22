@@ -192,6 +192,7 @@ py_library(
 py_test(
     name = "ensemble_builder_test",
     srcs = ["ensemble_builder_test.py"],
+    shard_count = 10,
     deps = [
         ":ensemble_builder",
         ":summary",

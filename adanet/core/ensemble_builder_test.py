@@ -30,6 +30,8 @@ from adanet.core.summary import Summary
 import adanet.core.testing_utils as tu
 from adanet.ensemble import Candidate as EnsembleCandidate
 from adanet.ensemble import ComplexityRegularizedEnsembler
+from adanet.ensemble import MeanEnsemble
+from adanet.ensemble import MeanEnsembler
 from adanet.ensemble import MixtureWeightType
 from adanet.subnetwork import Builder
 from adanet.subnetwork import Subnetwork
@@ -183,6 +185,17 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
           "want_adanet_loss": 1.338,
           "want_ensemble_trainable_vars": 1,
       }, {
+          "testcase_name": "mean_ensembler",
+          "want_logits": [[.621], [.979]],
+          "want_loss": 1.3702,
+          "want_adanet_loss": 1.3702,
+          "want_ensemble_trainable_vars": 0,
+          "ensembler_class": MeanEnsembler,
+          "want_predictions": {
+              MeanEnsemble.MEAN_LAST_LAYER: [[-0.2807, -0.1377, -0.6763],
+                                             [0.0245, -0.8935, -0.8284]],
+          }
+      }, {
           "testcase_name": "no_previous_ensemble_prune_all",
           "want_logits": [[.016], [.117]],
           "want_loss": 1.338,
@@ -302,7 +315,9 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
       subnetwork_builder_class=_Builder,
       mode=tf.estimator.ModeKeys.TRAIN,
       multi_head=False,
-      want_subnetwork_trainable_vars=2):
+      want_subnetwork_trainable_vars=2,
+      ensembler_class=ComplexityRegularizedEnsembler,
+      want_predictions=None):
     seed = 64
 
     if multi_head:
@@ -353,6 +368,8 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
                        tf_compat.v1.summary.histogram("histogram", 1.))
       self.assertEqual("fake_audio",
                        tf_compat.v1.summary.audio("audio", 1., 1.))
+      if not var_list:
+        return tf.no_op()
       optimizer = tf_compat.v1.train.GradientDescentOptimizer(learning_rate=.1)
       return optimizer.minimize(loss, var_list=var_list)
 
@@ -389,6 +406,19 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
           mode=mode,
           labels=labels,
           previous_ensemble=previous_ensemble)
+      ensembler_kwargs = {}
+      if ensembler_class is ComplexityRegularizedEnsembler:
+        ensembler_kwargs.update({
+            "mixture_weight_type": mixture_weight_type,
+            "mixture_weight_initializer": mixture_weight_initializer,
+            "warm_start_mixture_weights": warm_start_mixture_weights,
+            "model_dir": self.test_subdirectory,
+            "adanet_lambda": adanet_lambda,
+            "adanet_beta": adanet_beta,
+            "use_bias": use_bias
+        })
+      if ensembler_class is MeanEnsembler:
+        ensembler_kwargs.update({"add_mean_last_layer_predictions": True})
       ensemble_spec = builder.build_ensemble_spec(
           # Note: when ensemble_spec is not None and warm_start_mixture_weights
           # is True, we need to make sure that the bias and mixture weights are
@@ -396,14 +426,7 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
           name="test",
           previous_ensemble_spec=previous_ensemble_spec,
           candidate=EnsembleCandidate("foo", [subnetwork_builder], None),
-          ensembler=ComplexityRegularizedEnsembler(
-              mixture_weight_type=mixture_weight_type,
-              mixture_weight_initializer=mixture_weight_initializer,
-              warm_start_mixture_weights=warm_start_mixture_weights,
-              model_dir=self.test_subdirectory,
-              adanet_lambda=adanet_lambda,
-              adanet_beta=adanet_beta,
-              use_bias=use_bias),
+          ensembler=ensembler_class(**ensembler_kwargs),
           subnetwork_specs=[subnetwork_spec],
           summary=_FakeSummary(),
           features=features,
@@ -466,19 +489,26 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
         self.assertAllClose(
             want_logits, sess.run(ensemble_spec.ensemble.logits), atol=1e-3)
 
-        # Bias should learn a non-zero value when used.
-        bias = sess.run(ensemble_spec.ensemble.bias)
-        if isinstance(bias, dict):
-          bias = sum(abs(b) for b in bias.values())
-        if use_bias:
-          self.assertNotEqual(0., bias)
-        else:
-          self.assertAlmostEqual(0., bias)
+        if ensembler_class is ComplexityRegularizedEnsembler:
+          # Bias should learn a non-zero value when used.
+          bias = sess.run(ensemble_spec.ensemble.bias)
+          if isinstance(bias, dict):
+            bias = sum(abs(b) for b in bias.values())
+          if use_bias:
+            self.assertNotEqual(0., bias)
+          else:
+            self.assertAlmostEqual(0., bias)
 
         self.assertAlmostEqual(
             want_loss, sess.run(ensemble_spec.loss), places=3)
         self.assertAlmostEqual(
             want_adanet_loss, sess.run(ensemble_spec.adanet_loss), places=3)
+
+        if want_predictions:
+          self.assertAllClose(
+              want_predictions,
+              sess.run(ensemble_spec.ensemble.predictions),
+              atol=1e-3)
 
 
 class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
