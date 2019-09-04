@@ -1,8 +1,12 @@
 # Tutorials
 
+## Notebooks
+
 Play with AdaNet in our interactive
 [Colab notebooks available on GitHub](https://github.com/tensorflow/adanet/tree/master/adanet/examples/tutorials).
 
+
+## Misc
 
 To learn more, please visit our [quick start guide](./quick_start.md).
 
