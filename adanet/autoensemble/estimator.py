@@ -93,10 +93,11 @@ class AutoEnsembleSubestimator(
 class _BuilderFromSubestimator(Builder):
   """An `adanet.Builder` from a :class:`tf.estimator.Estimator`."""
 
-  def __init__(self, name, subestimator, logits_fn, config):
+  def __init__(self, name, subestimator, logits_fn, last_layer_fn, config):
     self._name = name
     self._subestimator = subestimator
     self._logits_fn = logits_fn
+    self._last_layer_fn = last_layer_fn
     self._config = config
 
   @property
@@ -109,11 +110,15 @@ class _BuilderFromSubestimator(Builder):
       estimator_spec = model_fn(
           features=features, labels=labels, mode=mode, config=self._config)
       logits = self._logits_fn(estimator_spec=estimator_spec)
+      last_layer = logits
+      if self._last_layer_fn:
+        last_layer = self._last_layer_fn(estimator_spec=estimator_spec)
+
       train_op = TrainOpSpec(
           estimator_spec.train_op,
           chief_hooks=estimator_spec.training_chief_hooks,
           hooks=estimator_spec.training_hooks)
-    return logits, train_op
+    return logits, last_layer, train_op
 
   def build_subnetwork(self, features, labels, logits_dimension, training,
                        iteration_step, summary, previous_ensemble):
@@ -135,11 +140,11 @@ class _BuilderFromSubestimator(Builder):
         subestimator_features, subestimator_labels = inputs
 
       # Construct subnetwork graph first because of dependencies on scope.
-      _, bagging_train_op_spec = call_model_fn_template(subestimator_features,
-                                                        subestimator_labels,
-                                                        mode, summary)
+      _, _, bagging_train_op_spec = call_model_fn_template(
+          subestimator_features, subestimator_labels, mode, summary)
       # Graph for ensemble learning gets model_fn_1 for scope.
-      logits, _ = call_model_fn_template(features, labels, mode, summary)
+      logits, last_layer, _ = call_model_fn_template(features, labels, mode,
+                                                     summary)
 
       # Run train op in a hook so that exceptions can be intercepted by the
       # AdaNet framework instead of the Estimator's monitored training session.
@@ -150,14 +155,14 @@ class _BuilderFromSubestimator(Builder):
           chief_hooks=bagging_train_op_spec.chief_hooks,
           hooks=hooks)
     else:
-      logits, train_op_spec = call_model_fn_template(features, labels, mode,
-                                                     summary)
+      logits, last_layer, train_op_spec = call_model_fn_template(
+          features, labels, mode, summary)
 
     # TODO: Replace with variance complexity measure.
     complexity = tf.constant(0.)
     return Subnetwork(
         logits=logits,
-        last_layer=logits,
+        last_layer=last_layer,
         shared={"train_op": train_op_spec},
         complexity=complexity)
 
@@ -179,11 +184,12 @@ def _convert_to_subestimator(candidate):
 class _GeneratorFromCandidatePool(Generator):
   """An `adanet.Generator` from a pool of `Estimator` and `Model` instances."""
 
-  def __init__(self, candidate_pool, logits_fn):
+  def __init__(self, candidate_pool, logits_fn, last_layer_fn):
     self._candidate_pool = candidate_pool
     if logits_fn is None:
       logits_fn = _default_logits
     self._logits_fn = logits_fn
+    self._last_layer_fn = last_layer_fn
 
   def generate_candidates(self, previous_ensemble, iteration_number,
                           previous_ensemble_reports, all_reports, config):
@@ -200,6 +206,7 @@ class _GeneratorFromCandidatePool(Generator):
                 name,
                 _convert_to_subestimator(candidate_pool[name]),
                 logits_fn=self._logits_fn,
+                last_layer_fn=self._last_layer_fn,
                 config=config))
       return builders
 
@@ -211,6 +218,7 @@ class _GeneratorFromCandidatePool(Generator):
               name,
               _convert_to_subestimator(estimator),
               logits_fn=self._logits_fn,
+              last_layer_fn=self._last_layer_fn,
               config=config))
     return builders
 
@@ -328,6 +336,16 @@ class AutoEnsembleEstimator(Estimator):
           default to returning `estimator_spec.predictions` when they are a
           :class:`tf.Tensor` or the :class:`tf.Tensor` for the key 'logits' when
           they are a dict of string to :class:`tf.Tensor`.
+    last_layer_fn: An optional function for fetching the subnetwork last_layer
+      from a :class:`tf.estimator.EstimatorSpec`, which should obey the
+      following signature:
+        - `Args`: Can only have following argument:
+          - estimator_spec: The candidate's :class:`tf.estimator.EstimatorSpec`.
+        - `Returns`: Last layer :class:`tf.Tensor` or dict of string to last
+          layer :class:`tf.Tensor` (for multi-head) for the candidate subnetwork
+          extracted from the given `estimator_spec`. The last_layer can be used
+          for learning ensembles or exporting them as embeddings.
+      When `None`, it will default to using the logits as the last_layer.
     ensemblers: See :class:`adanet.Estimator`.
     ensemble_strategies: See :class:`adanet.Estimator`.
     evaluator:  See :class:`adanet.Estimator`.
@@ -358,6 +376,7 @@ class AutoEnsembleEstimator(Estimator):
                ensemblers=None,
                ensemble_strategies=None,
                logits_fn=None,
+               last_layer_fn=None,
                evaluator=None,
                metric_fn=None,
                force_grow=False,
@@ -370,7 +389,7 @@ class AutoEnsembleEstimator(Estimator):
                enable_subnetwork_summaries=True,
                **kwargs):
     subnetwork_generator = _GeneratorFromCandidatePool(candidate_pool,
-                                                       logits_fn)
+                                                       logits_fn, last_layer_fn)
     super(AutoEnsembleEstimator, self).__init__(
         head=head,
         subnetwork_generator=subnetwork_generator,

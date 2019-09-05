@@ -19,10 +19,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import contextlib
 import os
 import shutil
 
 from absl.testing import parameterized
+from adanet.autoensemble.estimator import _GeneratorFromCandidatePool
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
 from adanet.autoensemble.estimator import AutoEnsembleSubestimator
 import tensorflow as tf
@@ -236,6 +238,55 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     export_saved_model_fn(
         export_dir_base=export_dir_base,
         serving_input_receiver_fn=serving_input_fn)
+
+  def test_last_layer_fn(self):
+    head = tf.contrib.estimator.regression_head(
+        loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=.01)
+    feature_columns = [tf.feature_column.numeric_column("input_1", shape=[2])]
+    cand_pool = [
+        tf.estimator.DNNEstimator(
+            head=head,
+            feature_columns=feature_columns,
+            optimizer=optimizer,
+            hidden_units=[3])
+    ]
+    input_features = {}
+    features = {"input_1": [[1., 0.]]}
+    labels = [[1.]]
+    for key, feature in features.items():
+      input_features[key] = tf.constant(feature, name=key)
+    input_labels = tf.constant(labels, name="labels")
+
+    class _FakeSummary(object):
+      """A fake adanet.Summary."""
+
+      def scalar(self, name, tensor, family=None):
+        del name, tensor, family
+        return "fake_scalar"
+
+      @contextlib.contextmanager
+      def current_scope(self):
+        yield
+
+    def _adanet_last_layer_fn(estimator_spec):
+      del estimator_spec
+      return input_labels
+
+    # Call with custom last_layer_fn which simply returns the labels tensor.
+    generator = _GeneratorFromCandidatePool(
+        cand_pool, logits_fn=None, last_layer_fn=_adanet_last_layer_fn)
+    candidates = generator.generate_candidates(
+        previous_ensemble=None,
+        iteration_number=None,
+        previous_ensemble_reports=None,
+        all_reports=None,
+        config=tf.estimator.RunConfig())
+    subnetwork = candidates[0].build_subnetwork(input_features,
+                                                input_labels, None, False, 1,
+                                                _FakeSummary(), None)
+
+    self.assertEqual(input_labels, subnetwork.last_layer)
 
   def test_extra_checkpoint_saver_hook(self):
     """Tests b/122795064."""
