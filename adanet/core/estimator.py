@@ -456,7 +456,7 @@ class Estimator(tf.estimator.Estimator):
     if max_iteration_steps is not None and max_iteration_steps <= 0.:
       raise ValueError("max_iteration_steps must be > 0 or None.")
     if max_iterations is not None and max_iterations <= 0.:
-      raise ValueError("max_iteration_steps must be > 0 or None.")
+      raise ValueError("max_iterations must be > 0 or None.")
     is_distributed_training = config and config.num_worker_replicas > 1
     is_model_dir_specified = model_dir or (config and config.model_dir)
     if is_distributed_training and not is_model_dir_specified:
