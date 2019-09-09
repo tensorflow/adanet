@@ -587,6 +587,11 @@ class Estimator(tf.estimator.Estimator):
     return tf.train.load_variable(latest_checkpoint,
                                   self._Keys.CURRENT_ITERATION)
 
+  def _checkpoint_path_iteration_number(self, checkpoint_path):
+    """Returns the iteration number from checkpoint_path."""
+
+    return tf.train.load_variable(checkpoint_path, self._Keys.CURRENT_ITERATION)
+
   def _latest_checkpoint_global_step(self):
     """Returns the global step from the latest checkpoint."""
 
@@ -787,9 +792,12 @@ class Estimator(tf.estimator.Estimator):
     # Ensure that the read to get the iteration number and read to restore
     # variable values come from the same checkpoint during evaluation.
     params = {
-        "evaluation_checkpoint_path": checkpoint_path,
-        "evaluation_name": name,
-        "best_ensemble_index": self._compute_best_ensemble_index(),
+        "evaluation_checkpoint_path":
+            checkpoint_path,
+        "evaluation_name":
+            name,
+        "best_ensemble_index":
+            self._compute_best_ensemble_index(checkpoint_path),
     }
 
     # Delegate evaluation to a temporary estimator instead of super to make
@@ -814,7 +822,8 @@ class Estimator(tf.estimator.Estimator):
     temp_estimator = self._create_temp_estimator(
         self.config,
         params={
-            "best_ensemble_index": self._compute_best_ensemble_index(),
+            "best_ensemble_index":
+                self._compute_best_ensemble_index(checkpoint_path),
         })
     return temp_estimator.predict(input_fn, predict_keys, hooks,
                                   checkpoint_path, yield_single_examples)
@@ -833,7 +842,8 @@ class Estimator(tf.estimator.Estimator):
     temp_estimator = self._create_temp_estimator(
         self.config,
         params={
-            "best_ensemble_index": self._compute_best_ensemble_index(),
+            "best_ensemble_index":
+                self._compute_best_ensemble_index(checkpoint_path),
         })
     with self._force_replication_strategy():
       return temp_estimator.export_savedmodel(
@@ -856,7 +866,8 @@ class Estimator(tf.estimator.Estimator):
     temp_estimator = self._create_temp_estimator(
         self.config,
         params={
-            "best_ensemble_index": self._compute_best_ensemble_index(),
+            "best_ensemble_index":
+                self._compute_best_ensemble_index(checkpoint_path),
         })
     with self._force_replication_strategy():
       return temp_estimator.export_saved_model(
@@ -878,7 +889,8 @@ class Estimator(tf.estimator.Estimator):
     temp_estimator = self._create_temp_estimator(
         self.config,
         params={
-            "best_ensemble_index": self._compute_best_ensemble_index(),
+            "best_ensemble_index":
+                self._compute_best_ensemble_index(checkpoint_path),
         })
     with self._force_replication_strategy():
       return temp_estimator.experimental_export_all_saved_models(
@@ -888,12 +900,14 @@ class Estimator(tf.estimator.Estimator):
           as_text=as_text,
           checkpoint_path=checkpoint_path)
 
-  def _compute_best_ensemble_index(self):
+  def _compute_best_ensemble_index(self, checkpoint_path):
     """Runs the Evaluator to obtain the best ensemble index among candidates."""
 
     if self._evaluator:
       return self._execute_candidate_evaluation_phase(
-          self._evaluator.input_fn, export_best_architecture=False)
+          self._evaluator.input_fn,
+          export_best_architecture=False,
+          checkpoint_path=checkpoint_path)
     return None
 
   @contextlib.contextmanager
@@ -1000,14 +1014,18 @@ class Estimator(tf.estimator.Estimator):
 
     logging.info("Finished preparing iteration %s.", next_iteration_number)
 
-  def _execute_candidate_evaluation_phase(self, evaluator_input_fn,
-                                          export_best_architecture):
+  def _execute_candidate_evaluation_phase(self,
+                                          evaluator_input_fn,
+                                          export_best_architecture,
+                                          checkpoint_path=None):
     """Evaluates and chooses the best ensemble for this iteration.
 
     Args:
       evaluator_input_fn: The input_fn for evaluation.
       export_best_architecture: Boolean whether to persist the best ensemble's
         architecture to the model_dir.
+      checkpoint_path: Optional path to the checkpoint to restore from. If None,
+        effectively assumes the latest checkpoint path.
 
     Returns:
       Integer index of the best ensemble withing the list of candidate ensembles
@@ -1027,7 +1045,9 @@ class Estimator(tf.estimator.Estimator):
       architecture = current_iteration.candidates[
           best_ensemble_index].ensemble_spec.architecture
     if export_best_architecture:
-      iteration_number = self._latest_checkpoint_iteration_number()
+      iteration_number = (
+          self._checkpoint_path_iteration_number(checkpoint_path)
+          if checkpoint_path else self._latest_checkpoint_iteration_number())
       new_architecture_filename = self._architecture_filename(iteration_number)
       logging.info("Exporting best ensemble architecture to %s",
                    new_architecture_filename)
@@ -1648,7 +1668,10 @@ class Estimator(tf.estimator.Estimator):
         the previous iteration for restoring during the graph growing phase.
     """
 
-    iteration_number = self._latest_checkpoint_iteration_number()
+    iteration_number = (
+        self._checkpoint_path_iteration_number(evaluation_checkpoint_path)
+        if evaluation_checkpoint_path else
+        self._latest_checkpoint_iteration_number())
 
     # Use the evaluation checkpoint path to get both the iteration number and
     # variable values to avoid any race conditions between the first and second
