@@ -408,6 +408,9 @@ class Estimator(tf.estimator.Estimator):
       keep iterating until `Estimator#train` terminates. Otherwise, if
       :code:`max_iteratios` is supplied and is met or exceeded during training,
       training will terminate even before `steps` or `max_steps`.
+    export_subnetwork_logits: Whether to include subnetwork logits in exports.
+    export_subnetwork_last_layer: Whether to include subnetwork last layer in
+      exports.
     **kwargs: Extra keyword args passed to the parent.
 
   Returns:
@@ -450,6 +453,8 @@ class Estimator(tf.estimator.Estimator):
                enable_subnetwork_summaries=True,
                global_step_combiner_fn=tf.math.reduce_mean,
                max_iterations=None,
+               export_subnetwork_logits=False,
+               export_subnetwork_last_layer=True,
                **kwargs):
     if subnetwork_generator is None:
       raise ValueError("subnetwork_generator can't be None.")
@@ -539,7 +544,11 @@ class Estimator(tf.estimator.Estimator):
     # model_dir is not provided.
     self._use_tpu = kwargs.get("use_tpu", False)
     ensemble_builder = _EnsembleBuilder(
-        head=head, metric_fn=metric_fn, use_tpu=self._use_tpu)
+        head=head,
+        metric_fn=metric_fn,
+        use_tpu=self._use_tpu,
+        export_subnetwork_logits=export_subnetwork_logits,
+        export_subnetwork_last_layer=export_subnetwork_last_layer)
 
     # TODO: Merge CandidateBuilder into SubnetworkManager.
     candidate_builder = _CandidateBuilder(adanet_loss_decay=adanet_loss_decay)

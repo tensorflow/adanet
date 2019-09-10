@@ -296,6 +296,23 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
           "multi_head": True,
           "want_ensemble_trainable_vars": 2,
           "want_subnetwork_trainable_vars": 4,
+      }, {
+          "testcase_name": "expect_subnetwork_exports",
+          "mode": tf.estimator.ModeKeys.PREDICT,
+          "want_logits": [[0.], [0.]],
+          "want_ensemble_trainable_vars": 1,
+          "export_subnetworks": True,
+      }, {
+          "testcase_name": "multi_head_expect_subnetwork_exports",
+          "mode": tf.estimator.ModeKeys.PREDICT,
+          "multi_head": True,
+          "want_logits": {
+              "head1": [[0.], [0.]],
+              "head2": [[0.], [0.]],
+          },
+          "want_ensemble_trainable_vars": 2,
+          "want_subnetwork_trainable_vars": 4,
+          "export_subnetworks": True,
       })
   @test_util.run_in_graph_and_eager_modes
   def test_build_ensemble_spec(
@@ -317,7 +334,8 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
       multi_head=False,
       want_subnetwork_trainable_vars=2,
       ensembler_class=ComplexityRegularizedEnsembler,
-      want_predictions=None):
+      want_predictions=None,
+      export_subnetworks=False):
     seed = 64
 
     if multi_head:
@@ -329,7 +347,10 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
       ])
     else:
       head = binary_class_head.BinaryClassHead(loss_reduction=tf_compat.SUM)
-    builder = _EnsembleBuilder(head=head)
+    builder = _EnsembleBuilder(
+        head=head,
+        export_subnetwork_logits=export_subnetworks,
+        export_subnetwork_last_layer=export_subnetworks)
 
     def _subnetwork_train_op_fn(loss, var_list):
       self.assertLen(var_list, want_subnetwork_trainable_vars)
@@ -475,6 +496,34 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
           self.assertIsNone(ensemble_spec.adanet_loss)
           self.assertIsNone(ensemble_spec.train_op)
           self.assertIsNotNone(ensemble_spec.export_outputs)
+          if not export_subnetworks:
+            return
+          if not multi_head:
+            subnetwork_logits = sess.run(ensemble_spec.export_outputs[
+                _EnsembleBuilder._SUBNETWORK_LOGITS_EXPORT_SIGNATURE].outputs)
+            self.assertAllClose(subnetwork_logits["test"],
+                                sess.run(subnetwork_spec.subnetwork.logits))
+            subnetwork_last_layer = sess.run(ensemble_spec.export_outputs[
+                _EnsembleBuilder._SUBNETWORK_LAST_LAYER_EXPORT_SIGNATURE]
+                                             .outputs)
+            self.assertAllClose(subnetwork_last_layer["test"],
+                                sess.run(subnetwork_spec.subnetwork.last_layer))
+          else:
+            self.assertIn("subnetwork_logits_head2",
+                          ensemble_spec.export_outputs)
+            subnetwork_logits_head1 = sess.run(
+                ensemble_spec.export_outputs["subnetwork_logits_head1"].outputs)
+            self.assertAllClose(
+                subnetwork_logits_head1["test"],
+                sess.run(subnetwork_spec.subnetwork.logits["head1"]))
+            self.assertIn("subnetwork_logits_head2",
+                          ensemble_spec.export_outputs)
+            subnetwork_last_layer_head1 = sess.run(
+                ensemble_spec.export_outputs["subnetwork_last_layer_head1"]
+                .outputs)
+            self.assertAllClose(
+                subnetwork_last_layer_head1["test"],
+                sess.run(subnetwork_spec.subnetwork.last_layer["head1"]))
           return
 
         # Verify that train_op works, previous loss should be greater than loss

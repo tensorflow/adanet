@@ -48,6 +48,7 @@ import tensorflow as tf
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import context
 from tensorflow.python.framework import test_util
+from tensorflow.python.tools import saved_model_utils
 # pylint: enable=g-direct-tensorflow-import
 from tensorflow_estimator.python.estimator.export import export
 from tensorflow_estimator.python.estimator.head import binary_class_head
@@ -698,6 +699,24 @@ class EstimatorTest(tu.AdanetTestCase):
       },
       {
           "testcase_name":
+              "two_dnn_export_subnetworks",
+          "subnetwork_generator":
+              SimpleGenerator(
+                  [_DNNBuilder("dnn"),
+                   _DNNBuilder("dnn2", layer_size=3)]),
+          "max_iteration_steps":
+              100,
+          "want_loss":
+              0.26433355,
+          "want_iteration":
+              2,
+          "want_global_step":
+              300,
+          "export_subnetworks":
+              True,
+      },
+      {
+          "testcase_name":
               "width_limiting_builder_no_pruning",
           "subnetwork_generator":
               SimpleGenerator([_WidthLimitingDNNBuilder("no_pruning")]),
@@ -983,7 +1002,8 @@ class EstimatorTest(tu.AdanetTestCase):
                      steps=None,
                      report_materializer=None,
                      train_input_fn=None,
-                     max_iterations=None):
+                     max_iterations=None,
+                     export_subnetworks=False):
     """Train entire estimator lifecycle using XOR dataset."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
@@ -1014,6 +1034,8 @@ class EstimatorTest(tu.AdanetTestCase):
         model_dir=self.test_subdirectory,
         config=run_config,
         max_iterations=max_iterations,
+        export_subnetwork_logits=export_subnetworks,
+        export_subnetwork_last_layer=export_subnetworks,
         **default_ensembler_kwargs)
 
     if not train_input_fn:
@@ -1052,6 +1074,13 @@ class EstimatorTest(tu.AdanetTestCase):
     export_saved_model_fn(
         export_dir_base=self.test_subdirectory,
         serving_input_receiver_fn=serving_input_fn)
+    if export_subnetworks:
+      saved_model = saved_model_utils.read_saved_model(
+          os.path.join(self.test_subdirectory,
+                       tf.io.gfile.listdir(self.test_subdirectory)[0]))
+      export_signature_def = saved_model.meta_graphs[0].signature_def
+      self.assertIn("subnetwork_logits", export_signature_def.keys())
+      self.assertIn("subnetwork_last_layer", export_signature_def.keys())
 
   @parameterized.named_parameters(
       {
@@ -1438,11 +1467,16 @@ class EstimatorMultiHeadTest(tu.AdanetTestCase):
           "builders": [MultiHeadBuilder()],
           "want_loss": 3.218,
       }, {
+          "testcase_name": "split_logits_with_export_subnetworks",
+          "builders": [MultiHeadBuilder(split_logits=True)],
+          "want_loss": 3.224,
+          "export_subnetworks": True,
+      }, {
           "testcase_name": "split_logits",
           "builders": [MultiHeadBuilder(split_logits=True)],
           "want_loss": 3.224,
       })
-  def test_lifecycle(self, builders, want_loss):
+  def test_lifecycle(self, builders, want_loss, export_subnetworks=False):
     """Train entire estimator lifecycle using XOR dataset."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
@@ -1470,7 +1504,9 @@ class EstimatorMultiHeadTest(tu.AdanetTestCase):
         max_iteration_steps=3,
         evaluator=Evaluator(input_fn=train_input_fn, steps=1),
         model_dir=self.test_subdirectory,
-        config=run_config)
+        config=run_config,
+        export_subnetwork_logits=export_subnetworks,
+        export_subnetwork_last_layer=export_subnetworks)
 
     # Train.
     estimator.train(input_fn=train_input_fn, max_steps=9)
@@ -1501,6 +1537,15 @@ class EstimatorMultiHeadTest(tu.AdanetTestCase):
     export_saved_model_fn(
         export_dir_base=self.test_subdirectory,
         serving_input_receiver_fn=serving_input_fn)
+    if export_subnetworks:
+      saved_model = saved_model_utils.read_saved_model(
+          os.path.join(self.test_subdirectory,
+                       tf.io.gfile.listdir(self.test_subdirectory)[0]))
+      export_signature_def = saved_model.meta_graphs[0].signature_def
+      self.assertIn("subnetwork_logits_head1", export_signature_def.keys())
+      self.assertIn("subnetwork_logits_head2", export_signature_def.keys())
+      self.assertIn("subnetwork_last_layer_head1", export_signature_def.keys())
+      self.assertIn("subnetwork_last_layer_head2", export_signature_def.keys())
 
 
 class EstimatorCallingModelFnDirectlyTest(tu.AdanetTestCase):

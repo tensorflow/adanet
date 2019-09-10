@@ -68,6 +68,9 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
     debug: See :class:`adanet.Estimator`.
     enable_ensemble_summaries: See :class:`adanet.Estimator`.
     enable_subnetwork_summaries: See :class:`adanet.Estimator`.
+    export_subnetwork_logits: Whether to include subnetwork logits in exports.
+    export_subnetwork_last_layer: Whether to include subnetwork last layer in
+      exports.
     **kwargs: Extra keyword args passed to the parent.
   """
 
@@ -93,6 +96,8 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
                debug=False,
                enable_ensemble_summaries=True,
                enable_subnetwork_summaries=True,
+               export_subnetwork_logits=False,
+               export_subnetwork_last_layer=True,
                **kwargs):
 
     if tf_compat.version_greater_or_equal("2.0.0"):
@@ -135,6 +140,8 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
         debug=debug,
         enable_ensemble_summaries=enable_ensemble_summaries,
         enable_subnetwork_summaries=enable_subnetwork_summaries,
+        export_subnetwork_logits=export_subnetwork_logits,
+        export_subnetwork_last_layer=export_subnetwork_last_layer,
         **kwargs)
 
   # Yields predictions on CPU even when use_tpu=True.

@@ -236,17 +236,29 @@ class _EnsembleBuilder(object):
         existing one. The values of the dict are the results of calling a metric
         function, namely a `(metric_tensor, update_op)` tuple.
     use_tpu: Whether AdaNet is running on TPU.
+    export_subnetwork_logits: Include subnetwork logits in exports.
+    export_subnetwork_last_layer: Include subnetwork last layer in exports.
 
   Returns:
     An `_EnsembleBuilder` instance.
   """
 
-  def __init__(self, head, metric_fn=None, use_tpu=False):
+  _SUBNETWORK_LOGITS_EXPORT_SIGNATURE = "subnetwork_logits"
+  _SUBNETWORK_LAST_LAYER_EXPORT_SIGNATURE = "subnetwork_last_layer"
+
+  def __init__(self,
+               head,
+               metric_fn=None,
+               use_tpu=False,
+               export_subnetwork_logits=False,
+               export_subnetwork_last_layer=False):
     _verify_metric_fn_args(metric_fn)
 
     self._head = head
     self._metric_fn = metric_fn
     self._use_tpu = use_tpu
+    self._export_subnetwork_logits = export_subnetwork_logits
+    self._export_subnetwork_last_layer = export_subnetwork_last_layer
 
   def build_ensemble_spec(self,
                           name,
@@ -359,6 +371,58 @@ class _EnsembleBuilder(object):
 
       predictions = estimator_spec.predictions
       export_outputs = estimator_spec.export_outputs
+
+      if self._export_subnetwork_logits and export_outputs and subnetwork_map:
+        first_subnetwork_logits = list(subnetwork_map.values())[0].logits
+        if isinstance(first_subnetwork_logits, dict):
+          for head_name in first_subnetwork_logits.keys():
+            subnetwork_logits = {
+                subnetwork_name: subnetwork.logits[head_name]
+                for subnetwork_name, subnetwork in subnetwork_map.items()
+            }
+            export_outputs.update({
+                "{}_{}".format(
+                    _EnsembleBuilder._SUBNETWORK_LOGITS_EXPORT_SIGNATURE,
+                    head_name):
+                    tf.estimator.export.PredictOutput(subnetwork_logits)
+            })
+        else:
+          subnetwork_logits = {
+              subnetwork_name: subnetwork.logits
+              for subnetwork_name, subnetwork in subnetwork_map.items()
+          }
+          export_outputs.update({
+              _EnsembleBuilder._SUBNETWORK_LOGITS_EXPORT_SIGNATURE:
+                  tf.estimator.export.PredictOutput(subnetwork_logits)
+          })
+
+      if (self._export_subnetwork_last_layer and export_outputs and
+          subnetwork_map and
+          list(subnetwork_map.values())[0].last_layer is not None):
+        first_subnetwork_last_layer = list(
+            subnetwork_map.values())[0].last_layer
+        if isinstance(first_subnetwork_last_layer, dict):
+          for head_name in first_subnetwork_last_layer.keys():
+            subnetwork_last_layer = {
+                subnetwork_name: subnetwork.last_layer[head_name]
+                for subnetwork_name, subnetwork in subnetwork_map.items()
+            }
+            export_outputs.update({
+                "{}_{}".format(
+                    _EnsembleBuilder._SUBNETWORK_LAST_LAYER_EXPORT_SIGNATURE,
+                    head_name):
+                    tf.estimator.export.PredictOutput(subnetwork_last_layer)
+            })
+        else:
+          subnetwork_last_layer = {
+              subnetwork_name: subnetwork.last_layer
+              for subnetwork_name, subnetwork in subnetwork_map.items()
+          }
+          export_outputs.update({
+              _EnsembleBuilder._SUBNETWORK_LAST_LAYER_EXPORT_SIGNATURE:
+                  tf.estimator.export.PredictOutput(subnetwork_last_layer)
+          })
+
       if ensemble.predictions and predictions:
         predictions.update(ensemble.predictions)
       if ensemble.predictions and export_outputs:
