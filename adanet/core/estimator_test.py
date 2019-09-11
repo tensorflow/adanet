@@ -3103,7 +3103,10 @@ class EstimatorTFLearnRunConfigTest(tu.AdanetTestCase):
 
   def test_train(self):
     try:
-      tf.contrib.learn.RunConfig(tf_random_seed=42)
+      run_config = tf.contrib.learn.RunConfig(tf_random_seed=42)
+      # Removed in TF 1.15 (nightly). See
+      # https://travis-ci.org/tensorflow/adanet/jobs/583471908
+      _ = run_config._session_creation_timeout_secs
     except AttributeError:
       self.skipTest("There is no tf.contrib in TF 2.0.")
 
