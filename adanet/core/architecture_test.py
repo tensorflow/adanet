@@ -72,8 +72,15 @@ class ArchitectureTest(parameterized.TestCase, tf.test.TestCase):
       arch.add_subnetwork(*subnetwork)
     self.assertEqual(want, arch.subnetworks_grouped_by_iteration)
 
-  def test_serialization_lifecycle(self):
+  def test_set_and_add_replay_index(self):
     arch = _Architecture("foo", "dummy_ensembler_name")
+    arch.set_replay_indices([1, 2, 3])
+    self.assertAllEqual([1, 2, 3], arch.replay_indices)
+    arch.add_replay_index(4)
+    self.assertAllEqual([1, 2, 3, 4], arch.replay_indices)
+
+  def test_serialization_lifecycle(self):
+    arch = _Architecture("foo", "dummy_ensembler_name", replay_indices=[1, 2])
     arch.add_subnetwork(0, "linear")
     arch.add_subnetwork(0, "dnn")
     arch.add_subnetwork(1, "dnn")
@@ -85,10 +92,10 @@ class ArchitectureTest(parameterized.TestCase, tf.test.TestCase):
     serialized = arch.serialize(global_step)
     self.assertEqual(
         '{"ensemble_candidate_name": "foo", "ensembler_name": '
-        '"dummy_ensembler_name", "global_step": 100, "subnetworks": '
-        '[{"builder_name": "linear", "iteration_number": 0}, {"builder_name": '
-        '"dnn", "iteration_number": 0}, {"builder_name": "dnn", '
-        '"iteration_number": 1}]}', serialized)
+        '"dummy_ensembler_name", "global_step": 100, "replay_indices": [1, 2], '
+        '"subnetworks": [{"builder_name": "linear", "iteration_number": 0}, '
+        '{"builder_name": "dnn", "iteration_number": 0},'
+        ' {"builder_name": "dnn", "iteration_number": 1}]}', serialized)
     deserialized_arch = _Architecture.deserialize(serialized)
     self.assertEqual(arch.ensemble_candidate_name,
                      deserialized_arch.ensemble_candidate_name)

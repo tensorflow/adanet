@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import collections
 import contextlib
+import copy
 import functools
 import inspect
 
@@ -270,6 +271,7 @@ class _EnsembleBuilder(object):
                           mode,
                           iteration_number,
                           labels=None,
+                          my_ensemble_index=None,
                           previous_ensemble_spec=None):
     """Builds an `_EnsembleSpec` with the given `adanet.ensemble.Candidate`.
 
@@ -286,6 +288,8 @@ class _EnsembleBuilder(object):
       iteration_number: Integer current iteration number.
       labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
         (for multi-head).
+      my_ensemble_index: An integer holding the index of the ensemble in the
+        candidates list of AdaNet.
       previous_ensemble_spec: Link the rest of the `_EnsembleSpec` from
         iteration t-1. Used for creating the subnetwork train_op.
 
@@ -304,7 +308,15 @@ class _EnsembleBuilder(object):
       step_tensor = tf.convert_to_tensor(value=step)
       with summary.current_scope():
         summary.scalar("iteration_step/adanet/iteration_step", step_tensor)
-      architecture = _Architecture(candidate.name, ensembler.name)
+      replay_indices = []
+      if previous_ensemble_spec:
+        replay_indices = copy.copy(
+            previous_ensemble_spec.architecture.replay_indices)
+      if my_ensemble_index is not None:
+        replay_indices.append(my_ensemble_index)
+
+      architecture = _Architecture(candidate.name, ensembler.name,
+                                   replay_indices=replay_indices)
       previous_subnetworks = []
       subnetwork_builders = []
       previous_ensemble = None

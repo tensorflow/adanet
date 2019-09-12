@@ -71,6 +71,9 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
     export_subnetwork_logits: Whether to include subnetwork logits in exports.
     export_subnetwork_last_layer: Whether to include subnetwork last layer in
       exports.
+    global_step_combiner_fn: See :class:`adanet.Estimator`.
+    max_iterations: See :class:`adanet.Estimator`.
+    replay_config: See :class:`adanet.Estimator`.
     **kwargs: Extra keyword args passed to the parent.
   """
 
@@ -98,6 +101,9 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
                enable_subnetwork_summaries=True,
                export_subnetwork_logits=False,
                export_subnetwork_last_layer=True,
+               global_step_combiner_fn=tf.math.reduce_mean,
+               max_iterations=None,
+               replay_config=None,
                **kwargs):
 
     if tf_compat.version_greater_or_equal("2.0.0"):
@@ -142,6 +148,9 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
         enable_subnetwork_summaries=enable_subnetwork_summaries,
         export_subnetwork_logits=export_subnetwork_logits,
         export_subnetwork_last_layer=export_subnetwork_last_layer,
+        global_step_combiner_fn=global_step_combiner_fn,
+        max_iterations=max_iterations,
+        replay_config=replay_config,
         **kwargs)
 
   # Yields predictions on CPU even when use_tpu=True.

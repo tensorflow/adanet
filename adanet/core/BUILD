@@ -52,6 +52,7 @@ py_test(
         ":evaluator",
         ":report_materializer",
         ":testing_utils",
+        "//adanet/replay",
         "//adanet/subnetwork",
         "@absl_py//absl/testing:parameterized",
     ],
@@ -148,6 +149,7 @@ py_test(
     name = "iteration_test",
     srcs = ["iteration_test.py"],
     deps = [
+        ":architecture",
         ":candidate",
         ":ensemble_builder",
         ":iteration",
@@ -194,6 +196,7 @@ py_test(
     srcs = ["ensemble_builder_test.py"],
     shard_count = 10,
     deps = [
+        ":architecture",
         ":ensemble_builder",
         ":summary",
         ":testing_utils",

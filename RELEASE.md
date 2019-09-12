@@ -15,6 +15,7 @@ limitations under the License.
 
 # Current version (0.8.0.dev)
  * Under development.
+ * Adding AdaNet replay. The ability to rerun training without having to determine the best candidate for the iteration. A list of best indices from the previous run is provided and honored by AdaNet.
  * TODO: Add official Keras Model support, including Keras layers, Sequential, and Model subclasses for defining subnetworks.
  * Introduced `adanet.ensemble.MeanEnsembler` with a basic implementation for taking the mean of logits of subnetworks. This also supports including the mean of last_layer (helpful if subnetworks have same configurations) in the `predictions` and `export_outputs` of the EstimatorSpec.
  * **BREAKING CHANGE**: AdaNet now supports arbitrary metrics when choosing the best ensemble. To achieve this, the interface of `adanet.Evaluator` is changing. The `Evaluator.evaluate_adanet_losses(sess, adanet_losses)` function is being replaced with `Evaluator.evaluate(sess, ensemble_metrics)`. The `ensemble_metrics` parameter contains all computed metrics for each candidate ensemble as well as the `adanet_loss`. Code which overrides `evaluate_adanet_losses` must migrate over to use the new `evaluate` method (we suspect that such cases are very rare).

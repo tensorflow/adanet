@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import collections
 import contextlib
+import copy
 import json
 import os
 
@@ -553,7 +554,7 @@ class _IterationBuilder(object):
         builder_mode = mode
 
     features, labels = self._check_numerics(features, labels)
-
+    replay_indices_for_all = {}
     training = mode == tf.estimator.ModeKeys.TRAIN
     skip_summaries = mode == tf.estimator.ModeKeys.PREDICT or rebuilding
     with tf_compat.v1.variable_scope("iteration_{}".format(iteration_number)):
@@ -565,6 +566,8 @@ class _IterationBuilder(object):
 
       if previous_ensemble_spec:
         previous_ensemble = previous_ensemble_spec.ensemble
+        replay_indices_for_all[len(candidates)] = copy.copy(
+            previous_ensemble_spec.architecture.replay_indices)
         # Include previous best subnetwork as a candidate so that its
         # predictions are returned until a new candidate outperforms.
         seen_builder_names = {previous_ensemble_spec.name: True}
@@ -680,12 +683,15 @@ class _IterationBuilder(object):
               mode=builder_mode,
               iteration_number=iteration_number,
               labels=labels,
+              my_ensemble_index=len(candidates),
               previous_ensemble_spec=previous_ensemble_spec)
           # TODO: Eliminate need for candidates.
           # TODO: Don't track moving average of loss when rebuilding
           # previous ensemble.
           candidate = self._candidate_builder.build_candidate(
               ensemble_spec=ensemble_spec, training=training, summary=summary)
+          replay_indices_for_all[len(candidates)] = copy.copy(
+              ensemble_spec.architecture.replay_indices)
           candidates.append(candidate)
           # TODO: Move adanet_loss from subnetwork report to a new
           # ensemble report, since the adanet_loss is associated with an
@@ -725,7 +731,8 @@ class _IterationBuilder(object):
         if best_loss is not None:
           summary.scalar("loss", best_loss)
       iteration_metrics = _IterationMetrics(iteration_number, candidates,
-                                            subnetwork_specs)
+                                            subnetwork_specs,
+                                            replay_indices_for_all)
       if self._use_tpu:
         estimator_spec = tf_compat.v1.estimator.tpu.TPUEstimatorSpec(
             mode=mode,

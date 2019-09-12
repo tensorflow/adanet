@@ -23,6 +23,7 @@ import functools
 
 from absl.testing import parameterized
 from adanet import tf_compat
+from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _Candidate
 from adanet.core.ensemble_builder import _EnsembleSpec
 from adanet.core.ensemble_builder import _SubnetworkSpec
@@ -252,6 +253,7 @@ class _FakeEnsembleBuilder(object):
                           iteration_number,
                           labels=None,
                           previous_ensemble_spec=None,
+                          my_ensemble_index=None,
                           params=None):
     del ensembler
     del subnetwork_specs
@@ -261,6 +263,7 @@ class _FakeEnsembleBuilder(object):
     del labels
     del iteration_number
     del params
+    del my_ensemble_index
 
     num_subnetworks = 0
     if previous_ensemble_spec:
@@ -861,12 +864,14 @@ class _HeadEnsembleBuilder(object):
                           iteration_number,
                           labels=None,
                           previous_ensemble_spec=None,
+                          my_ensemble_index=None,
                           params=None):
     del ensembler
     del subnetwork_specs
     del summary
     del iteration_number
     del previous_ensemble_spec
+    del my_ensemble_index
     del params
 
     logits = [[.5]]
@@ -876,7 +881,7 @@ class _HeadEnsembleBuilder(object):
     return _EnsembleSpec(
         name=name,
         ensemble=None,
-        architecture=None,
+        architecture=_Architecture("foo", "bar"),
         subnetwork_builders=candidate.subnetwork_builders,
         predictions=estimator_spec.predictions,
         step=tf.Variable(0),

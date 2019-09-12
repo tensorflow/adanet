@@ -358,6 +358,9 @@ class AutoEnsembleEstimator(Estimator):
     debug: See :class:`adanet.Estimator`.
     enable_ensemble_summaries: See :class:`adanet.Estimator`.
     enable_subnetwork_summaries: See :class:`adanet.Estimator`.
+    global_step_combiner_fn: See :class:`adanet.Estimator`.
+    max_iterations: See :class:`adanet.Estimator`.
+    replay_config: See :class:`adanet.Estimator`.
     **kwargs: Extra keyword args passed to the parent.
 
   Returns:
@@ -387,6 +390,9 @@ class AutoEnsembleEstimator(Estimator):
                debug=False,
                enable_ensemble_summaries=True,
                enable_subnetwork_summaries=True,
+               global_step_combiner_fn=tf.math.reduce_mean,
+               max_iterations=None,
+               replay_config=None,
                **kwargs):
     subnetwork_generator = _GeneratorFromCandidatePool(candidate_pool,
                                                        logits_fn, last_layer_fn)
@@ -406,4 +412,7 @@ class AutoEnsembleEstimator(Estimator):
         debug=debug,
         enable_ensemble_summaries=enable_ensemble_summaries,
         enable_subnetwork_summaries=enable_subnetwork_summaries,
+        global_step_combiner_fn=global_step_combiner_fn,
+        max_iterations=max_iterations,
+        replay_config=replay_config,
         **kwargs)

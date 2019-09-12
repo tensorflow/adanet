@@ -313,6 +313,15 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
           "want_ensemble_trainable_vars": 2,
           "want_subnetwork_trainable_vars": 4,
           "export_subnetworks": True,
+      }, {
+          "testcase_name": "replay_no_prev",
+          "adanet_beta": .1,
+          "want_logits": [[.006], [.082]],
+          "want_loss": 1.349,
+          "want_adanet_loss": 1.360,
+          "want_ensemble_trainable_vars": 1,
+          "my_ensemble_index": 2,
+          "want_replay_indices": [2],
       })
   @test_util.run_in_graph_and_eager_modes
   def test_build_ensemble_spec(
@@ -334,6 +343,8 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
       multi_head=False,
       want_subnetwork_trainable_vars=2,
       ensembler_class=ComplexityRegularizedEnsembler,
+      my_ensemble_index=None,
+      want_replay_indices=None,
       want_predictions=None,
       export_subnetworks=False):
     seed = 64
@@ -453,7 +464,12 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
           features=features,
           iteration_number=1,
           labels=labels,
+          my_ensemble_index=my_ensemble_index,
           mode=mode)
+
+      if want_replay_indices:
+        self.assertAllEqual(want_replay_indices,
+                            ensemble_spec.architecture.replay_indices)
 
       with tf_compat.v1.Session(graph=g).as_default() as sess:
         sess.run(tf_compat.v1.global_variables_initializer())

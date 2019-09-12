@@ -25,6 +25,7 @@ import time
 
 from absl import logging
 from absl.testing import parameterized
+from adanet import replay
 from adanet import tf_compat
 from adanet.core import testing_utils as tu
 from adanet.core.estimator import Estimator
@@ -3139,6 +3140,86 @@ class EstimatorTFLearnRunConfigTest(tu.AdanetTestCase):
       # Revert TF_CONFIG environment variable in order to not break other tests.
       del os.environ["TF_CONFIG"]
 
+
+
+
+class EstimatorReplayTest(tu.AdanetTestCase):
+
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "no_evaluator",
+          "evaluator": None,
+          "replay_evaluator": None,
+          "want_architecture": " dnn3 | dnn3 | dnn ",
+      }, {
+          "testcase_name":
+              "evaluator",
+          "evaluator":
+              Evaluator(
+                  input_fn=tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS),
+                  steps=1),
+          "replay_evaluator":
+              Evaluator(
+                  input_fn=tu.dummy_input_fn([[0., 0.], [0., 0], [0., 0.],
+                                              [0., 0.]], [[0], [0], [0], [0]]),
+                  steps=1),
+          "want_architecture":
+              " dnn3 | dnn3 | dnn ",
+      })
+  def test_replay(self, evaluator, replay_evaluator, want_architecture):
+    """Train entire estimator lifecycle using Replay."""
+
+    original_model_dir = os.path.join(self.test_subdirectory, "original")
+    run_config = tf.estimator.RunConfig(
+        tf_random_seed=42, model_dir=original_model_dir)
+    subnetwork_generator = SimpleGenerator([
+        _DNNBuilder("dnn"),
+        _DNNBuilder("dnn2", layer_size=3),
+        _DNNBuilder("dnn3", layer_size=5),
+    ])
+    estimator = Estimator(
+        head=tu.head(),
+        subnetwork_generator=subnetwork_generator,
+        max_iteration_steps=10,
+        evaluator=evaluator,
+        config=run_config)
+
+    train_input_fn = tu.dummy_input_fn(XOR_FEATURES, XOR_LABELS)
+
+    # Train for three iterations.
+    estimator.train(input_fn=train_input_fn, max_steps=30)
+
+    # Evaluate.
+    eval_results = estimator.evaluate(input_fn=train_input_fn, steps=1)
+    self.assertIn(want_architecture,
+                  str(eval_results["architecture/adanet/ensembles"]))
+
+    replay_run_config = tf.estimator.RunConfig(
+        tf_random_seed=42,
+        model_dir=os.path.join(self.test_subdirectory, "replayed"))
+
+    # Use different features and labels to represent a shift in the data
+    # distribution.
+    different_features = [[0., 0.], [0., 0], [0., 0.], [0., 0.]]
+    different_labels = [[0], [0], [0], [0]]
+
+    replay_estimator = Estimator(
+        head=tu.head(),
+        subnetwork_generator=subnetwork_generator,
+        max_iteration_steps=10,
+        evaluator=replay_evaluator,
+        config=replay_run_config,
+        replay_config=replay.Config(best_ensemble_indices=[2, 3, 1]))
+
+    train_input_fn = tu.dummy_input_fn(different_features, different_labels)
+
+    # Train for three iterations.
+    replay_estimator.train(input_fn=train_input_fn, max_steps=30)
+
+    # Evaluate.
+    eval_results = replay_estimator.evaluate(input_fn=train_input_fn, steps=1)
+    self.assertIn(want_architecture,
+                  str(eval_results["architecture/adanet/ensembles"]))
 
 
 if __name__ == "__main__":

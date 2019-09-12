@@ -411,6 +411,13 @@ class Estimator(tf.estimator.Estimator):
     export_subnetwork_logits: Whether to include subnetwork logits in exports.
     export_subnetwork_last_layer: Whether to include subnetwork last layer in
       exports.
+    replay_config: Optional :class:`adanet.replay.Config` to specify a previous
+      AdaNet run to replay. Given the exact same search space but potentially
+      different training data, the `replay_config` causes the estimator to
+      reconstruct the previously trained model without performing a search.
+      NOTE: The previous run must have executed with identical hyperparameters
+      as the new run in order to be replayable. The only supported difference is
+      that the underlying data can change.
     **kwargs: Extra keyword args passed to the parent.
 
   Returns:
@@ -455,6 +462,7 @@ class Estimator(tf.estimator.Estimator):
                max_iterations=None,
                export_subnetwork_logits=False,
                export_subnetwork_last_layer=True,
+               replay_config=None,
                **kwargs):
     if subnetwork_generator is None:
       raise ValueError("subnetwork_generator can't be None.")
@@ -487,6 +495,7 @@ class Estimator(tf.estimator.Estimator):
     self._worker_wait_secs = worker_wait_secs
     self._worker_wait_timeout_secs = worker_wait_timeout_secs
     self._max_iterations = max_iterations
+    self._replay_config = replay_config
 
     # Added for backwards compatibility.
     default_ensembler_args = [
@@ -912,6 +921,15 @@ class Estimator(tf.estimator.Estimator):
   def _compute_best_ensemble_index(self, checkpoint_path):
     """Runs the Evaluator to obtain the best ensemble index among candidates."""
 
+    # AdaNet Replay.
+    if self._replay_config:
+      iteration_number = (
+          self._checkpoint_path_iteration_number(checkpoint_path)
+          if checkpoint_path else self._latest_checkpoint_iteration_number())
+      best_index = self._replay_config.get_best_ensemble_index(iteration_number)
+      if best_index is not None:
+        return best_index
+
     if self._evaluator:
       return self._execute_candidate_evaluation_phase(
           self._evaluator.input_fn,
@@ -1143,6 +1161,12 @@ class Estimator(tf.estimator.Estimator):
     Returns:
       Index of the best ensemble in the iteration's list of `_Candidates`.
     """
+    # AdaNet Replay.
+    if self._replay_config:
+      best_index = self._replay_config.get_best_ensemble_index(
+          current_iteration.number)
+      if best_index is not None:
+        return best_index
 
     # Skip the evaluation phase when there is only one candidate subnetwork.
     if len(current_iteration.candidates) == 1:
@@ -1538,6 +1562,8 @@ class Estimator(tf.estimator.Estimator):
       assert len(current_iteration.candidates) == max_candidates
       previous_ensemble_spec = current_iteration.candidates[-1].ensemble_spec
       previous_ensemble = previous_ensemble_spec.ensemble
+    previous_ensemble_spec.architecture.set_replay_indices(
+        architecture.replay_indices)
     return previous_ensemble_spec
 
   def _collate_subnetwork_reports(self, iteration_number):

@@ -49,6 +49,7 @@ class AdaNetTest(tf.test.TestCase):
     self.assertIsNotNone(adanet.Estimator)
     self.assertIsNotNone(adanet.Evaluator)
     self.assertIsNotNone(adanet.MixtureWeightType)
+    self.assertIsNotNone(adanet.replay.Config)
     self.assertIsNotNone(adanet.ReportMaterializer)
     self.assertIsNotNone(adanet.Subnetwork)
     self.assertIsNotNone(adanet.subnetwork.Builder)

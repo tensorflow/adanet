@@ -20,6 +20,7 @@ from __future__ import print_function
 
 from adanet import distributed
 from adanet import ensemble
+from adanet import replay
 from adanet import subnetwork
 from adanet.autoensemble import AutoEnsembleEstimator
 from adanet.autoensemble import AutoEnsembleSubestimator
@@ -43,6 +44,7 @@ __all__ = [
     "Ensemble",
     "Estimator",
     "Evaluator",
+    "replay",
     "ReportMaterializer",
     "subnetwork",
     "Summary",

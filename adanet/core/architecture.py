@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import copy
 import json
 
 
@@ -28,15 +29,20 @@ class _Architecture(object):
   `adanet.subnetwork.Builder` instances that compose the ensemble, the
   `adanet.ensemble.Ensembler` that constructed it, as well as the sequence
   of states in the search space that led to the construction of this model.
+  In addition, it stores `replay_indices` A list of indices (an index per
+  boosting iteration); Holding the index of the ensemble in the candidate list
+  throughout the run.
 
   It is serializable and deserializable for persistent storage.
   """
 
-  def __init__(self, ensemble_candidate_name, ensembler_name, global_step=None):
+  def __init__(self, ensemble_candidate_name, ensembler_name, global_step=None,
+               replay_indices=None):
     self._ensemble_candidate_name = ensemble_candidate_name
     self._ensembler_name = ensembler_name
     self._global_step = global_step
     self._subnets = []
+    self._replay_indices = replay_indices or []
 
   @property
   def ensemble_candidate_name(self):
@@ -77,6 +83,17 @@ class _Architecture(object):
     return tuple(self._subnets)
 
   @property
+  def replay_indices(self):
+    """The list of replay indices.
+
+    Returns:
+      A list of integers (an integer per boosting iteration); Holding the index
+      of the ensemble in the candidate list throughout the run
+    """
+
+    return self._replay_indices
+
+  @property
   def subnetworks_grouped_by_iteration(self):
     """The component subnetworks grouped by iteration number.
 
@@ -105,6 +122,13 @@ class _Architecture(object):
     """
     self._subnets.append((iteration_number, builder_name))
 
+  # TODO: Remove setters and getters.
+  def add_replay_index(self, index):
+    self._replay_indices.append(index)
+
+  def set_replay_indices(self, indices):
+    self._replay_indices = copy.copy(indices)
+
   def serialize(self, global_step):
     """Returns a string serialization of this object."""
 
@@ -115,6 +139,7 @@ class _Architecture(object):
         "global_step": global_step,
         "ensembler_name": self.ensembler_name,
         "subnetworks": [],
+        "replay_indices": self._replay_indices
     }
     for iteration_number, builder_name in self._subnets:
       subnetwork_arch = {
@@ -139,7 +164,8 @@ class _Architecture(object):
     ensemble_arch = json.loads(serialized_architecture)
     architecture = _Architecture(ensemble_arch["ensemble_candidate_name"],
                                  ensemble_arch["ensembler_name"],
-                                 ensemble_arch["global_step"])
+                                 ensemble_arch["global_step"],
+                                 ensemble_arch["replay_indices"])
     for subnet in ensemble_arch["subnetworks"]:
       architecture.add_subnetwork(subnet["iteration_number"],
                                   subnet["builder_name"])

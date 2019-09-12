@@ -17,6 +17,10 @@ py_library(
     deps = [
         "//adanet/autoensemble",
         "//adanet/core",
+        "//adanet/distributed",
+        "//adanet/ensemble",
+        "//adanet/replay",
+        "//adanet/subnetwork",
     ],
 )
 

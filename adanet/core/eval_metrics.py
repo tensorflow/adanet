@@ -291,10 +291,15 @@ class _EnsembleMetrics(_SubnetworkMetrics):
 class _IterationMetrics(object):
   """A object which creates evaluation metrics for an Iteration."""
 
-  def __init__(self, iteration_number, candidates, subnetwork_specs):
+  def __init__(self,
+               iteration_number,
+               candidates,
+               subnetwork_specs,
+               replay_indices_for_all=None):
     self._iteration_number = iteration_number
     self._candidates = candidates
     self._subnetwork_specs = subnetwork_specs
+    self._replay_indices_for_all = replay_indices_for_all
 
     self._candidates_eval_metrics_store = self._build_eval_metrics_store(
         [candidate.ensemble_spec for candidate in self._candidates])
@@ -343,6 +348,26 @@ class _IterationMetrics(object):
     args = candidate_args + subnetwork_args
     args.append(tf.reshape(best_candidate_index, [1]))
 
+    def _replay_eval_metrics(best_candidate_idx, eval_metric_ops):
+      """Saves replay indices as eval metrics."""
+      # _replay_indices_for_all is a dict: {candidate: [list of replay_indices]}
+      # We are finding the max length replay list.
+      pad_value = max(
+          [len(v) for _, v in self._replay_indices_for_all.items()])
+
+      # Creating a matrix of (#candidate) times (max length replay indices).
+      # Entry i,j is the jth replay index of the ith candidate (ensemble).
+      replay_indices_as_tensor = tf.constant([
+          value + [-1] * (pad_value - len(value))
+          for _, value in self._replay_indices_for_all.items()
+      ])
+
+      # Passing the right entries (entries of the best candidate).
+      for iteration in range(replay_indices_as_tensor.get_shape()[1].value):
+        index_t = replay_indices_as_tensor[best_candidate_idx, iteration]
+        eval_metric_ops["best_ensemble_index_{}".format(iteration)] = (index_t,
+                                                                       index_t)
+
     def _best_eval_metrics_fn(*args):
       """Returns the best eval metrics."""
 
@@ -355,6 +380,7 @@ class _IterationMetrics(object):
         else:
           idx, idx_update_op = tf_compat.v1.metrics.mean(args.pop())
 
+        idx = tf.cast(idx, tf.int32)
         metric_fns = self._candidates_eval_metrics_store.metric_fns
         metric_fn_args = self._candidates_eval_metrics_store.pack_args(
             args[:len(candidate_args)])
@@ -376,11 +402,11 @@ class _IterationMetrics(object):
             continue
           if tf.executing_eagerly():
             values = [m.result() for m in metric_ops]
-            best_value = tf.stack(values)[tf.cast(idx, tf.int32)]
+            best_value = tf.stack(values)[idx]
             eval_metric_ops[metric_name] = (best_value, None)
             continue
           values, ops = list(six.moves.zip(*metric_ops))
-          best_value = tf.stack(values)[tf.cast(idx, tf.int32)]
+          best_value = tf.stack(values)[idx]
           # All tensors in this function have been outfed from the TPU, so we
           # must update them manually, otherwise the TPU will hang indefinitely
           # for the value of idx to update.
@@ -394,6 +420,9 @@ class _IterationMetrics(object):
           eval_metric_ops[metric_name] = (best_value, all_ops)
         iteration_number = tf.constant(self._iteration_number)
         eval_metric_ops["iteration"] = (iteration_number, iteration_number)
+
+        if self._replay_indices_for_all:
+          _replay_eval_metrics(idx, eval_metric_ops)
 
         # tf.estimator.Estimator does not allow a "loss" key to be present in
         # its eval_metrics.
