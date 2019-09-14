@@ -1188,9 +1188,13 @@ class Estimator(tf.estimator.Estimator):
     for hook in input_hooks:
       hook.begin()
     with tf_compat.v1.Session() as sess:
-      init = tf.group(tf_compat.v1.global_variables_initializer(),
-                      tf_compat.v1.local_variables_initializer(),
-                      tf_compat.v1.tables_initializer())
+      init = tf.group(
+          tf_compat.v1.global_variables_initializer(),
+          tf_compat.v1.local_variables_initializer(),
+          tf_compat.v1.tables_initializer(),
+          current_iteration.estimator_spec.scaffold.local_init_op if isinstance(
+              current_iteration.estimator_spec,
+              tf.estimator.EstimatorSpec) else tf.no_op())
       sess.run(init)
       coord = tf.train.Coordinator()
       for hook in input_hooks:
@@ -1264,9 +1268,13 @@ class Estimator(tf.estimator.Estimator):
     for hook in input_hooks:
       hook.begin()
     with tf_compat.v1.Session() as sess:
-      init = tf.group(tf_compat.v1.global_variables_initializer(),
-                      tf_compat.v1.local_variables_initializer(),
-                      tf_compat.v1.tables_initializer())
+      init = tf.group(
+          tf_compat.v1.global_variables_initializer(),
+          tf_compat.v1.local_variables_initializer(),
+          tf_compat.v1.tables_initializer(),
+          current_iteration.estimator_spec.scaffold.local_init_op if isinstance(
+              current_iteration.estimator_spec,
+              tf.estimator.EstimatorSpec) else tf.no_op())
       sess.run(init)
       coord = tf.train.Coordinator()
       for hook in input_hooks:
@@ -1658,7 +1666,11 @@ class Estimator(tf.estimator.Estimator):
         training_hooks=training_hooks,
         evaluation_hooks=self._evaluation_hooks(current_iteration, training,
                                                 evaluation_name),
-        scaffold=tf_compat.v1.train.Scaffold(summary_op=tf.constant("")),
+        scaffold=tf_compat.v1.train.Scaffold(
+            summary_op=tf.constant(""),
+            local_init_op=current_iteration.estimator_spec.scaffold
+            .local_init_op if isinstance(current_iteration.estimator_spec,
+                                         tf.estimator.EstimatorSpec) else None),
         export_outputs=iteration_estimator_spec.export_outputs)
 
   def _call_generate_candidates(self, previous_ensemble, iteration_number,

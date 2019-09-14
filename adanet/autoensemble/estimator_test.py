@@ -34,6 +34,44 @@ from tensorflow.python.estimator.export import export
 tf.logging.set_verbosity(tf.logging.INFO)
 
 
+# Ensures "local_init_op" is called.
+class CheckLocalInitOpEstimator(tf.estimator.Estimator):
+
+  def __init__(self):
+    super(CheckLocalInitOpEstimator,
+          self).__init__(model_fn=self._get_model_fn())
+
+  def _get_model_fn(self):
+
+    def _model_fn(features, labels, mode, params):
+
+      del labels
+      del params
+
+      flag = tf.Variable(initial_value=False, collections=[])
+      set_flag = tf.assign(flag, True)
+      test_flag = tf.debugging.Assert(tf.equal(flag, True), [flag])
+
+      scaffold = tf.train.Scaffold(
+          local_init_op=tf.group(tf.train.Scaffold.default_local_init_op(),
+                                 set_flag))
+
+      # Note: Not consuming the feature stales the test input_fn.
+      feature = next(iter(features.values()))
+      with tf.control_dependencies([feature, test_flag]):
+        batch_size = tf.shape(feature)[0]
+        predictions = tf.zeros([batch_size, 1])
+
+      return tf.estimator.EstimatorSpec(
+          mode,
+          loss=tf.constant(-1.0),
+          train_op=test_flag,
+          scaffold=scaffold,
+          predictions=predictions)
+
+    return _model_fn
+
+
 class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
@@ -168,7 +206,21 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
           # change to the TensorFlow graph.
           "want_loss":
               0.3,
-      })
+      },
+      {
+          "testcase_name":
+              "check_local_init_op",
+          "max_train_steps":
+              10,
+          "candidate_pool":
+              lambda head, feature_columns, optimizer: {
+                  "expect_local_init_op":
+                      AutoEnsembleSubestimator(CheckLocalInitOpEstimator()),
+              },
+          "want_loss":
+              1.0,
+      },
+  )
   # pylint: enable=g-long-lambda
   def test_auto_ensemble_estimator_lifecycle(self,
                                              candidate_pool,

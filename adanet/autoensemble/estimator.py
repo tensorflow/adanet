@@ -114,11 +114,16 @@ class _BuilderFromSubestimator(Builder):
       if self._last_layer_fn:
         last_layer = self._last_layer_fn(estimator_spec=estimator_spec)
 
+      if estimator_spec.scaffold and estimator_spec.scaffold.local_init_op:
+        local_init_op = estimator_spec.scaffold.local_init_op
+      else:
+        local_init_op = None
+
       train_op = TrainOpSpec(
           estimator_spec.train_op,
           chief_hooks=estimator_spec.training_chief_hooks,
           hooks=estimator_spec.training_hooks)
-    return logits, last_layer, train_op
+    return logits, last_layer, train_op, local_init_op
 
   def build_subnetwork(self, features, labels, logits_dimension, training,
                        iteration_step, summary, previous_ensemble):
@@ -130,6 +135,7 @@ class _BuilderFromSubestimator(Builder):
     # Call in template to ensure that variables are created once and reused.
     call_model_fn_template = tf.make_template("model_fn", self._call_model_fn)
     subestimator_features, subestimator_labels = features, labels
+    local_init_ops = []
     if training and self._subestimator.train_input_fn:
       # TODO: Consider tensorflow_estimator/python/estimator/util.py.
       inputs = self._subestimator.train_input_fn()
@@ -140,11 +146,16 @@ class _BuilderFromSubestimator(Builder):
         subestimator_features, subestimator_labels = inputs
 
       # Construct subnetwork graph first because of dependencies on scope.
-      _, _, bagging_train_op_spec = call_model_fn_template(
+      _, _, bagging_train_op_spec, sub_local_init_op = call_model_fn_template(
           subestimator_features, subestimator_labels, mode, summary)
       # Graph for ensemble learning gets model_fn_1 for scope.
-      logits, last_layer, _ = call_model_fn_template(features, labels, mode,
-                                                     summary)
+      logits, last_layer, _, ensemble_local_init_op = call_model_fn_template(
+          features, labels, mode, summary)
+
+      if sub_local_init_op:
+        local_init_ops.append(sub_local_init_op)
+      if ensemble_local_init_op:
+        local_init_ops.append(ensemble_local_init_op)
 
       # Run train op in a hook so that exceptions can be intercepted by the
       # AdaNet framework instead of the Estimator's monitored training session.
@@ -155,8 +166,10 @@ class _BuilderFromSubestimator(Builder):
           chief_hooks=bagging_train_op_spec.chief_hooks,
           hooks=hooks)
     else:
-      logits, last_layer, train_op_spec = call_model_fn_template(
+      logits, last_layer, train_op_spec, local_init_op = call_model_fn_template(
           features, labels, mode, summary)
+      if local_init_op:
+        local_init_ops.append(local_init_op)
 
     # TODO: Replace with variance complexity measure.
     complexity = tf.constant(0.)
@@ -164,7 +177,8 @@ class _BuilderFromSubestimator(Builder):
         logits=logits,
         last_layer=last_layer,
         shared={"train_op": train_op_spec},
-        complexity=complexity)
+        complexity=complexity,
+        local_init_ops=local_init_ops)
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):

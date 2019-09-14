@@ -60,9 +60,10 @@ class TrainOpSpec(
 
 
 class Subnetwork(
-    collections.namedtuple(
-        "Subnetwork",
-        ["last_layer", "logits", "complexity", "persisted_tensors", "shared"])):
+    collections.namedtuple("Subnetwork", [
+        "last_layer", "logits", "complexity", "persisted_tensors", "shared",
+        "local_init_ops"
+    ])):
   # pyformat: disable
   """An AdaNet subnetwork.
 
@@ -102,6 +103,8 @@ class Subnetwork(
       :class:`adanet.subnetwork.Subnetwork` instances.
     shared: Optional Python object(s), primitive(s), or function(s) to share
       with subnetworks within the same iteration or in future iterations.
+    local_init_ops: Iterable of :class:`tf.Operation` objects to run to
+      initialize local variables.
 
   Returns:
     A validated :class:`adanet.subnetwork.Subnetwork` object.
@@ -125,7 +128,8 @@ class Subnetwork(
               logits,
               complexity,
               persisted_tensors=None,
-              shared=None):
+              shared=None,
+              local_init_ops=None):
     if last_layer is None:
       raise ValueError("last_layer not provided")
     if logits is None:
@@ -140,13 +144,15 @@ class Subnetwork(
       if not isinstance(persisted_tensors, dict):
         raise ValueError("persisted_tensors must be a dict")
       _validate_nested_persisted_tensors(persisted_tensors)
+    local_init_ops = tuple(local_init_ops) if local_init_ops else ()
     return super(Subnetwork, cls).__new__(
         cls,
         last_layer=last_layer,
         logits=logits,
         complexity=complexity,
         persisted_tensors=persisted_tensors,
-        shared=shared)
+        shared=shared,
+        local_init_ops=local_init_ops)
 
 
 class Builder(object):
