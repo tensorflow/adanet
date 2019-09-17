@@ -283,13 +283,23 @@ class _TrainingHookRunnerHook(tf_compat.SessionRunHook):
 
   def before_run(self, run_context):
     if self._train_manager.should_train(self._spec):
+      # Use a tmp run context to intercept if the hook requests stop.
+      tmp_run_context = tf_compat.v1.train.SessionRunContext(
+          run_context.original_args, run_context.session)
       with self._session_run_context():
-        return self._hook.before_run(run_context)
+        return self._hook.before_run(tmp_run_context)
+      if tmp_run_context.stop_requested:
+        self._train_manager.request_stop(self._spec, "Stop requested.")
 
   def after_run(self, run_context, run_values):
     if self._train_manager.should_train(self._spec):
+      # Use a tmp run context to intercept if the hook requests stop.
+      tmp_run_context = tf_compat.v1.train.SessionRunContext(
+          run_context.original_args, run_context.session)
       with self._session_run_context():
-        self._hook.after_run(run_context, run_values)
+        self._hook.after_run(tmp_run_context, run_values)
+      if tmp_run_context.stop_requested:
+        self._train_manager.request_stop(self._spec, "Stop requested.")
 
   def end(self, session):
     with self._session_run_context():

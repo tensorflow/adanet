@@ -414,6 +414,13 @@ class _AlwaysSecondToLastEvaluator(_FakeEvaluator):
     return losses
 
 
+class _EarlyStoppingHook(tf_compat.SessionRunHook):
+  """Hook that immediately requests training to stop."""
+
+  def after_run(self, run_context, run_values):
+    run_context.request_stop()
+
+
 class EstimatorTest(tu.AdanetTestCase):
 
   @parameterized.named_parameters(
@@ -985,6 +992,28 @@ class EstimatorTest(tu.AdanetTestCase):
               2,
           "want_global_step":
               300,
+      },
+      {
+          "testcase_name":
+              "early_stopping_subnetwork",
+          "subnetwork_generator":
+              SimpleGenerator([
+                  _DNNBuilder("dnn"),
+                  _DNNBuilder("dnn2", subnetwork_hooks=[_EarlyStoppingHook()])
+              ]),
+          "max_iteration_steps":
+              100,
+          "max_steps":
+              200,
+          "want_loss":
+              0.2958503,
+          # Since one subnetwork stops after 1 step and global step is the
+          # mean of iteration steps, global step will be incremented at half
+          # the rate.
+          "want_iteration":
+              3,
+          "want_global_step":
+              200,
       })
   def test_lifecycle(self,
                      subnetwork_generator,

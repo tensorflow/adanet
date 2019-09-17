@@ -401,7 +401,9 @@ class Estimator(tf.estimator.Estimator):
       TensorBoard for each subnetwork. Disable to reduce memory and disk usage
       per run.
     global_step_combiner_fn: Function for combining each subnetwork's
-      iteration step into the global step.
+      iteration step into the global step. By default it is the average of all
+      subnetwork iteration steps, which may affect the global_steps/sec as
+      subnetworks early stop and no longer increase their iteration step.
     max_iterations: Integer maximum number of AdaNet iterations (a.k.a. rounds)
       of generating new subnetworks and ensembles, training them, and evaluating
       them against the current best ensemble. When :code:`None`, AdaNet will
