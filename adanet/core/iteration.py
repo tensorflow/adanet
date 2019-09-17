@@ -722,7 +722,17 @@ class _IterationBuilder(object):
       train_manager, training_chief_hooks, training_hooks = self._create_hooks(
           base_global_step, subnetwork_specs, candidates, num_subnetworks,
           rebuilding, train_manager_dir, config.is_chief)
-      # Iteration summaries.
+
+      local_init_ops = []
+      if previous_ensemble_spec:
+        for s in previous_ensemble_spec.ensemble.subnetworks:
+          if s.local_init_ops:
+            local_init_ops.extend(s.local_init_ops)
+      for subnetwork_spec in subnetwork_specs:
+        if (subnetwork_spec and subnetwork_spec.subnetwork and
+            subnetwork_spec.subnetwork.local_init_ops):
+          local_init_ops.extend(subnetwork_spec.subnetwork.local_init_ops)
+
       summary = self._summary_maker(
           namespace=None, scope=None, skip_summary=skip_summaries)
       summaries.append(summary)
@@ -744,7 +754,8 @@ class _IterationBuilder(object):
             eval_metrics=iteration_metrics.best_eval_metrics_tuple(
                 best_candidate_index, mode),
             export_outputs=best_export_outputs,
-            training_hooks=training_hooks)
+            training_hooks=training_hooks,
+            scaffold_fn=self._get_scaffold_fn(local_init_ops))
       else:
         estimator_spec = tf.estimator.EstimatorSpec(
             mode=mode,
@@ -756,7 +767,8 @@ class _IterationBuilder(object):
                 best_candidate_index, mode),
             export_outputs=best_export_outputs,
             training_chief_hooks=training_chief_hooks,
-            training_hooks=training_hooks)
+            training_hooks=training_hooks,
+            scaffold=self._get_scaffold_fn(local_init_ops)())
 
       return _Iteration(
           number=iteration_number,
@@ -767,6 +779,26 @@ class _IterationBuilder(object):
           summaries=summaries,
           train_manager=train_manager,
           subnetwork_reports=subnetwork_reports)
+
+  def _get_scaffold_fn(self, local_init_ops):
+    """Creates a method generating a scaffold.
+
+    TODO: Make this code compatible with TPU estimators.
+
+    Args:
+      local_init_ops: List of tf.Operations to call during initialization.
+
+    Returns:
+      Method returning a `tf.train.Scaffold`.
+    """
+
+    def get_scaffold():
+      return tf_compat.v1.train.Scaffold(
+          local_init_op=tf.group(
+              local_init_ops +
+              [tf_compat.v1.train.Scaffold.default_local_init_op()]))
+
+    return get_scaffold
 
   def _create_dummy_candidate(self, subnetwork_spec, subnetwork_builders,
                               subnetwork_summary, training):

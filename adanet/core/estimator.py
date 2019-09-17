@@ -1068,7 +1068,7 @@ class Estimator(tf.estimator.Estimator):
       current_iteration, _ = self._create_iteration(
           features, labels, mode, config, is_growing_phase=False)
       best_ensemble_index = self._get_best_ensemble_index(
-          current_iteration, input_hooks)
+          current_iteration, input_hooks, checkpoint_path)
       architecture = current_iteration.candidates[
           best_ensemble_index].ensemble_spec.architecture
     if export_best_architecture:
@@ -1148,7 +1148,10 @@ class Estimator(tf.estimator.Estimator):
     frozen_checkpoint = os.path.join(self.model_dir, "architecture")
     return "{}-{}.json".format(frozen_checkpoint, iteration_number)
 
-  def _get_best_ensemble_index(self, current_iteration, input_hooks):
+  def _get_best_ensemble_index(self,
+                               current_iteration,
+                               input_hooks,
+                               checkpoint_path=None):
     """Returns the best candidate ensemble's index in this iteration.
 
     Evaluates the ensembles using an `Evaluator` when provided. Otherwise,
@@ -1157,6 +1160,8 @@ class Estimator(tf.estimator.Estimator):
     Args:
       current_iteration: Current `_Iteration`.
       input_hooks: List of SessionRunHooks to be included when running.
+      checkpoint_path: Checkpoint to use when determining the best index.
+        When `None`, this method uses the latest checkpoint instead.
 
     Returns:
       Index of the best ensemble in the iteration's list of `_Candidates`.
@@ -1182,21 +1187,26 @@ class Estimator(tf.estimator.Estimator):
                    current_iteration.candidates[1].ensemble_spec.name)
       return 1
 
-    latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
+    if checkpoint_path is None:
+      checkpoint_path = tf.train.latest_checkpoint(self.model_dir)
     logging.info("Starting ensemble evaluation for iteration %s",
                  current_iteration.number)
     for hook in input_hooks:
       hook.begin()
     with tf_compat.v1.Session() as sess:
-      init = tf.group(tf_compat.v1.global_variables_initializer(),
-                      tf_compat.v1.local_variables_initializer(),
-                      tf_compat.v1.tables_initializer())
+      init = tf.group(
+          tf_compat.v1.global_variables_initializer(),
+          tf_compat.v1.local_variables_initializer(),
+          tf_compat.v1.tables_initializer(),
+          current_iteration.estimator_spec.scaffold.local_init_op if isinstance(
+              current_iteration.estimator_spec,
+              tf.estimator.EstimatorSpec) else tf.no_op())
       sess.run(init)
       coord = tf.train.Coordinator()
       for hook in input_hooks:
         hook.after_create_session(sess, coord)
       saver = tf_compat.v1.train.Saver(sharded=True)
-      saver.restore(sess, latest_checkpoint)
+      saver.restore(sess, checkpoint_path)
 
       tf_compat.v1.train.start_queue_runners(sess=sess, coord=coord)
       ensemble_metrics = []
@@ -1264,9 +1274,13 @@ class Estimator(tf.estimator.Estimator):
     for hook in input_hooks:
       hook.begin()
     with tf_compat.v1.Session() as sess:
-      init = tf.group(tf_compat.v1.global_variables_initializer(),
-                      tf_compat.v1.local_variables_initializer(),
-                      tf_compat.v1.tables_initializer())
+      init = tf.group(
+          tf_compat.v1.global_variables_initializer(),
+          tf_compat.v1.local_variables_initializer(),
+          tf_compat.v1.tables_initializer(),
+          current_iteration.estimator_spec.scaffold.local_init_op if isinstance(
+              current_iteration.estimator_spec,
+              tf.estimator.EstimatorSpec) else tf.no_op())
       sess.run(init)
       coord = tf.train.Coordinator()
       for hook in input_hooks:
@@ -1658,7 +1672,11 @@ class Estimator(tf.estimator.Estimator):
         training_hooks=training_hooks,
         evaluation_hooks=self._evaluation_hooks(current_iteration, training,
                                                 evaluation_name),
-        scaffold=tf_compat.v1.train.Scaffold(summary_op=tf.constant("")),
+        scaffold=tf_compat.v1.train.Scaffold(
+            summary_op=tf.constant(""),
+            local_init_op=current_iteration.estimator_spec.scaffold
+            .local_init_op if isinstance(current_iteration.estimator_spec,
+                                         tf.estimator.EstimatorSpec) else None),
         export_outputs=iteration_estimator_spec.export_outputs)
 
   def _call_generate_candidates(self, previous_ensemble, iteration_number,
