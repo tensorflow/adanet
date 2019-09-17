@@ -362,8 +362,9 @@ class _IterationMetrics(object):
           for _, value in self._replay_indices_for_all.items()
       ])
 
-      # Passing the right entries (entries of the best candidate).
-      for iteration in range(replay_indices_as_tensor.get_shape()[1].value):
+      # Passing the right entries (entries of the best candidate). Note: we use
+      # TensorShape.as_list here so the code works on both TF 1.0 and 2.0.
+      for iteration in range(replay_indices_as_tensor.get_shape().as_list()[1]):
         index_t = replay_indices_as_tensor[best_candidate_idx, iteration]
         eval_metric_ops["best_ensemble_index_{}".format(iteration)] = (index_t,
                                                                        index_t)
