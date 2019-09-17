@@ -59,9 +59,11 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
     adanet_loss_decay: See :class:`adanet.Estimator`.
     report_dir: See :class:`adanet.Estimator`.
     config: See :class:`adanet.Estimator`.
-    use_tpu: Boolean to enable *both* training and evaluating on TPU. Defaults
-      to :code:`True` and is only provided to allow debugging models on CPU/GPU.
-      Use :class:`adanet.Estimator` instead if you do not plan to run on TPU.
+    use_tpu: Boolean to enable training on TPU. Defaults to :code:`True` and
+      is only provided to allow debugging models on CPU/GPU. Use
+      :class:`adanet.Estimator` instead if you do not plan to run on TPU.
+    eval_on_tpu: Boolean to enable evaluating on TPU. Defaults to :code:`True`.
+      Ignored if :code:`use_tpu=False`.
     train_batch_size: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
     eval_batch_size: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
     embedding_config_spec: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
@@ -93,6 +95,7 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
                report_dir=None,
                config=None,
                use_tpu=True,
+               eval_on_tpu=True,
                train_batch_size=None,
                eval_batch_size=None,
                embedding_config_spec=None,
@@ -117,6 +120,7 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
 
     # TPUEstimator modifies config under the hood. We keep track of it here so
     # we can use it during the bookkeeping phase and when predict() is called.
+    self._eval_on_tpu = eval_on_tpu if self._use_tpu else False
     self._original_config = config or tf_compat.v1.estimator.tpu.RunConfig()
     self._train_batch_size = train_batch_size or 0
     self._eval_batch_size = eval_batch_size or train_batch_size or 0
@@ -137,8 +141,8 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
         model_dir=model_dir,
         report_dir=report_dir,
         config=self._original_config,
-        use_tpu=use_tpu,
-        eval_on_tpu=use_tpu,
+        use_tpu=self._use_tpu,
+        eval_on_tpu=self._eval_on_tpu,
         export_to_tpu=False,
         train_batch_size=self._train_batch_size,
         eval_batch_size=self._eval_batch_size,
@@ -170,6 +174,7 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
         config=self._original_config,
         params=self.params,
         use_tpu=False,
+        eval_on_tpu=False,
         embedding_config_spec=self._embedding_config_spec)
     return tpu_estimator.predict(
         input_fn,
@@ -201,7 +206,7 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
         config=config,
         model_dir=temp_model_dir,
         use_tpu=self._use_tpu,
-        eval_on_tpu=self._use_tpu,
+        eval_on_tpu=self._eval_on_tpu,
         export_to_tpu=False,
         train_batch_size=self._train_batch_size,
         eval_batch_size=self._eval_batch_size,
