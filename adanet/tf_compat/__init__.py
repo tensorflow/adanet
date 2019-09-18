@@ -19,6 +19,7 @@ from __future__ import print_function
 
 from distutils.version import LooseVersion
 import tensorflow as tf
+import tensorflow as tf_v2
 # pylint: disable=unused-import
 # pylint: disable=g-direct-tensorflow-import
 # pylint: disable=g-import-not-at-top
@@ -43,6 +44,7 @@ try:
 except AttributeError:
   DatasetV2 = tf.data.Dataset
 
+from tensorflow.python import tf2
 from tensorflow_estimator.python.estimator.head import regression_head
 # pylint: enable=g-import-not-at-top
 # pylint: enable=g-direct-tensorflow-import
@@ -178,3 +180,48 @@ def _update_variable_collection(collection_name, vars_to_add):
   vars_to_add = vars_to_add - collection
   for v in vars_to_add:
     tf.add_to_collection(collection_name, v)
+
+
+def skip_for_tf2(f):
+  """Decorator that skips tests when using TensorFlow 2."""
+
+  def wrapper(*args, **kwargs):
+    """Wraps the decorated function to determine whether to skip."""
+
+    # Extract test case instance from args.
+    self = args[0]
+    try:
+      # If tf.contrib doesn't exist, we are in TF 2.0.
+      _ = tf.contrib
+    except AttributeError:
+      self.skipTest("Skipping test in TF 2.0.")
+    return f(*args, **kwargs)
+
+  return wrapper
+
+
+def skip_for_tf1(f):
+  """Decorator that skips tests when using TensorFlow 1."""
+
+  def wrapper(*args, **kwargs):
+    """Wraps the decorated function to determine whether to skip."""
+
+    # Extract test case instance from args.
+    self = args[0]
+    try:
+      # If tf.contrib doesn't exist, we are in TF 2.0.
+      _ = tf_v2.contrib
+    except AttributeError:
+      return f(*args, **kwargs)
+    self.skipTest("Skipping test in TF 1.0.")
+    return f(*args, **kwargs)
+
+  return wrapper
+
+
+def is_v2_behavior_enabled():
+  """Returns if user called tf.enable_v2_behavior."""
+
+  # Since there is no actual tf.is_v2_behavior enabled, check that the
+  # settings were enabled.
+  return tf2.enabled()

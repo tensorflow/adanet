@@ -1,4 +1,4 @@
-"""Tests for AdaNet AutoEnsembleEstimator.
+"""Tests for AdaNet AutoEnsembleEstimator in TF 1.
 
 Copyright 2018 The AdaNet Authors. All Rights Reserved.
 

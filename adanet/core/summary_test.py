@@ -1,4 +1,4 @@
-"""Test AdaNet summary single graph implementation.
+"""Test AdaNet summary single graph implementation for TF 1.
 
 Copyright 2018 The AdaNet Authors. All Rights Reserved.
 
@@ -48,6 +48,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_scope(self, scope):
     scoped_summary = _ScopedSummary(scope)
     self.assertEqual(scope, scoped_summary.scope)
@@ -64,6 +65,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           "scope": None,
           "skip_summary": True,
       })
+  @tf_compat.skip_for_tf2
   def test_scalar_summary(self, scope, skip_summary=False):
     scoped_summary = _ScopedSummary(scope, skip_summary)
     with self.test_session() as s:
@@ -89,6 +91,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_scalar_summary_with_family(self, scope):
     scoped_summary = _ScopedSummary(scope)
     with self.test_session() as s:
@@ -119,6 +122,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_summarizing_variable(self, scope):
     scoped_summary = _ScopedSummary(scope)
     with self.test_session() as s:
@@ -147,6 +151,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           "scope": None,
           "skip_summary": True,
       })
+  @tf_compat.skip_for_tf2
   def test_image_summary(self, scope, skip_summary=False):
     scoped_summary = _ScopedSummary(scope, skip_summary)
     with self.test_session() as s:
@@ -173,6 +178,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_image_summary_with_family(self, scope):
     scoped_summary = _ScopedSummary(scope)
     with self.test_session() as s:
@@ -201,6 +207,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           "scope": None,
           "skip_summary": True,
       })
+  @tf_compat.skip_for_tf2
   def test_histogram_summary(self, scope, skip_summary=False):
     scoped_summary = _ScopedSummary(scope, skip_summary)
     with self.test_session() as s:
@@ -224,6 +231,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_histogram_summary_with_family(self, scope):
     scoped_summary = _ScopedSummary(scope)
     with self.test_session() as s:
@@ -248,6 +256,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           "scope": None,
           "skip_summary": True,
       })
+  @tf_compat.skip_for_tf2
   def test_audio_summary(self, scope, skip_summary=False):
     scoped_summary = _ScopedSummary(scope, skip_summary)
     with self.test_session() as s:
@@ -274,6 +283,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_audio_summary_with_family(self, scope):
     scoped_summary = _ScopedSummary(scope)
     with self.test_session() as s:
@@ -299,6 +309,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_summary_name_conversion(self, scope):
     scoped_summary = _ScopedSummary(scope)
     c = tf.constant(3)
@@ -326,6 +337,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           "testcase_name": "nested_graph",
           "nest_graph": True,
       })
+  @tf_compat.skip_for_tf2
   def test_merge_all(self, nest_graph):
     c0 = tf.constant(0)
     c1 = tf.constant(1)
@@ -414,6 +426,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_scope(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     self.assertEqual(scope, scoped_summary.scope)
@@ -430,6 +443,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
           "scope": None,
           "skip_summary": True,
       })
+  @tf_compat.skip_for_tf2
   def test_scalar_summary(self, scope, skip_summary=False):
     scoped_summary = _TPUScopedSummary(
         self.test_subdirectory, scope=scope, skip_summary=skip_summary)
@@ -453,6 +467,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_scalar_summary_with_family(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     i = tf.constant(7)
@@ -481,6 +496,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_summarizing_variable(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     c = tf.constant(42.0)
@@ -506,6 +522,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
           "scope": None,
           "skip_summary": True,
       })
+  @tf_compat.skip_for_tf2
   def test_image_summary(self, scope, skip_summary=False):
     scoped_summary = _TPUScopedSummary(
         self.test_subdirectory, scope=scope, skip_summary=skip_summary)
@@ -530,6 +547,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_image_summary_with_family(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     i = tf.ones((5, 2, 3, 1))
@@ -556,6 +574,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
           "scope": None,
           "skip_summary": True,
       })
+  @tf_compat.skip_for_tf2
   def test_histogram_summary(self, scope, skip_summary=False):
     scoped_summary = _TPUScopedSummary(
         self.test_subdirectory, scope=scope, skip_summary=skip_summary)
@@ -578,6 +597,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_histogram_summary_with_family(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     i = tf.ones((5, 4, 4, 3))
@@ -601,6 +621,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
           "scope": None,
           "skip_summary": True,
       })
+  @tf_compat.skip_for_tf2
   def test_audio_summary(self, scope, skip_summary=False):
     scoped_summary = _TPUScopedSummary(
         self.test_subdirectory, scope=scope, skip_summary=skip_summary)
@@ -625,6 +646,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_audio_summary_with_family(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     i = tf.ones((5, 3, 4))
@@ -647,6 +669,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_summary_name_conversion(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     c = tf.constant(3)
@@ -669,6 +692,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
           "testcase_name": "with_scope",
           "scope": "with_scope",
       })
+  @tf_compat.skip_for_tf2
   def test_current_scope(self, scope):
     scoped_summary = _TPUScopedSummary(self.test_subdirectory, scope=scope)
     i = tf.constant(3)
@@ -684,6 +708,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     self.assertEqual(values[0].tag, "inner1/inner2/a/b/c")
     self.assertEqual(values[0].simple_value, 3.0)
 
+  @tf_compat.skip_for_tf2
   def test_summary_args(self):
     summary = _TPUScopedSummary(self.test_subdirectory)
     summary.scalar("scalar", 1, "family")
@@ -692,6 +717,7 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
     summary.audio("audio", 1, 3, 3, "family")
     self.assertLen(summary.summary_tuples(), 4)
 
+  @tf_compat.skip_for_tf2
   def test_summary_kwargs(self):
     summary = _TPUScopedSummary(self.test_subdirectory)
     summary.scalar(name="scalar", tensor=1, family="family")
@@ -733,6 +759,7 @@ class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
           "summary_maker":
               functools.partial(_TPUScopedSummary, logdir="/tmp/fakedir")
       })
+  @tf_compat.skip_for_tf2
   def test_monkey_patched_summaries_args(self, summary_maker):
     summary = summary_maker()
     before = _summaries()
@@ -761,6 +788,7 @@ class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
           "summary_maker":
               functools.partial(_TPUScopedSummary, logdir="/tmp/fakedir"),
       })
+  @tf_compat.skip_for_tf2
   def test_monkey_patched_summaries_kwargs(self, summary_maker):
     summary = summary_maker()
     before = _summaries()

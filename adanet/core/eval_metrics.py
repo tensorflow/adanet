@@ -352,8 +352,7 @@ class _IterationMetrics(object):
       """Saves replay indices as eval metrics."""
       # _replay_indices_for_all is a dict: {candidate: [list of replay_indices]}
       # We are finding the max length replay list.
-      pad_value = max(
-          [len(v) for _, v in self._replay_indices_for_all.items()])
+      pad_value = max([len(v) for _, v in self._replay_indices_for_all.items()])
 
       # Creating a matrix of (#candidate) times (max length replay indices).
       # Entry i,j is the jth replay index of the ith candidate (ensemble).

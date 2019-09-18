@@ -59,6 +59,22 @@ py_test(
 )
 
 py_test(
+    name = "estimator_v2_test",
+    size = "large",
+    srcs = ["estimator_v2_test.py"],
+    shard_count = 2,
+    deps = [
+        ":ensemble_builder",
+        ":estimator",
+        ":evaluator",
+        ":report_materializer",
+        ":testing_utils",
+        "//adanet/subnetwork",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+py_test(
     name = "estimator_distributed_test",
     size = "large",
     srcs = ["estimator_distributed_test.py"],
@@ -237,6 +253,17 @@ py_library(
 py_test(
     name = "summary_test",
     srcs = ["summary_test.py"],
+    deps = [
+        ":summary",
+        ":testing_utils",
+        "@absl_py//absl/testing:parameterized",
+        "@six_archive//:six",
+    ],
+)
+
+py_test(
+    name = "summary_v2_test",
+    srcs = ["summary_v2_test.py"],
     deps = [
         ":summary",
         ":testing_utils",

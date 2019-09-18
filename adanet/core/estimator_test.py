@@ -2348,9 +2348,13 @@ class EstimatorExportSavedModelTest(tu.AdanetTestCase):
         export_dir_base=self.test_subdirectory,
         serving_input_receiver_fn=serving_input_fn,
         experimental_mode=tf.estimator.ModeKeys.PREDICT)
-    estimator.export_savedmodel(
-        export_dir_base=self.test_subdirectory,
-        serving_input_receiver_fn=serving_input_fn)
+    try:
+      estimator.export_savedmodel(
+          export_dir_base=self.test_subdirectory,
+          serving_input_receiver_fn=serving_input_fn)
+    except AttributeError as error:
+      # Log deprecation errors.
+      logging.warning("Testing estimator#export_savedmodel: %s", error)
     estimator.experimental_export_all_saved_models(
         export_dir_base=self.test_subdirectory,
         input_receiver_fn_map={

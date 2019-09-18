@@ -34,3 +34,14 @@ py_test(
         "@absl_py//absl/testing:parameterized",
     ],
 )
+
+py_test(
+    name = "estimator_v2_test",
+    size = "large",
+    srcs = ["estimator_v2_test.py"],
+    shard_count = 5,
+    deps = [
+        ":estimator",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)

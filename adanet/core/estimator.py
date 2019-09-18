@@ -35,6 +35,7 @@ from adanet.core.eval_metrics import call_eval_metrics
 from adanet.core.iteration import _IterationBuilder
 from adanet.core.report_accessor import _ReportAccessor
 from adanet.core.summary import _ScopedSummary
+from adanet.core.summary import _ScopedSummaryV2
 from adanet.core.summary import _TPUScopedSummary
 from adanet.core.timer import _CountDownTimer
 from adanet.distributed import ReplicationStrategy
@@ -86,6 +87,68 @@ class _StopAfterTrainingHook(tf_compat.SessionRunHook):
     logging.info("Now stopping iteration %d training", self._iteration.number)
     run_context.request_stop()
     self._after_fn()
+
+
+class _SummaryV2SaverHook(tf_compat.SessionRunHook):
+  """A hook that writes summaries to the appropriate log directory on disk."""
+
+  def __init__(self, summaries, save_steps=None, save_secs=None):
+    """Initializes a `SummaryV2SaverHook` for writing TF 2 summaries.
+
+    Args:
+      summaries: List of `_ScopedSummaryV2` instances.
+      save_steps: `int`, save summaries every N steps. Exactly one of
+        `save_secs` and `save_steps` should be set.
+      save_secs: `int`, save summaries every N seconds.
+    """
+
+    self._summaries = summaries
+    self._summary_ops = []
+    self._writer_init_ops = []
+    self._timer = tf_compat.v1.train.SecondOrStepTimer(
+        every_secs=save_secs, every_steps=save_steps)
+
+  def begin(self):
+    self._next_step = None
+    self._global_step_tensor = tf_compat.v1.train.get_global_step()
+
+    for summary in self._summaries:
+      assert isinstance(summary, _ScopedSummaryV2)
+      writer = tf_compat.v2.summary.create_file_writer(summary.logdir)
+      with writer.as_default():
+        for summary_fn, tensor in summary.summary_tuples():
+          self._summary_ops.append(
+              summary_fn(tensor, step=tf.compat.v1.train.get_global_step()))
+      self._writer_init_ops.append(writer.init())
+
+  def after_create_session(self, session, coord):
+    session.run(self._writer_init_ops)
+
+  def before_run(self, run_context):
+    requests = {"global_step": self._global_step_tensor}
+    self._request_summary = (
+        self._next_step is None or
+        self._timer.should_trigger_for_step(self._next_step))
+    if self._request_summary:
+      requests["summary"] = self._summary_ops
+
+    return tf_compat.SessionRunArgs(requests)
+
+  def after_run(self, run_context, run_values):
+    stale_global_step = run_values.results["global_step"]
+    global_step = stale_global_step + 1
+    if self._next_step is None or self._request_summary:
+      global_step = run_context.session.run(self._global_step_tensor)
+
+    if self._request_summary:
+      self._timer.update_last_triggered_step(global_step)
+
+    self._next_step = global_step + 1
+
+  def end(self, session):
+    # TODO: Run writer.flush() at Session end.
+    # Currently disabled because the flush op crashes between iterations.
+    return
 
 
 class _EvalMetricSaverHook(tf_compat.SessionRunHook):
@@ -588,6 +651,13 @@ class Estimator(tf.estimator.Estimator):
 
   def _summary_maker(self, scope=None, skip_summary=False, namespace=None):
     """Constructs a `_ScopedSummary`."""
+    if tf_compat.is_v2_behavior_enabled():
+      # Here we assume TF 2 behavior is enabled.
+      return _ScopedSummaryV2(
+          logdir=self._model_dir,
+          scope=scope,
+          skip_summary=skip_summary,
+          namespace=namespace)
     if self._use_tpu:
       return _TPUScopedSummary(
           logdir=self._model_dir,
@@ -1346,15 +1416,24 @@ class Estimator(tf.estimator.Estimator):
       return []
 
     training_hooks = []
-    for summary in current_iteration.summaries:
-      output_dir = self.model_dir
-      if summary.scope:
-        output_dir = os.path.join(output_dir, summary.namespace, summary.scope)
-      summary_saver_hook = tf_compat.SummarySaverHook(
-          save_steps=self.config.save_summary_steps,
-          output_dir=output_dir,
-          summary_op=summary.merge_all())
-      training_hooks.append(summary_saver_hook)
+    if tf_compat.is_v2_behavior_enabled():
+      # Use V2 summaries and hook when user is using TF 2 behavior.
+      training_hooks.append(
+          _SummaryV2SaverHook(
+              current_iteration.summaries,
+              save_steps=self.config.save_summary_steps))
+    else:
+      # Fallback to V1 summaries.
+      for summary in current_iteration.summaries:
+        output_dir = self.model_dir
+        if summary.scope:
+          output_dir = os.path.join(output_dir, summary.namespace,
+                                    summary.scope)
+        summary_saver_hook = tf_compat.SummarySaverHook(
+            save_steps=self.config.save_summary_steps,
+            output_dir=output_dir,
+            summary_op=summary.merge_all())
+        training_hooks.append(summary_saver_hook)
     training_hooks += list(
         current_iteration.estimator_spec.training_chief_hooks)
     return training_hooks

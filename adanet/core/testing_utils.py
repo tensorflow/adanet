@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import os
 import shutil
+import struct
 import sys
 
 from absl import flags
@@ -278,3 +279,46 @@ class AdanetTestCase(parameterized.TestCase, tf.test.TestCase):
   def tearDown(self):
     super(AdanetTestCase, self).tearDown()
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
+
+
+def summary_simple_value(summary_value):
+  """Returns the scalar parsed from the summary proto tensor_value bytes."""
+
+  return struct.unpack("<f", summary_value.tensor.tensor_content)[0]
+
+
+def check_eventfile_for_keyword(keyword, dir_):
+  """Checks event files for the keyword."""
+
+  tf_compat.v1.summary.FileWriterCache.clear()
+
+  if not tf.io.gfile.exists(dir_):
+    raise ValueError("Directory '{}' not found.".format(dir_))
+
+  # Get last `Event` written.
+  filenames = os.path.join(dir_, "events*")
+  event_paths = tf.io.gfile.glob(filenames)
+  if not event_paths:
+    raise ValueError("Path '{}' not found.".format(filenames))
+
+  for event_path in event_paths:
+    for last_event in tf_compat.v1.train.summary_iterator(event_path):
+      if last_event.summary is not None:
+        for value in last_event.summary.value:
+          if keyword == value.tag:
+            if value.HasField("simple_value"):
+              return value.simple_value
+            if value.HasField("image"):
+              return (value.image.height, value.image.width,
+                      value.image.colorspace)
+            if value.HasField("tensor"):
+              if value.metadata.plugin_data.plugin_name == "scalars":
+                return summary_simple_value(value)
+              if value.metadata.plugin_data.plugin_name == "images":
+                return (int(value.tensor.string_val[0]),
+                        int(value.tensor.string_val[1]), 1)
+              if value.tensor.string_val is not None:
+                return value.tensor.string_val
+
+  raise ValueError("Keyword '{}' not found in path '{}'.".format(
+      keyword, filenames))
