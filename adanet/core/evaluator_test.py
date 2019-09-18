@@ -21,10 +21,15 @@ from __future__ import print_function
 
 from absl.testing import parameterized
 from adanet.core.evaluator import Evaluator
+from adanet import tf_compat
 import adanet.core.testing_utils as tu
 import numpy as np
 import tensorflow as tf
 
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
 
 def _fake_adanet_losses_0(input_fn):
   _, labels = input_fn()
@@ -69,14 +74,16 @@ class EvaluatorTest(parameterized.TestCase, tf.test.TestCase):
       "adanet_losses": _fake_adanet_losses_1,
       "want_adanet_losses": [18, 9],
   })
+  @test_util.run_in_graph_and_eager_modes
   def test_evaluate_no_metric_fn_falls_back_to_adanet_losses(
       self, input_fn, steps, adanet_losses, want_adanet_losses):
-    adanet_losses = adanet_losses(input_fn)
-    metrics = [{"adanet_loss": tf.metrics.mean(loss)} for loss in adanet_losses]
-    with self.test_session() as sess:
-      evaluator = Evaluator(input_fn=input_fn, steps=steps)
-      adanet_losses = evaluator.evaluate(sess, ensemble_metrics=metrics)
-      self.assertEqual(want_adanet_losses, adanet_losses)
+    with context.graph_mode():
+      adanet_losses = adanet_losses(input_fn)
+      metrics = [{"adanet_loss": tf_compat.v1.metrics.mean(loss)} for loss in adanet_losses]
+      with self.test_session() as sess:
+        evaluator = Evaluator(input_fn=input_fn, steps=steps)
+        adanet_losses = evaluator.evaluate(sess, ensemble_metrics=metrics)
+        self.assertEqual(want_adanet_losses, adanet_losses)
 
   @parameterized.named_parameters(
       {
@@ -90,49 +97,53 @@ class EvaluatorTest(parameterized.TestCase, tf.test.TestCase):
           "expected_objective_fn": np.nanargmin,
           "metric_fn": lambda x, y: None
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_objective(self, objective, expected_objective_fn, metric_fn=None):
     evaluator = Evaluator(input_fn=None, objective=objective)
     self.assertEqual(expected_objective_fn, evaluator.objective_fn)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_objective_unsupported_objective(self):
     with self.assertRaises(ValueError):
       Evaluator(input_fn=None, objective="non_existent_objective")
 
+  @test_util.run_in_graph_and_eager_modes
   def test_evaluate(self):
+    with context.graph_mode():
+      input_fn = tu.dummy_input_fn([[1., 2]], [[3.]])
+      _, labels = input_fn()
+      predictions = [labels * 2, labels * 3]
+      metrics = []
+      for preds in predictions:
+        metrics.append({
+            "mse": tf_compat.v1.metrics.mean_squared_error(labels, preds),
+            "other_metric_1": (tf.constant(1), tf.constant(1)),
+            "other_metric_2": (tf.constant(2), tf.constant(2))
+        })
 
-    input_fn = tu.dummy_input_fn([[1., 2]], [[3.]])
-    _, labels = input_fn()
-    predictions = [labels * 2, labels * 3]
-    metrics = []
-    for preds in predictions:
-      metrics.append({
-          "mse": tf.metrics.mean_squared_error(labels, preds),
-          "other_metric_1": (tf.constant(1), tf.constant(1)),
-          "other_metric_2": (tf.constant(2), tf.constant(2))
-      })
-
-    with self.test_session() as sess:
-      evaluator = Evaluator(input_fn=input_fn, metric_name="mse", steps=3)
-      metrics = evaluator.evaluate(sess, ensemble_metrics=metrics)
-      self.assertEqual([9, 36], metrics)
-
-  def test_evaluate_invalid_metric(self):
-
-    input_fn = tu.dummy_input_fn([[1., 2]], [[3.]])
-    _, labels = input_fn()
-    predictions = [labels * 2, labels * 3]
-    metrics = []
-    for preds in predictions:
-      metrics.append({
-          "mse": tf.metrics.mean_squared_error(labels, preds),
-          "other_metric_1": (tf.constant(1), tf.constant(1)),
-          "other_metric_2": (tf.constant(2), tf.constant(2))
-      })
-
-    with self.test_session() as sess:
-      evaluator = Evaluator(input_fn=input_fn, metric_name="dne", steps=3)
-      with self.assertRaises(KeyError):
+      with self.test_session() as sess:
+        evaluator = Evaluator(input_fn=input_fn, metric_name="mse", steps=3)
         metrics = evaluator.evaluate(sess, ensemble_metrics=metrics)
+        self.assertEqual([9, 36], metrics)
+
+  @test_util.run_in_graph_and_eager_modes
+  def test_evaluate_invalid_metric(self):
+    with context.graph_mode():
+      input_fn = tu.dummy_input_fn([[1., 2]], [[3.]])
+      _, labels = input_fn()
+      predictions = [labels * 2, labels * 3]
+      metrics = []
+      for preds in predictions:
+        metrics.append({
+            "mse": tf_compat.v1.metrics.mean_squared_error(labels, preds),
+            "other_metric_1": (tf.constant(1), tf.constant(1)),
+            "other_metric_2": (tf.constant(2), tf.constant(2))
+        })
+
+      with self.test_session() as sess:
+        evaluator = Evaluator(input_fn=input_fn, metric_name="dne", steps=3)
+        with self.assertRaises(KeyError):
+          metrics = evaluator.evaluate(sess, ensemble_metrics=metrics)
 
 
 if __name__ == "__main__":
