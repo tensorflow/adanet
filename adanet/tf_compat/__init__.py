@@ -156,18 +156,28 @@ def metric_op(metric):
     return metric
   vars_to_add = {}
   for var in metric.variables:
-    vars_to_add[var.experimental_ref()] = var
+    vars_to_add[_hashable_var_key(var)] = var
   metric = (metric.result(), metric.updates[0])
   _update_variable_collection(v1.GraphKeys.LOCAL_VARIABLES, vars_to_add)
   _update_variable_collection(v1.GraphKeys.METRIC_VARIABLES, vars_to_add)
   return metric
 
 
+def _hashable_var_key(var):
+  """Returns a hashable key to identify the given Variable."""
+
+  # Since in TF 2, Variables themselves are not hashable.
+  ref_op = getattr(var, "experimental_ref", None)
+  if callable(ref_op):
+    return ref_op()
+  return var
+
+
 def _update_variable_collection(collection_name, vars_to_add):
   """Add variables to collection."""
   collection = {}
   for var in v1.get_collection(collection_name):
-    collection[var.experimental_ref()] = var
+    collection[_hashable_var_key(var)] = var
   # Skip variables that are in the collection already: O(n) runtime.
   for var_ref in vars_to_add:
     if var_ref in collection:
