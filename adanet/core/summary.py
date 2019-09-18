@@ -900,10 +900,6 @@ def monkey_patched_summaries(summary):
   setattr(tf_compat.v2.summary, "image", wrapped_summary.image_v3)
   setattr(tf_compat.v2.summary, "histogram", wrapped_summary.histogram_v3)
   setattr(tf_compat.v2.summary, "audio", wrapped_summary.audio_v3)
-  setattr(tf.summary, "scalar", wrapped_summary.scalar_v3)
-  setattr(tf.summary, "image", wrapped_summary.image_v3)
-  setattr(tf.summary, "histogram", wrapped_summary.histogram_v3)
-  setattr(tf.summary, "audio", wrapped_summary.audio_v3)
   setattr(summary_v2_lib, "scalar", wrapped_summary.scalar_v2)
   setattr(summary_v2_lib, "image", wrapped_summary.image_v2)
   setattr(summary_v2_lib, "histogram", wrapped_summary.histogram_v2)
@@ -916,7 +912,11 @@ def monkey_patched_summaries(summary):
     setattr(tf_v1.contrib.summary, "audio", wrapped_summary.audio_v2)
   except AttributeError:
     # TF 2.0 eliminates tf.contrib.
-    pass
+    # Also set the new tf.summary to be use the new summaries in TF 2.
+    setattr(tf.summary, "scalar", wrapped_summary.scalar_v3)
+    setattr(tf.summary, "image", wrapped_summary.image_v3)
+    setattr(tf.summary, "histogram", wrapped_summary.histogram_v3)
+    setattr(tf.summary, "audio", wrapped_summary.audio_v3)
 
   try:
     yield
