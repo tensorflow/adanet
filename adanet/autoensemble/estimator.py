@@ -133,7 +133,7 @@ class _BuilderFromSubestimator(Builder):
       mode = tf.estimator.ModeKeys.TRAIN
 
     # Call in template to ensure that variables are created once and reused.
-    call_model_fn_template = tf.make_template("model_fn", self._call_model_fn)
+    call_model_fn_template = tf.compat.v1.make_template("model_fn", self._call_model_fn)
     subestimator_features, subestimator_labels = features, labels
     local_init_ops = []
     if training and self._subestimator.train_input_fn:
