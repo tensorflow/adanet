@@ -373,6 +373,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
         self.assertEqual(["c0", "c1"], [s.tag for s in summary.value])
         self.assertEqual([0, 1], [s.simple_value for s in summary.value])
 
+  @tf_compat.skip_for_tf2
   def test_summary_args(self):
     summary = _ScopedSummary()
     summary.scalar("scalar", 1, "family")
@@ -381,6 +382,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     summary.audio("audio", 1, 3, 3, "family")
     self.assertLen(summary.merge_all(), 4)
 
+  @tf_compat.skip_for_tf2
   def test_summary_kwargs(self):
     summary = _ScopedSummary()
     summary.scalar(name="scalar", tensor=1, family="family")

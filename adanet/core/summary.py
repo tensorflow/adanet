@@ -27,8 +27,14 @@ from absl import logging
 from adanet import tf_compat
 import tensorflow as tf_v1
 import tensorflow as tf
-# pylint: disable=g-direct-tensorflow-import
+
 from tensorboard.compat import tf2
+from tensorboard.plugins.scalar import summary_v2 as scalar_v2_lib
+from tensorboard.plugins.image import summary_v2 as image_v2_lib
+from tensorboard.plugins.histogram import summary_v2 as histogram_v2_lib
+from tensorboard.plugins.audio import summary_v2 as audio_v2_lib
+
+# pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.ops import summary_op_util
 from tensorflow.python.ops import summary_ops_v2 as summary_v2_lib
 from tensorflow.python.ops.summary_ops_v2 import _INVALID_SCOPE_CHARACTERS
@@ -412,10 +418,10 @@ class _ScopedSummaryV2(Summary):
     self._scope = scope
     self._additional_scope = None
     self._skip_summary = skip_summary
-    self._actual_summary_scalar_fn = tf_compat.v2.summary.scalar
-    self._actual_summary_image_fn = tf_compat.v2.summary.image
-    self._actual_summary_histogram_fn = tf_compat.v2.summary.histogram
-    self._actual_summary_audio_fn = tf_compat.v2.summary.audio
+    self._actual_summary_scalar_fn = scalar_v2_lib.scalar
+    self._actual_summary_image_fn = image_v2_lib.image
+    self._actual_summary_histogram_fn = histogram_v2_lib.histogram
+    self._actual_summary_audio_fn = audio_v2_lib.audio
     self._summary_tuples = []
 
   @property
