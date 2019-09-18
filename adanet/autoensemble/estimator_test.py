@@ -22,16 +22,22 @@ from __future__ import print_function
 import contextlib
 import os
 import shutil
+import sys
 
+from absl import flags
+from absl import logging
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.autoensemble.estimator import _GeneratorFromCandidatePool
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
 from adanet.autoensemble.estimator import AutoEnsembleSubestimator
 import tensorflow as tf
 
+# pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.estimator.export import export
+# pylint: enable=g-direct-tensorflow-import
 
-tf.logging.set_verbosity(tf.logging.INFO)
+logging.set_verbosity(logging.INFO)
 
 
 # Ensures "local_init_op" is called.
@@ -77,7 +83,9 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
   def setUp(self):
     super(AutoEnsembleEstimatorTest, self).setUp()
     # Setup and cleanup test directory.
-    self.test_subdirectory = os.path.join(tf.flags.FLAGS.test_tmpdir, self.id())
+    # Flags are not automatically parsed at this point.
+    flags.FLAGS(sys.argv)
+    self.test_subdirectory = os.path.join(flags.FLAGS.test_tmpdir, self.id())
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
     os.makedirs(self.test_subdirectory)
 
@@ -222,6 +230,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
       },
   )
   # pylint: enable=g-long-lambda
+  @tf_compat.skip_for_tf2
   def test_auto_ensemble_estimator_lifecycle(self,
                                              candidate_pool,
                                              want_loss,
@@ -291,6 +300,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
         export_dir_base=export_dir_base,
         serving_input_receiver_fn=serving_input_fn)
 
+  @tf_compat.skip_for_tf2
   def test_last_layer_fn(self):
     head = tf.contrib.estimator.regression_head(
         loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
@@ -340,6 +350,7 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
 
     self.assertEqual(input_labels, subnetwork.last_layer)
 
+  @tf_compat.skip_for_tf2
   def test_extra_checkpoint_saver_hook(self):
     """Tests b/122795064."""
 
