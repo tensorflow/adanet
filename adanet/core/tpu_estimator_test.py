@@ -210,6 +210,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
               0.41315794,
       },
   )
+  @tf_compat.skip_for_tf2
   def test_tpu_estimator_simple_lifecycle(self, use_tpu, subnetwork_generator,
                                           want_loss):
     config = tf_compat.v1.estimator.tpu.RunConfig(master="", tf_random_seed=42)
@@ -274,6 +275,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
           "want_predictions": 0.46818,
       },
   )
+  @tf_compat.skip_for_tf2
   def test_tpu_estimator_summaries(self, use_tpu, want_loss, want_adanet_loss,
                                    want_eval_summary_loss, want_predictions):
     max_steps = 10
