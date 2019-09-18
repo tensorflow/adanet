@@ -81,17 +81,6 @@ except AttributeError:
   CheckpointSaverHook = tf.train.CheckpointSaverHook
 
 try:
-  TPUEstimatorSpec = tf.contrib.tpu.TPUEstimatorSpec
-except AttributeError:
-  TPUEstimatorSpec = object
-
-# TODO: Figure out TPU strategy for TF 2.0.
-try:
-  TPUEstimator = tf.contrib.tpu.TPUEstimator
-except AttributeError:
-  TPUEstimator = object
-
-try:
   # Loss reduction strings change between TF 1.13 and TF 1.14, which causes
   # Heads to raise errors.
   regression_head.RegressionHead(

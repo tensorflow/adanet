@@ -63,7 +63,7 @@ class MetricsTest(tu.AdanetTestCase):
     self._labels = {head: labels for head in heads}
     predictions = {(head, "predictions"): labels for head in heads}
     loss = tf.constant(2.)
-    self._estimator_spec = tf_compat.TPUEstimatorSpec(
+    self._estimator_spec = tf_compat.v1.estimator.tpu.TPUEstimatorSpec(
         mode=tf.estimator.ModeKeys.EVAL,
         loss=loss,
         predictions=predictions,
