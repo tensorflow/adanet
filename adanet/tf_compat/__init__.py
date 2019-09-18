@@ -154,21 +154,25 @@ def metric_op(metric):
 
   if not isinstance(metric, tf.keras.metrics.Metric):
     return metric
-  vars_to_add = set()
-  vars_to_add.update(metric.variables)
+  vars_to_add = {}
+  for var in metric.variables:
+    vars_to_add[var.experimental_ref()] = var
   metric = (metric.result(), metric.updates[0])
-  _update_variable_collection(tf.GraphKeys.LOCAL_VARIABLES, vars_to_add)
-  _update_variable_collection(tf.GraphKeys.METRIC_VARIABLES, vars_to_add)
+  _update_variable_collection(v1.GraphKeys.LOCAL_VARIABLES, vars_to_add)
+  _update_variable_collection(v1.GraphKeys.METRIC_VARIABLES, vars_to_add)
   return metric
 
 
 def _update_variable_collection(collection_name, vars_to_add):
   """Add variables to collection."""
-  collection = set(tf.get_collection(collection_name))
+  collection = {}
+  for var in v1.get_collection(collection_name):
+    collection[var.experimental_ref()] = var
   # Skip variables that are in the collection already: O(n) runtime.
-  vars_to_add = vars_to_add - collection
-  for v in vars_to_add:
-    tf.add_to_collection(collection_name, v)
+  for var_ref in vars_to_add:
+    if var_ref in collection:
+      continue
+    v1.add_to_collection(collection_name, vars_to_add[var_ref])
 
 
 def skip_for_tf2(f):
