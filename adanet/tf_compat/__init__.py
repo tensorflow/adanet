@@ -178,7 +178,7 @@ def _update_variable_collection(collection_name, vars_to_add):
 def skip_for_tf2(f):
   """Decorator that skips tests when using TensorFlow 2."""
 
-  def wrapper(*args, **kwargs):
+  def test_wrapper(*args, **kwargs):
     """Wraps the decorated function to determine whether to skip."""
 
     # Extract test case instance from args.
@@ -190,13 +190,13 @@ def skip_for_tf2(f):
       self.skipTest("Skipping test in TF 2.0.")
     return f(*args, **kwargs)
 
-  return wrapper
+  return test_wrapper
 
 
 def skip_for_tf1(f):
   """Decorator that skips tests when using TensorFlow 1."""
 
-  def wrapper(*args, **kwargs):
+  def test_wrapper(*args, **kwargs):
     """Wraps the decorated function to determine whether to skip."""
 
     # Extract test case instance from args.
@@ -209,7 +209,7 @@ def skip_for_tf1(f):
     self.skipTest("Skipping test in TF 1.0.")
     return f(*args, **kwargs)
 
-  return wrapper
+  return test_wrapper
 
 
 def is_v2_behavior_enabled():

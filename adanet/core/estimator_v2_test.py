@@ -97,7 +97,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
   """Test that Tensorboard summaries get written correctly."""
 
   @tf_compat.skip_for_tf1
-  def test_summaries(self):
+  def test_summaries_v2(self):
     """Tests that summaries are written to candidate directory."""
 
     run_config = tf.estimator.RunConfig(
