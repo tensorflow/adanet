@@ -29,6 +29,7 @@ from adanet import tf_compat
 from adanet.core.summary import Summary
 import mock
 import tensorflow as tf
+
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import context
 from tensorflow.python.framework import test_util
@@ -90,8 +91,11 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
 
     def load_variable(checkpoint_dir, name):
       self.assertEqual(checkpoint_dir, 'fake_checkpoint_dir')
-      return tf_compat.v1.get_variable(
+      var = tf_compat.v1.get_variable(
           name='fake_loaded_variable_' + name, initializer=1.)
+      with self.test_session() as sess:
+        sess.run(tf_compat.v1.global_variables_initializer())
+        return var
 
     tf.train.load_variable.side_effect = load_variable
 
@@ -477,111 +481,114 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
                           expected_complexity_regularization=0.,
                           expected_summary_scalars=None,
                           name=None):
-    model_dir = None
-    if warm_start_mixture_weights:
-      model_dir = 'fake_checkpoint_dir'
-    ensembler = ensemble.ComplexityRegularizedEnsembler(
-        optimizer=self._optimizer,
-        mixture_weight_type=mixture_weight_type,
-        mixture_weight_initializer=mixture_weight_initializer,
-        warm_start_mixture_weights=warm_start_mixture_weights,
-        model_dir=model_dir,
-        adanet_lambda=adanet_lambda,
-        adanet_beta=adanet_beta,
-        use_bias=use_bias,
-        name=name)
+    with context.graph_mode():
+      model_dir = None
+      if warm_start_mixture_weights:
+        model_dir = 'fake_checkpoint_dir'
+      ensembler = ensemble.ComplexityRegularizedEnsembler(
+          optimizer=self._optimizer,
+          mixture_weight_type=mixture_weight_type,
+          mixture_weight_initializer=mixture_weight_initializer,
+          warm_start_mixture_weights=warm_start_mixture_weights,
+          model_dir=model_dir,
+          adanet_lambda=adanet_lambda,
+          adanet_beta=adanet_beta,
+          use_bias=use_bias,
+          name=name)
 
-    if name:
-      self.assertEqual(ensembler.name, name)
-    else:
-      self.assertEqual(ensembler.name, 'complexity_regularized')
+      if name:
+        self.assertEqual(ensembler.name, name)
+      else:
+        self.assertEqual(ensembler.name, 'complexity_regularized')
 
-    with tf_compat.v1.variable_scope('dummy_adanet_scope_iteration_0'):
-      previous_ensemble_subnetworks_all = [
-          self._build_subnetwork(multi_head),
-          self._build_subnetwork(multi_head)
-      ]
+      with tf_compat.v1.variable_scope('dummy_adanet_scope_iteration_0'):
+        previous_ensemble_subnetworks_all = [
+            self._build_subnetwork(multi_head),
+            self._build_subnetwork(multi_head)
+        ]
 
-      previous_ensemble = self._build_easy_ensemble(
-          previous_ensemble_subnetworks_all)
+        previous_ensemble = self._build_easy_ensemble(
+            previous_ensemble_subnetworks_all)
 
-    with tf_compat.v1.variable_scope('dummy_adanet_scope_iteration_1'):
-      subnetworks_pool = [
-          self._build_subnetwork(multi_head),
-          self._build_subnetwork(multi_head),
-      ]
+      with tf_compat.v1.variable_scope('dummy_adanet_scope_iteration_1'):
+        subnetworks_pool = [
+            self._build_subnetwork(multi_head),
+            self._build_subnetwork(multi_head),
+        ]
 
-      subnetworks = subnetworks_pool[:num_subnetworks]
+        subnetworks = subnetworks_pool[:num_subnetworks]
 
-      previous_ensemble_subnetworks = previous_ensemble_subnetworks_all[:(
-          num_previous_ensemble_subnetworks)]
+        previous_ensemble_subnetworks = previous_ensemble_subnetworks_all[:(
+            num_previous_ensemble_subnetworks)]
 
-      self.summary.clear_scalars()
+        self.summary.clear_scalars()
 
-      built_ensemble = ensembler.build_ensemble(
-          subnetworks=subnetworks,
-          previous_ensemble_subnetworks=previous_ensemble_subnetworks,
-          features=None,
-          labels=None,
-          logits_dimension=None,
-          training=None,
-          iteration_step=None,
-          summary=self.summary,
-          previous_ensemble=previous_ensemble)
+        built_ensemble = ensembler.build_ensemble(
+            subnetworks=subnetworks,
+            previous_ensemble_subnetworks=previous_ensemble_subnetworks,
+            features=None,
+            labels=None,
+            logits_dimension=None,
+            training=None,
+            iteration_step=None,
+            summary=self.summary,
+            previous_ensemble=previous_ensemble)
 
-    if tf.executing_eagerly():
-      summary_scalars, complexity_regularization = (
-          self.summary.scalars, built_ensemble.complexity_regularization)
-
-      if expected_summary_scalars:
-        for key in expected_summary_scalars.keys():
-          self.assertAllClose(summary_scalars[key],
-                              expected_summary_scalars[key])
-
-      self.assertEqual(
-          [l.subnetwork for l in built_ensemble.weighted_subnetworks],
-          previous_ensemble_subnetworks + subnetworks)
-
-      self.assertAllClose(complexity_regularization,
-                          expected_complexity_regularization)
-      self.assertIsNotNone(built_ensemble.logits)
-    else:
-      with self.test_session() as sess:
-        sess.run(tf_compat.v1.global_variables_initializer())
-
-        summary_scalars, complexity_regularization = sess.run(
-            (self.summary.scalars, built_ensemble.complexity_regularization))
+      if tf.executing_eagerly():
+        summary_scalars, complexity_regularization = (
+            self.summary.scalars, built_ensemble.complexity_regularization)
 
         if expected_summary_scalars:
           for key in expected_summary_scalars.keys():
-            print(summary_scalars)
-            self.assertAllClose(expected_summary_scalars[key],
-                                summary_scalars[key])
+            self.assertAllClose(summary_scalars[key],
+                                expected_summary_scalars[key])
 
         self.assertEqual(
             [l.subnetwork for l in built_ensemble.weighted_subnetworks],
             previous_ensemble_subnetworks + subnetworks)
 
-        self.assertAllClose(expected_complexity_regularization,
-                            complexity_regularization)
-        self.assertIsNotNone(sess.run(built_ensemble.logits))
+        self.assertAllClose(complexity_regularization,
+                            expected_complexity_regularization)
+        self.assertIsNotNone(built_ensemble.logits)
+      else:
+        with self.test_session() as sess:
+          sess.run(tf_compat.v1.global_variables_initializer())
+
+          summary_scalars, complexity_regularization = sess.run(
+              (self.summary.scalars, built_ensemble.complexity_regularization))
+
+          if expected_summary_scalars:
+            for key in expected_summary_scalars.keys():
+              print(summary_scalars)
+              self.assertAllClose(expected_summary_scalars[key],
+                                  summary_scalars[key])
+
+          self.assertEqual(
+              [l.subnetwork for l in built_ensemble.weighted_subnetworks],
+              previous_ensemble_subnetworks + subnetworks)
+
+          self.assertAllClose(expected_complexity_regularization,
+                              complexity_regularization)
+          self.assertIsNotNone(sess.run(built_ensemble.logits))
 
   @test_util.run_in_graph_and_eager_modes
   def test_build_ensemble_subnetwork_has_scalar_logits(self):
-    logits = tf.ones(shape=(100,))
-    ensemble_spec = self._build_easy_ensemble([
-        subnetwork.Subnetwork(last_layer=logits, logits=logits, complexity=0.)
-    ])
-    self.assertEqual([1], ensemble_spec.bias.shape.as_list())
+    with context.graph_mode():
+      logits = tf.ones(shape=(100,))
+      ensemble_spec = self._build_easy_ensemble([
+          subnetwork.Subnetwork(last_layer=logits, logits=logits, complexity=0.)
+      ])
+      self.assertEqual([1], ensemble_spec.bias.shape.as_list())
 
   @test_util.run_in_graph_and_eager_modes
   def test_build_train_op_no_op(self):
-    train_op = ensemble.ComplexityRegularizedEnsembler().build_train_op(
-        *[None] * 7)  # arguments unused
-    if tf.executing_eagerly():
-      self.assertIsNone(train_op)
-    else:
-      self.assertEqual(train_op.type, tf.no_op().type)
+    with context.graph_mode():
+      train_op = ensemble.ComplexityRegularizedEnsembler().build_train_op(
+          *[None] * 7)  # arguments unused
+      if tf.executing_eagerly():
+        self.assertIsNone(train_op)
+      else:
+        self.assertEqual(train_op.type, tf.no_op().type)
 
   @test_util.run_in_graph_and_eager_modes
   def test_build_train_op_callable_optimizer(self):
