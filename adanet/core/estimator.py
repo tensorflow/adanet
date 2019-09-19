@@ -783,7 +783,7 @@ class Estimator(tf.estimator.Estimator):
         # In TensorFlow v1.14.0 and below, saving listeners are attached to the
         # first CheckpointSaverHook each time train is called. Instead, we pass
         # in the saving_listeners in the first AdaNet iteration only.
-        if not tf_compat.version_greater_or_equal("1.15.0"):
+        if not tf_compat.version_greater_or_equal("2.0.0.rc1"):
           saving_listeners = None
         logging.info("Finished training Adanet iteration %s", current_iteration)
 
@@ -1232,8 +1232,8 @@ class Estimator(tf.estimator.Estimator):
     Args:
       current_iteration: Current `_Iteration`.
       input_hooks: List of SessionRunHooks to be included when running.
-      checkpoint_path: Checkpoint to use when determining the best index.
-        When `None`, this method uses the latest checkpoint instead.
+      checkpoint_path: Checkpoint to use when determining the best index. When
+        `None`, this method uses the latest checkpoint instead.
 
     Returns:
       Index of the best ensemble in the iteration's list of `_Candidates`.
