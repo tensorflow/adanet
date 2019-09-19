@@ -1746,7 +1746,7 @@ def _mean_keras_metric(value):
 class EstimatorSummaryWriterTest(tu.AdanetTestCase):
   """Test that Tensorboard summaries get written correctly."""
 
-  @tf_compat.skip_for_tf1
+  @tf_compat.skip_for_tf2
   def test_summaries(self):
     """Tests that summaries are written to candidate directory."""
 
@@ -1814,7 +1814,7 @@ class EstimatorSummaryWriterTest(tu.AdanetTestCase):
             "adanet_weighted_ensemble/subnetwork_0", ensemble_subdir),
         places=3)
 
-  @tf_compat.skip_for_tf1
+  @tf_compat.skip_for_tf2
   def test_disable_summaries(self):
     """Tests that summaries can be disabled for ensembles and subnetworks."""
 
