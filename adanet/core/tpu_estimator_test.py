@@ -34,6 +34,9 @@ from adanet.subnetwork import Subnetwork
 import numpy as np
 import tensorflow as tf
 
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow_estimator.python.estimator.head import regression_head
+# pylint: enable=g-direct-tensorflow-import
 
 
 class _DNNBuilder(Builder):
@@ -68,17 +71,17 @@ class _DNNBuilder(Builder):
     if previous_ensemble:
       # Increment seed so different iterations don't learn the exact same thing.
       seed += 1
-    with tf.variable_scope("dnn"):
+    with tf.compat.v1.variable_scope("dnn"):
       persisted_tensors = {}
-      with tf.variable_scope("hidden_layer"):
+      with tf.compat.v1.variable_scope("hidden_layer"):
         if self._feature_columns:
           input_layer = tf.feature_column.input_layer(
               features=features, feature_columns=self._feature_columns)
         else:
           input_layer = features["x"]
-        w = tf.get_variable(
+        w = tf.compat.v1.get_variable(
             shape=[input_layer.shape[1], self._layer_size],
-            initializer=tf.glorot_uniform_initializer(seed=seed),
+            initializer=tf.compat.v1.glorot_uniform_initializer(seed=seed),
             name="weight")
         hidden_layer = tf.matmul(input_layer, w)
 
@@ -97,15 +100,15 @@ class _DNNBuilder(Builder):
         # `freeze_training_graph` is `True`.
         persisted_tensors["hidden_layer"] = 2 * hidden_layer
 
-    with tf.variable_scope("logits"):
-      logits = tf.layers.dense(
+    with tf.compat.v1.variable_scope("logits"):
+      logits = tf.compat.v1.layers.dense(
           hidden_layer,
           logits_dimension,
-          kernel_initializer=tf.glorot_uniform_initializer(seed=seed))
+          kernel_initializer=tf.compat.v1.glorot_uniform_initializer(seed=seed))
 
     summary.scalar("scalar", 3)
     summary.image("image", tf.ones([1, 3, 3, 1]))
-    with tf.variable_scope("nested"):
+    with tf.compat.v1.variable_scope("nested"):
       summary.scalar("scalar", 5)
 
     return Subnetwork(
@@ -116,7 +119,7 @@ class _DNNBuilder(Builder):
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
-    optimizer = tf.train.GradientDescentOptimizer(
+    optimizer = tf.compat.v1.train.GradientDescentOptimizer(
         learning_rate=self._learning_rate)
     if self._use_tpu:
       optimizer = tf.tpu.CrossShardOptimizer(optimizer)
@@ -163,13 +166,13 @@ class _NanLossBuilder(Builder):
 def _get_summary_value(keyword, dir_):
   """Returns the latest summary value for the given keyword in TF events."""
 
-  tf.summary.FileWriterCache.clear()
+  tf.compat.v1.summary.FileWriterCache.clear()
 
   filenames = os.path.join(dir_, "events*")
-  event_paths = tf.gfile.Glob(filenames)
+  event_paths = tf.io.gfile.glob(filenames)
   if not event_paths:
     raise ValueError("Path '{!r}' not found.".format(filenames))
-  for last_event in tf.train.summary_iterator(event_paths[-1]):
+  for last_event in tf.compat.v1.train.summary_iterator(event_paths[-1]):
     if last_event.summary is not None:
       for value in last_event.summary.value:
         if keyword == value.tag:
@@ -208,15 +211,13 @@ class TPUEstimatorTest(tu.AdanetTestCase):
               SimpleGenerator([_DNNBuilder("dnn", use_tpu=False)]),
           "want_loss":
               0.41315794,
-      },
-  )
-  @tf_compat.skip_for_tf2
+      },)
   def test_tpu_estimator_simple_lifecycle(self, use_tpu, subnetwork_generator,
                                           want_loss):
     config = tf_compat.v1.estimator.tpu.RunConfig(master="", tf_random_seed=42)
     estimator = TPUEstimator(
-        head=tf.contrib.estimator.regression_head(
-            loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE),
+        head=regression_head.RegressionHead(
+            loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE),
         subnetwork_generator=subnetwork_generator,
         max_iteration_steps=10,
         model_dir=self.test_subdirectory,
@@ -244,16 +245,13 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     # Export SavedModel.
     def serving_input_fn():
       """Input fn for serving export, starting from serialized example."""
-      serialized_example = tf.placeholder(
+      serialized_example = tf.compat.v1.placeholder(
           dtype=tf.string, shape=(None), name="serialized_example")
       return tf.estimator.export.ServingInputReceiver(
           features={"x": tf.constant([[0., 0.]], name="serving_x")},
           receiver_tensors=serialized_example)
 
-    export_saved_model_fn = getattr(estimator, "export_saved_model", None)
-    if not callable(export_saved_model_fn):
-      export_saved_model_fn = estimator.export_savedmodel
-    export_saved_model_fn(
+    estimator.export_saved_model(
         export_dir_base=estimator.model_dir,
         serving_input_receiver_fn=serving_input_fn)
 
@@ -263,8 +261,6 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     for prediction in predictions:
       self.assertIsNotNone(prediction["predictions"])
 
-
-
   @parameterized.named_parameters(
       {
           "testcase_name": "not_use_tpu",
@@ -273,15 +269,15 @@ class TPUEstimatorTest(tu.AdanetTestCase):
           "want_adanet_loss": .64416,
           "want_eval_summary_loss": 0.555849,
           "want_predictions": 0.46818,
-      },
-  )
+      },)
+  # TODO: Use V2 summaries for TPU and reenable test.
   @tf_compat.skip_for_tf2
   def test_tpu_estimator_summaries(self, use_tpu, want_loss, want_adanet_loss,
                                    want_eval_summary_loss, want_predictions):
     max_steps = 10
     config = tf_compat.v1.estimator.tpu.RunConfig(
         tf_random_seed=42,
-        save_summary_steps=max_steps,
+        save_summary_steps=2,
         log_step_count_steps=max_steps)
     assert config.log_step_count_steps
 
@@ -291,8 +287,8 @@ class TPUEstimatorTest(tu.AdanetTestCase):
       }
 
     estimator = TPUEstimator(
-        head=tf.contrib.estimator.regression_head(
-            loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE),
+        head=regression_head.RegressionHead(
+            loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE),
         subnetwork_generator=SimpleGenerator(
             [_DNNBuilder("dnn", use_tpu=use_tpu)]),
         max_iteration_steps=max_steps,

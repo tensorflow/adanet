@@ -23,6 +23,7 @@ import collections
 import contextlib
 import functools
 
+from absl import logging
 from adanet import tf_compat
 from adanet.core.estimator import Estimator
 import tensorflow as tf
@@ -59,8 +60,8 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
     adanet_loss_decay: See :class:`adanet.Estimator`.
     report_dir: See :class:`adanet.Estimator`.
     config: See :class:`adanet.Estimator`.
-    use_tpu: Boolean to enable training on TPU. Defaults to :code:`True` and
-      is only provided to allow debugging models on CPU/GPU. Use
+    use_tpu: Boolean to enable training on TPU. Defaults to :code:`True` and is
+      only provided to allow debugging models on CPU/GPU. Use
       :class:`adanet.Estimator` instead if you do not plan to run on TPU.
     eval_on_tpu: Boolean to enable evaluating on TPU. Defaults to :code:`True`.
       Ignored if :code:`use_tpu=False`.
@@ -108,13 +109,9 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
                max_iterations=None,
                replay_config=None,
                **kwargs):
-
-    if tf_compat.version_greater_or_equal("2.0.0"):
-      raise ValueError("TPUEstimator is not yet supported with TensorFlow 2.0.")
-
     self._use_tpu = use_tpu
     if not self._use_tpu:
-      tf.logging.warning(
+      logging.warning(
           "This adanet.TPUEstimator is meant to be used for running on TPU. "
           "If you want to run on CPU/GPU, use adanet.Estimator instead.")
 
@@ -165,7 +162,7 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
               checkpoint_path=None,
               yield_single_examples=True):
 
-    tf.logging.warning(
+    logging.warning(
         "The adanet.TPUEstimator does not support predicting on TPU. "
         "Instead, all predictions are run on CPU.")
     tpu_estimator = tf_compat.v1.estimator.tpu.TPUEstimator(
