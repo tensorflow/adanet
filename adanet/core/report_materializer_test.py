@@ -26,6 +26,11 @@ from adanet.core.report_materializer import ReportMaterializer
 import adanet.core.testing_utils as tu
 import tensorflow as tf
 
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
+
 
 def decode(param):
   """Decodes the given param when it is bytes."""
@@ -405,6 +410,7 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
               ),
           ],
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_materialize_subnetwork_reports(self,
                                           input_fn,
                                           subnetwork_reports_fn,
@@ -412,62 +418,64 @@ class ReportMaterializerTest(parameterized.TestCase, tf.test.TestCase):
                                           iteration_number=0,
                                           included_subnetwork_names=None,
                                           want_materialized_reports=None):
-    tf.constant(0.)  # dummy op so that the session graph is never empty.
-    features, labels = input_fn()
-    subnetwork_reports = subnetwork_reports_fn(features, labels)
-    with self.test_session() as sess:
-      sess.run(tf_compat.v1.initializers.local_variables())
-      report_materializer = ReportMaterializer(input_fn=input_fn, steps=steps)
-      materialized_reports = (
-          report_materializer.materialize_subnetwork_reports(
-              sess, iteration_number, subnetwork_reports,
-              included_subnetwork_names))
-      self.assertEqual(
-          len(want_materialized_reports), len(materialized_reports))
-      materialized_reports_dict = {
-          blrm.name: blrm for blrm in materialized_reports
-      }
-      for want_materialized_report in want_materialized_reports:
-        materialized_report = (
-            materialized_reports_dict[want_materialized_report.name])
-        self.assertEqual(iteration_number, materialized_report.iteration_number)
+    with context.graph_mode():
+      tf.constant(0.)  # dummy op so that the session graph is never empty.
+      features, labels = input_fn()
+      subnetwork_reports = subnetwork_reports_fn(features, labels)
+      with self.test_session() as sess:
+        sess.run(tf_compat.v1.initializers.local_variables())
+        report_materializer = ReportMaterializer(input_fn=input_fn, steps=steps)
+        materialized_reports = (
+            report_materializer.materialize_subnetwork_reports(
+                sess, iteration_number, subnetwork_reports,
+                included_subnetwork_names))
         self.assertEqual(
-            set(want_materialized_report.hparams.keys()),
-            set(materialized_report.hparams.keys()))
-        for hparam_key, want_hparam in (
-            want_materialized_report.hparams.items()):
-          if isinstance(want_hparam, float):
-            self.assertAllClose(want_hparam,
-                                materialized_report.hparams[hparam_key])
-          else:
-            self.assertEqual(want_hparam,
-                             materialized_report.hparams[hparam_key])
+            len(want_materialized_reports), len(materialized_reports))
+        materialized_reports_dict = {
+            blrm.name: blrm for blrm in materialized_reports
+        }
+        for want_materialized_report in want_materialized_reports:
+          materialized_report = (
+              materialized_reports_dict[want_materialized_report.name])
+          self.assertEqual(iteration_number,
+                           materialized_report.iteration_number)
+          self.assertEqual(
+              set(want_materialized_report.hparams.keys()),
+              set(materialized_report.hparams.keys()))
+          for hparam_key, want_hparam in (
+              want_materialized_report.hparams.items()):
+            if isinstance(want_hparam, float):
+              self.assertAllClose(want_hparam,
+                                  materialized_report.hparams[hparam_key])
+            else:
+              self.assertEqual(want_hparam,
+                               materialized_report.hparams[hparam_key])
 
-        self.assertSetEqual(
-            set(want_materialized_report.attributes.keys()),
-            set(materialized_report.attributes.keys()))
-        for attribute_key, want_attribute in (
-            want_materialized_report.attributes.items()):
-          if isinstance(want_attribute, float):
-            self.assertAllClose(
-                want_attribute,
-                decode(materialized_report.attributes[attribute_key]))
-          else:
-            self.assertEqual(
-                want_attribute,
-                decode(materialized_report.attributes[attribute_key]))
+          self.assertSetEqual(
+              set(want_materialized_report.attributes.keys()),
+              set(materialized_report.attributes.keys()))
+          for attribute_key, want_attribute in (
+              want_materialized_report.attributes.items()):
+            if isinstance(want_attribute, float):
+              self.assertAllClose(
+                  want_attribute,
+                  decode(materialized_report.attributes[attribute_key]))
+            else:
+              self.assertEqual(
+                  want_attribute,
+                  decode(materialized_report.attributes[attribute_key]))
 
-        self.assertSetEqual(
-            set(want_materialized_report.metrics.keys()),
-            set(materialized_report.metrics.keys()))
-        for metric_key, want_metric in (
-            want_materialized_report.metrics.items()):
-          if isinstance(want_metric, float):
-            self.assertAllClose(want_metric,
-                                decode(materialized_report.metrics[metric_key]))
-          else:
-            self.assertEqual(want_metric,
-                             decode(materialized_report.metrics[metric_key]))
+          self.assertSetEqual(
+              set(want_materialized_report.metrics.keys()),
+              set(materialized_report.metrics.keys()))
+          for metric_key, want_metric in (
+              want_materialized_report.metrics.items()):
+            if isinstance(want_metric, float):
+              self.assertAllClose(
+                  want_metric, decode(materialized_report.metrics[metric_key]))
+            else:
+              self.assertEqual(want_metric,
+                               decode(materialized_report.metrics[metric_key]))
 
 
 if __name__ == "__main__":
