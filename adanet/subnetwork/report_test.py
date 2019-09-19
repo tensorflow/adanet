@@ -23,44 +23,53 @@ from absl.testing import parameterized
 from adanet.subnetwork.report import Report
 import tensorflow as tf
 
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
+
 
 class ReportTest(parameterized.TestCase, tf.test.TestCase):
 
-  @parameterized.named_parameters({
-      "testcase_name": "empty",
-      "hparams": {},
-      "attributes": {},
-      "metrics": {},
-  }, {
-      "testcase_name": "non_empty",
-      "hparams": {
-          "hoo": 1
-      },
-      "attributes": {
-          "aoo": tf.constant(1)
-      },
-      "metrics": {
-          "moo": (tf.constant(1), tf.constant(1))
-      },
-  }, {
-      "testcase_name": "non_tensor_update_op",
-      "hparams": {
-          "hoo": 1
-      },
-      "attributes": {
-          "aoo": tf.constant(1)
-      },
-      "metrics": {
-          "moo": (tf.constant(1), tf.no_op())
-      },
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "empty",
+          "hparams": {},
+          "attributes": lambda: {},
+          "metrics": lambda: {},
+      }, {
+          "testcase_name": "non_empty",
+          "hparams": {
+              "hoo": 1
+          },
+          "attributes": lambda: {
+              "aoo": tf.constant(1)
+          },
+          "metrics": lambda: {
+              "moo": (tf.constant(1), tf.constant(1))
+          },
+      }, {
+          "testcase_name": "non_tensor_update_op",
+          "hparams": {
+              "hoo": 1
+          },
+          "attributes": lambda: {
+              "aoo": tf.constant(1)
+          },
+          "metrics": lambda: {
+              "moo": (tf.constant(1), tf.no_op())
+          },
+      })
+  @test_util.run_in_graph_and_eager_modes
   def test_new(self, hparams, attributes, metrics):
-    with self.test_session():
-      report = Report(hparams=hparams, attributes=attributes, metrics=metrics)
+    with context.graph_mode():
+      _ = tf.constant(0)  # Just to have a non-empty graph.
+      report = Report(hparams=hparams, attributes=attributes(), metrics=metrics())
       self.assertEqual(hparams, report.hparams)
-      self.assertEqual(attributes, report.attributes)
-      self.assertEqual(metrics, report.metrics)
+      self.assertEqual(self.evaluate(attributes()), self.evaluate(report.attributes))
+      self.assertEqual(self.evaluate(metrics()), self.evaluate(report.metrics))
 
+  @test_util.run_in_graph_and_eager_modes
   def test_drop_non_scalar_metric(self):
     """Tests b/118632346."""
 
@@ -78,39 +87,40 @@ class ReportTest(parameterized.TestCase, tf.test.TestCase):
       self.assertEqual(attributes, report.attributes)
       self.assertEqual(want_metrics, report.metrics)
 
-  @parameterized.named_parameters({
-      "testcase_name": "tensor_hparams",
-      "hparams": {
-          "hoo": tf.constant(1)
-      },
-      "attributes": {},
-      "metrics": {},
-  }, {
-      "testcase_name": "non_tensor_attributes",
-      "hparams": {},
-      "attributes": {
-          "aoo": 1,
-      },
-      "metrics": {},
-  }, {
-      "testcase_name": "non_tuple_metrics",
-      "hparams": {},
-      "attributes": {},
-      "metrics": {
-          "moo": tf.constant(1)
-      },
-  }, {
-      "testcase_name": "one_item_tuple_metrics",
-      "hparams": {},
-      "attributes": {},
-      "metrics": {
-          "moo": (tf.constant(1),)
-      },
-  })
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "tensor_hparams",
+          "hparams": {
+              "hoo": tf.constant(1)
+          },
+          "attributes": {},
+          "metrics": {},
+      }, {
+          "testcase_name": "non_tensor_attributes",
+          "hparams": {},
+          "attributes": {
+              "aoo": 1,
+          },
+          "metrics": {},
+      }, {
+          "testcase_name": "non_tuple_metrics",
+          "hparams": {},
+          "attributes": {},
+          "metrics": {
+              "moo": tf.constant(1)
+          },
+      }, {
+          "testcase_name": "one_item_tuple_metrics",
+          "hparams": {},
+          "attributes": {},
+          "metrics": {
+              "moo": (tf.constant(1),)
+          },
+      })
+  @test_util.run_in_graph_and_eager_modes
   def test_new_errors(self, hparams, attributes, metrics):
-    with self.test_session():
-      with self.assertRaises(ValueError):
-        Report(hparams=hparams, attributes=attributes, metrics=metrics)
+    with self.assertRaises(ValueError):
+      Report(hparams=hparams, attributes=attributes, metrics=metrics)
 
 
 if __name__ == "__main__":
