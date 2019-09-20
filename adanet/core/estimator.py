@@ -47,6 +47,8 @@ import six
 import tensorflow as tf
 
 # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.ops import check_ops
+from tensorflow.python.ops import metrics_impl
 from tensorflow.python.util import deprecation
 from tensorflow_estimator.python.estimator import util
 # pylint: enable=g-direct-tensorflow-import
@@ -337,6 +339,60 @@ def _delete_directory(directory):
           tf.errors.FailedPreconditionError) as e:
     logging.info("Ignoring folder or file issues: %s '%s'", e.error_code,
                  e.message)
+
+
+@contextlib.contextmanager
+def _disable_asserts_for_confusion_matrix_at_thresholds():
+  """Disables asserts in metrics_impl._confusion_matrix_at_thresholds.
+
+  AdaNet sometimes have a few NaN and non-NaN subnetworks at a given iteration.
+  This doesn't crash during training, since AdaNet simply chooses the best
+  subnetwork among the non-NaN candidates. However, during estimator.evaluate(),
+  AdaNet evaluates all subnetworks and ensembles. This triggers an assertion
+  failure in V1 binary classifier _Head, since it expects the predictions to be
+  between 0 and 1, and NaN is not between 0 and 1. This causes AdaNet and
+  to raise an exception during estimator.evaluate(), even though the final model
+  is servable. Hence, we disable these assertions during evaluate(), and allow
+  the NaNs to be written to disk.
+
+  Yields:
+    Nothing. Simply returns control back to the caller.
+  """
+
+  def _no_op_assert(x, y, data=None, summarize=None, message=None, name=None):
+    """Dummy assert that never fails."""
+
+    del x, y, data, summarize, message, name  # unused
+    return tf.no_op()
+
+  old_confusion_matrix_at_thresholds = (
+      metrics_impl._confusion_matrix_at_thresholds)  # pylint:disable=protected-access
+
+  def _confusion_matrix_at_thresholds_without_asserts(labels,
+                                                      predictions,
+                                                      thresholds,
+                                                      weights=None,
+                                                      includes=None):
+    """Calls _confusion_matrix_at_thresholds without asserts; returns output."""
+
+    old_assert_greater_equal = check_ops.assert_greater_equal
+    old_assert_less_equal = check_ops.assert_less_equal
+    setattr(check_ops, "assert_greater_equal", _no_op_assert)
+    setattr(check_ops, "assert_less_equal", _no_op_assert)
+    conf_matrix = old_confusion_matrix_at_thresholds(labels, predictions,
+                                                     thresholds, weights,
+                                                     includes)
+    setattr(check_ops, "assert_greater_equal", old_assert_greater_equal)
+    setattr(check_ops, "assert_less_equal", old_assert_less_equal)
+    return conf_matrix
+
+  setattr(metrics_impl, "_confusion_matrix_at_thresholds",
+          _confusion_matrix_at_thresholds_without_asserts)
+  try:
+    yield
+  finally:
+    setattr(metrics_impl, "_confusion_matrix_at_thresholds",
+            old_confusion_matrix_at_thresholds)
 
 
 class Estimator(tf.estimator.Estimator):
@@ -893,12 +949,13 @@ class Estimator(tf.estimator.Estimator):
     # Delegate evaluation to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(self.config, params=params)
-    result = temp_estimator.evaluate(
-        input_fn,
-        steps=steps,
-        hooks=hooks,
-        checkpoint_path=checkpoint_path,
-        name=name)
+    with _disable_asserts_for_confusion_matrix_at_thresholds():
+      result = temp_estimator.evaluate(
+          input_fn,
+          steps=steps,
+          hooks=hooks,
+          checkpoint_path=checkpoint_path,
+          name=name)
     return result
 
   def predict(self,

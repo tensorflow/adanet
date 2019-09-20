@@ -51,6 +51,7 @@ from tensorflow.python.eager import context
 from tensorflow.python.framework import test_util
 from tensorflow.python.tools import saved_model_utils
 # pylint: enable=g-direct-tensorflow-import
+from tensorflow_estimator.python.estimator.canned.head import _binary_logistic_head_with_sigmoid_cross_entropy_loss as binary_class_head_v1
 from tensorflow_estimator.python.estimator.export import export
 from tensorflow_estimator.python.estimator.head import binary_class_head
 from tensorflow_estimator.python.estimator.head import multi_head as multi_head_lib
@@ -1284,6 +1285,21 @@ class EstimatorTest(tu.AdanetTestCase):
           model_dir=self.test_subdirectory)
       train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
       estimator.train(input_fn=train_input_fn, steps=steps, max_steps=max_steps)
+
+  def test_binary_head_asserts_are_disabled(self):
+    """Tests b/140267630."""
+
+    subnetwork_generator = SimpleGenerator([
+        _DNNBuilder("dnn"),
+        _NanLossBuilder(),
+    ])
+    estimator = Estimator(
+        head=binary_class_head_v1(),
+        subnetwork_generator=subnetwork_generator,
+        max_iteration_steps=10,
+        model_dir=self.test_subdirectory)
+    eval_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
+    estimator.evaluate(input_fn=eval_input_fn, steps=1)
 
 
 class KerasCNNBuilder(Builder):

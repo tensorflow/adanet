@@ -45,7 +45,7 @@ py_test(
     name = "estimator_test",
     size = "large",
     srcs = ["estimator_test.py"],
-    shard_count = 40,
+    shard_count = 41,
     deps = [
         ":ensemble_builder",
         ":estimator",
