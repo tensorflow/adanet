@@ -96,6 +96,7 @@ class _SimpleBuilder(Builder):
 class EstimatorSummaryWriterTest(tu.AdanetTestCase):
   """Test that Tensorboard summaries get written correctly."""
 
+  @tf_compat.skip_for_tf1
   def test_summaries(self):
     """Tests that summaries are written to candidate directory."""
 

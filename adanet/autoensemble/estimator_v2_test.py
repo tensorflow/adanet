@@ -25,6 +25,7 @@ import sys
 
 from absl import flags
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
 import tensorflow as tf
 
@@ -74,6 +75,7 @@ class AutoEnsembleEstimatorV2Test(parameterized.TestCase, tf.test.TestCase):
               .209,
       },)
   # pylint: enable=g-long-lambda
+  @tf_compat.skip_for_tf1
   def test_auto_ensemble_estimator_lifecycle(self,
                                              candidate_pool,
                                              want_loss,
