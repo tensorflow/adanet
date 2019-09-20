@@ -51,8 +51,6 @@ import tensorflow as tf
 
 # Contrib
 try:
-  from tensorflow.contrib.boosted_trees.estimator_batch.estimator import CoreGradientBoostedDecisionTreeEstimator
-  from tensorflow.contrib.boosted_trees.proto import learner_pb2
   from tensorflow.contrib.boosted_trees.python.utils import losses as bt_losses
 except ImportError:
   # Not much we can do here except skip the test.
@@ -319,13 +317,12 @@ def train_and_evaluate_estimator():
                     learning_rate=.001),
                 config=config),
         "gbdt":
-            CoreGradientBoostedDecisionTreeEstimator(
+            tf.estimator.BoostedTreesEstimator(
                 head=tree_head,
-                learner_config=learner_pb2.LearnerConfig(num_classes=n_classes),
-                examples_per_layer=8,
-                num_trees=None,
-                center_bias=False,  # Required for multi-class.
                 feature_columns=feature_columns,
+                n_trees=10,
+                n_batches_per_layer=1,
+                center_bias=False,
                 config=config),
     }
 
