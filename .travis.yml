@@ -69,10 +69,9 @@ install:
   - pip install -r requirements.txt
   - pip install numpy --upgrade
   - pip install coverage-enable-subprocess
-  - pip install nose-parallel==0.3.1 # For splitting tests across worker machines.
   - ./oss_scripts/oss_pip_install.sh
 script:
-  - NOSE_EXCLUDE='.*workers.*|.*nasnet.*.py' nosetests --with-parallel
+  - NOSE_EXCLUDE='.*workers.*|.*nasnet.*.py' nosetests
   - cat /tmp/absl_testing/**/*.txt || true  # Don't error if file does not exist.
 after_success:
   # Install codecov for tracking coverage over time.
