@@ -12,39 +12,50 @@ env:
     - CODECOV_TOKEN="0d2c482b-f42c-4d4c-b092-cb628ad20857"
     - BAZEL_VERSION=0.20.0
     - COVERAGE_PROCESS_START=$PWD/.coveragerc
+    - NODE_TOTAL=3  # Total machines running per test setting
   matrix:
     # We test against recent versions of TensorFlow and tf-nightly.
 
     # Quick test suite.
-    - TF_VERSION="1.14.*" SUITE="quick"
-    - TF_VERSION="tf-nightly" SUITE="quick"
-    - TF_VERSION="2.0.0-beta1" SUITE="quick"
-    - TF_VERSION="tf-nightly-2.0-preview" SUITE="quick"
-
-    # E2E Tests.
-    - TF_VERSION="1.14.*" SUITE="e2e"
-    - TF_VERSION="tf-nightly" SUITE="e2e"
-    - TF_VERSION="2.0.0-beta1" SUITE="e2e"
-    - TF_VERSION="tf-nightly-2.0-preview" SUITE="e2e"
+    - TF_VERSION="1.14.*" NODE_INDEX=0
+    - TF_VERSION="1.14.*" NODE_INDEX=1
+    - TF_VERSION="1.14.*" NODE_INDEX=2
+    - TF_VERSION="tf-nightly" NODE_INDEX=0
+    - TF_VERSION="tf-nightly" NODE_INDEX=1
+    - TF_VERSION="tf-nightly" NODE_INDEX=2
+    - TF_VERSION="2.0.0-rc1" NODE_INDEX=0
+    - TF_VERSION="2.0.0-rc1" Node_INDEX=1
+    - TF_VERSION="2.0.0-rc1" Node_INDEX=2
+    - TF_VERSION="tf-nightly-2.0-preview" Node_INDEX=0
+    - TF_VERSION="tf-nightly-2.0-preview" Node_INDEX=1
+    - TF_VERSION="tf-nightly-2.0-preview" Node_INDEX=2
 
 matrix:
   allow_failures:
     - python: "2.7"
-      env: TF_VERSION="2.0.0-beta1" SUITE="quick"
+      env: TF_VERSION="2.0.0-rc1" NODE_INDEX=0
     - python: "2.7"
-      env: TF_VERSION="2.0.0-beta1" SUITE="e2e"
-    - python: "3.6"
-      env: TF_VERSION="2.0.0-beta1" SUITE="quick"
-    - python: "3.6"
-      env: TF_VERSION="2.0.0-beta1" SUITE="e2e"
+      env: TF_VERSION="2.0.0-rc1" NODE_INDEX=1
     - python: "2.7"
-      env: TF_VERSION="tf-nightly-2.0-preview" SUITE="quick"
+      env: TF_VERSION="2.0.0-rc1" NODE_INDEX=2
+    - python: "3.6"
+      env: TF_VERSION="2.0.0-rc1" NODE_INDEX=0
+    - python: "3.6"
+      env: TF_VERSION="2.0.0-rc1" NODE_INDEX=1
+    - python: "3.6"
+      env: TF_VERSION="2.0.0-rc1" NODE_INDEX=2
     - python: "2.7"
-      env: TF_VERSION="tf-nightly-2.0-preview" SUITE="e2e"
+      env: TF_VERSION="tf-nightly-2.0-preview" NODE_INDEX=0
+    - python: "2.7"
+      env: TF_VERSION="tf-nightly-2.0-preview" NODE_INDEX=1
+    - python: "2.7"
+      env: TF_VERSION="tf-nightly-2.0-preview" NODE_INDEX=2
     - python: "3.6"
-      env: TF_VERSION="tf-nightly-2.0-preview" SUITE="quick"
+      env: TF_VERSION="tf-nightly-2.0-preview" NODE_INDEX=0
     - python: "3.6"
-      env: TF_VERSION="tf-nightly-2.0-preview" SUITE="e2e"
+      env: TF_VERSION="tf-nightly-2.0-preview" NODE_INDEX=1
+    - python: "3.6"
+      env: TF_VERSION="tf-nightly-2.0-preview" NODE_INDEX=2
 
 before_install:
   - sudo apt-get -y install pkg-config zip g++ zlib1g-dev unzip
@@ -58,14 +69,10 @@ install:
   - pip install -r requirements.txt
   - pip install numpy --upgrade
   - pip install coverage-enable-subprocess
+  - pip install nose-parallel==0.3.1 # For splitting tests across worker machines.
   - ./oss_scripts/oss_pip_install.sh
 script:
-  - |
-    if [ $SUITE == "e2e" ]; then
-      NOSE_EXCLUDE='.*workers.*' nosetests adanet/core/estimator_distributed_test.py
-    else
-      NOSE_EXCLUDE='.*nasnet.*.py|.*test_distributed_training.*' nosetests
-    fi
+  - NOSE_EXCLUDE='.*workers.*|.*nasnet.*.py' nosetests --with-parallel
   - cat /tmp/absl_testing/**/*.txt || true  # Don't error if file does not exist.
 after_success:
   # Install codecov for tracking coverage over time.
