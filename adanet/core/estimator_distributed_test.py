@@ -33,8 +33,8 @@ import time
 from absl import flags
 from absl import logging
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.core.timer import _CountDownTimer
-# TODO: Switch back to TF 2.0 once the distribution bug is fixed.
 import tensorflow as tf
 
 # Maximum number of characters to log per process.
@@ -282,6 +282,8 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
           ] for placement in ["replication", "round_robin"]
       ]))
   # pylint: enable=g-complex-comprehension
+  # TODO: Test distributed training in TF 2.
+  @tf_compat.skip_for_tf2
   def test_distributed_training(self,
                                 num_workers,
                                 num_ps,

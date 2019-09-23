@@ -29,7 +29,10 @@ from adanet.subnetwork import Subnetwork
 from adanet.subnetwork import TrainOpSpec
 import tensorflow as tf
 
+# pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.estimator.canned import prediction_keys
+from tensorflow_estimator.python.estimator import estimator as estimator_lib
+# pylint: enable=g-direct-tensorflow-import
 
 
 def _default_logits(estimator_spec):
@@ -133,7 +136,8 @@ class _BuilderFromSubestimator(Builder):
       mode = tf.estimator.ModeKeys.TRAIN
 
     # Call in template to ensure that variables are created once and reused.
-    call_model_fn_template = tf.make_template("model_fn", self._call_model_fn)
+    call_model_fn_template = tf.compat.v1.make_template("model_fn",
+                                                        self._call_model_fn)
     subestimator_features, subestimator_labels = features, labels
     local_init_ops = []
     if training and self._subestimator.train_input_fn:
@@ -188,7 +192,8 @@ class _BuilderFromSubestimator(Builder):
 def _convert_to_subestimator(candidate):
   if isinstance(candidate, AutoEnsembleSubestimator):
     return candidate
-  if isinstance(candidate, tf.estimator.Estimator):
+  if isinstance(candidate,
+                (estimator_lib.Estimator, estimator_lib.EstimatorV2)):
     return AutoEnsembleSubestimator(candidate)
   raise ValueError(
       "subestimator in candidate_pool must have type tf.estimator.Estimator or "

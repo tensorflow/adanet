@@ -31,31 +31,15 @@ from adanet.core.eval_metrics import call_eval_metrics
 import adanet.core.testing_utils as tu
 import tensorflow as tf
 
-
-def _run_metrics(sess, metrics):
-  metric_ops = metrics
-  if isinstance(metric_ops, tuple):
-    metric_ops = call_eval_metrics(metric_ops)
-  if tf.executing_eagerly():
-    results = {}
-    for k in metric_ops:
-      metric = metric_ops[k]
-      if isinstance(metric, tf.keras.metrics.Metric):
-        results[k] = metric_ops[k].result().numpy()
-      else:
-        results[k] = metric_ops[k][0]
-    return results
-  sess.run((tf_compat.v1.global_variables_initializer(),
-            tf_compat.v1.local_variables_initializer()))
-  sess.run(metric_ops)
-  return {k: sess.run(metric_ops[k][0]) for k in metric_ops}
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
 
 
 class MetricsTest(tu.AdanetTestCase):
 
-  def setUp(self):
-    super(MetricsTest, self).setUp()
-
+  def setup_graph(self):
     # We only test the multi head since this is the general case.
     self._features = {"x": tf.constant([[1.], [2.]])}
     heads = ("head_1", "head_2")
@@ -74,10 +58,17 @@ class MetricsTest(tu.AdanetTestCase):
             "loss": loss
         }))
 
+  def _run_metrics(self, metrics):
+    metric_ops = metrics
+    if isinstance(metric_ops, tuple):
+      metric_ops = call_eval_metrics(metric_ops)
+    self.evaluate((tf_compat.v1.global_variables_initializer(),
+                   tf_compat.v1.local_variables_initializer()))
+    self.evaluate(metric_ops)
+    return {k: self.evaluate(metric_ops[k][0]) for k in metric_ops}
+
   def _assert_tensors_equal(self, actual, expected):
-    if not tf.executing_eagerly():
-      with self.test_session() as sess:
-        actual, expected = sess.run((actual, expected))
+    actual, expected = self.evaluate((actual, expected))
     self.assertEqual(actual, expected)
 
   def _spec_metric_fn(self, features, labels, predictions, loss):
@@ -87,20 +78,12 @@ class MetricsTest(tu.AdanetTestCase):
         self._estimator_spec.loss
     ]
     self._assert_tensors_equal(actual, expected)
-    if tf.executing_eagerly():
-      metric = tf.metrics.Mean("mean_1")
-      metric(tf.constant(1.))
-      return {"metric_1": metric}
     return {"metric_1": tf_compat.v1.metrics.mean(tf.constant(1.))}
 
   def _metric_fn(self, features, predictions):
     actual = [features, predictions]
     expected = [self._features, self._estimator_spec.predictions]
     self._assert_tensors_equal(actual, expected)
-    if tf.executing_eagerly():
-      metric = tf.metrics.Mean("mean_2")
-      metric(tf.constant(2.))
-      return {"metric_2": metric}
     return {"metric_2": tf_compat.v1.metrics.mean(tf.constant(2.))}
 
   @parameterized.named_parameters(
@@ -114,60 +97,62 @@ class MetricsTest(tu.AdanetTestCase):
           "testcase_name": "not_use_tpu",
           "use_tpu": False,
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_subnetwork_metrics(self, use_tpu):
-    spec = self._estimator_spec
-    if not use_tpu:
-      spec = spec.as_estimator_spec()
-    metrics = _SubnetworkMetrics()
-    metrics.create_eval_metrics(self._features, self._labels, spec,
-                                self._metric_fn)
+    with context.graph_mode():
+      self.setup_graph()
+      spec = self._estimator_spec
+      if not use_tpu:
+        spec = spec.as_estimator_spec()
+      metrics = _SubnetworkMetrics()
+      metrics.create_eval_metrics(self._features, self._labels, spec,
+                                  self._metric_fn)
 
-    with self.test_session() as sess:
-      actual = _run_metrics(sess, metrics.eval_metrics_tuple())
+      actual = self._run_metrics(metrics.eval_metrics_tuple())
 
-    expected = {"loss": 2., "metric_1": 1., "metric_2": 2.}
-    self.assertEqual(actual, expected)
+      expected = {"loss": 2., "metric_1": 1., "metric_2": 2.}
+      self.assertEqual(actual, expected)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_subnetwork_metrics_user_metric_fn_overrides_metrics(self):
+    with context.graph_mode():
+      self.setup_graph()
+      overridden_value = 100.
 
-    overridden_value = 100.
+      def _overriding_metric_fn():
+        value = tf.constant(overridden_value)
 
-    def _overriding_metric_fn():
-      value = tf.constant(overridden_value)
-      if tf.executing_eagerly():
-        metric = tf.metrics.Mean()
-        metric.update_state(value)
-        return {"metric_1": metric}
-      return {"metric_1": tf_compat.v1.metrics.mean(value)}
+        return {"metric_1": tf_compat.v1.metrics.mean(value)}
 
-    metrics = _SubnetworkMetrics()
-    metrics.create_eval_metrics(self._features, self._labels,
-                                self._estimator_spec, _overriding_metric_fn)
+      metrics = _SubnetworkMetrics()
+      metrics.create_eval_metrics(self._features, self._labels,
+                                  self._estimator_spec, _overriding_metric_fn)
 
-    with self.test_session() as sess:
-      actual = _run_metrics(sess, metrics.eval_metrics_tuple())
+      actual = self._run_metrics(metrics.eval_metrics_tuple())
 
-    expected = {"loss": 2., "metric_1": overridden_value}
-    self.assertEqual(actual, expected)
+      expected = {"loss": 2., "metric_1": overridden_value}
+      self.assertEqual(actual, expected)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_ensemble_metrics(self):
-    architecture = _Architecture("test_ensemble_candidate", "test_ensembler")
-    architecture.add_subnetwork(iteration_number=0, builder_name="b_0_0")
-    architecture.add_subnetwork(iteration_number=0, builder_name="b_0_1")
-    architecture.add_subnetwork(iteration_number=1, builder_name="b_1_0")
-    architecture.add_subnetwork(iteration_number=2, builder_name="b_2_0")
+    with context.graph_mode():
+      self.setup_graph()
+      architecture = _Architecture("test_ensemble_candidate", "test_ensembler")
+      architecture.add_subnetwork(iteration_number=0, builder_name="b_0_0")
+      architecture.add_subnetwork(iteration_number=0, builder_name="b_0_1")
+      architecture.add_subnetwork(iteration_number=1, builder_name="b_1_0")
+      architecture.add_subnetwork(iteration_number=2, builder_name="b_2_0")
 
-    metrics = _EnsembleMetrics()
-    metrics.create_eval_metrics(self._features, self._labels,
-                                self._estimator_spec, self._metric_fn,
-                                architecture)
+      metrics = _EnsembleMetrics()
+      metrics.create_eval_metrics(self._features, self._labels,
+                                  self._estimator_spec, self._metric_fn,
+                                  architecture)
 
-    with self.test_session() as sess:
-      actual = _run_metrics(sess, metrics.eval_metrics_tuple())
+      actual = self._run_metrics(metrics.eval_metrics_tuple())
 
-    serialized_arch_proto = actual["architecture/adanet/ensembles"]
-    expected_arch_string = b"| b_0_0 | b_0_1 | b_1_0 | b_2_0 |"
-    self.assertIn(expected_arch_string, serialized_arch_proto)
+      serialized_arch_proto = actual["architecture/adanet/ensembles"]
+      expected_arch_string = b"| b_0_0 | b_0_1 | b_1_0 | b_2_0 |"
+      self.assertIn(expected_arch_string, serialized_arch_proto)
 
   @parameterized.named_parameters(
       {
@@ -187,47 +172,49 @@ class MetricsTest(tu.AdanetTestCase):
           "use_tpu": False,
           "mode": tf.estimator.ModeKeys.TRAIN,
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_iteration_metrics(self, use_tpu, mode):
-    best_candidate_index = 3
-    candidates = []
-    for i in range(10):
+    with context.graph_mode():
+      self.setup_graph()
+      best_candidate_index = 3
+      candidates = []
+      for i in range(10):
 
-      def metric_fn(val=i):
-        if tf.executing_eagerly():
-          metric = tf.metrics.Mean()
-          metric(tf.constant(val))
-          return {"ensemble_metric": metric}
-        return {"ensemble_metric": tf_compat.v1.metrics.mean(tf.constant(val))}
+        def metric_fn(val=i):
+          metric = tf.keras.metrics.Mean()
+          metric.update_state(tf.constant(val))
+          return {
+              "ensemble_v1_metric": tf_compat.v1.metrics.mean(tf.constant(val)),
+              "ensemble_keras_metric": metric
+          }
 
-      spec = _EnsembleSpec(
-          name="ensemble_{}".format(i),
-          ensemble=None,
-          architecture=None,
-          subnetwork_builders=None,
-          predictions=None,
-          step=None,
-          eval_metrics=(metric_fn, {}))
-      candidate = _Candidate(ensemble_spec=spec, adanet_loss=tf.constant(i))
-      candidates.append(candidate)
-    metrics = _IterationMetrics(1, candidates, subnetwork_specs=[])
+        spec = _EnsembleSpec(
+            name="ensemble_{}".format(i),
+            ensemble=None,
+            architecture=None,
+            subnetwork_builders=None,
+            predictions=None,
+            step=None,
+            eval_metrics=(metric_fn, {}))
+        candidate = _Candidate(ensemble_spec=spec, adanet_loss=tf.constant(i))
+        candidates.append(candidate)
+      metrics = _IterationMetrics(1, candidates, subnetwork_specs=[])
 
-    with self.test_session() as sess:
       metrics_fn = (
           metrics.best_eval_metrics_tuple
           if use_tpu else metrics.best_eval_metric_ops)
-      actual = _run_metrics(
-          sess,
+      actual = self._run_metrics(
           metrics_fn(tf.constant(best_candidate_index), mode) or {})
 
-    if mode == tf.estimator.ModeKeys.EVAL:
-      if tf.executing_eagerly():
-        metric = tf.metrics.Mean()
-        metric(best_candidate_index)
-        return {"ensemble_metric": metric}
-      expected = {"ensemble_metric": best_candidate_index, "iteration": 1}
-    else:
-      expected = {}
-    self.assertEqual(actual, expected)
+      if mode == tf.estimator.ModeKeys.EVAL:
+        expected = {
+            "ensemble_v1_metric": best_candidate_index,
+            "ensemble_keras_metric": best_candidate_index,
+            "iteration": 1
+        }
+      else:
+        expected = {}
+      self.assertEqual(actual, expected)
 
 
 if __name__ == "__main__":

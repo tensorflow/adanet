@@ -23,11 +23,16 @@ import collections
 import contextlib
 import functools
 
+from absl import logging
 from adanet import tf_compat
 from adanet.core.estimator import Estimator
 import tensorflow as tf
 
-from tensorflow.python.util import function_utils  # pylint: disable=g-direct-tensorflow-import
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.ops import summary_ops_v2
+from tensorflow.python.util import function_utils
+
+# pylint: enable=g-direct-tensorflow-import
 
 
 # pylint: disable=g-classes-have-attributes
@@ -59,8 +64,8 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
     adanet_loss_decay: See :class:`adanet.Estimator`.
     report_dir: See :class:`adanet.Estimator`.
     config: See :class:`adanet.Estimator`.
-    use_tpu: Boolean to enable training on TPU. Defaults to :code:`True` and
-      is only provided to allow debugging models on CPU/GPU. Use
+    use_tpu: Boolean to enable training on TPU. Defaults to :code:`True` and is
+      only provided to allow debugging models on CPU/GPU. Use
       :class:`adanet.Estimator` instead if you do not plan to run on TPU.
     eval_on_tpu: Boolean to enable evaluating on TPU. Defaults to :code:`True`.
       Ignored if :code:`use_tpu=False`.
@@ -108,13 +113,9 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
                max_iterations=None,
                replay_config=None,
                **kwargs):
-
-    if tf_compat.version_greater_or_equal("2.0.0"):
-      raise ValueError("TPUEstimator is not yet supported with TensorFlow 2.0.")
-
     self._use_tpu = use_tpu
     if not self._use_tpu:
-      tf.logging.warning(
+      logging.warning(
           "This adanet.TPUEstimator is meant to be used for running on TPU. "
           "If you want to run on CPU/GPU, use adanet.Estimator instead.")
 
@@ -165,7 +166,7 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
               checkpoint_path=None,
               yield_single_examples=True):
 
-    tf.logging.warning(
+    logging.warning(
         "The adanet.TPUEstimator does not support predicting on TPU. "
         "Instead, all predictions are run on CPU.")
     tpu_estimator = tf_compat.v1.estimator.tpu.TPUEstimator(
@@ -261,7 +262,8 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
         export_outputs=iteration_estimator_spec.export_outputs,
         # Return a constant summary_op, otherwise `Estimator` creates summary
         # ops that do not work on TPU.
-        scaffold_fn=lambda: tf.train.Scaffold(summary_op=tf.constant("")),
+        scaffold_fn=lambda: tf.compat.v1.train.Scaffold(  # pylint: disable=g-long-lambda
+            summary_op=tf.constant("")),
         training_hooks=training_hooks,
         evaluation_hooks=evaluation_hooks)
 
@@ -279,7 +281,7 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
       # Remove summary hooks on TPU since summaries are saved via host_call.
       training_hooks = [
           hook for hook in training_hooks
-          if not isinstance(hook, tf.train.SummarySaverHook)
+          if not isinstance(hook, tf.compat.v1.train.SummarySaverHook)
       ]
 
     return training_hooks
@@ -295,9 +297,12 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
       (fn, args) Pair to be called by TPUEstimator as the host_call.
     """
 
+    if not training:
+      return lambda **kwargs: [tf.no_op()], {}
+
     # Collect and flatten summary functions and arguments.
     summary_kwargs = collections.OrderedDict()
-    gs_t = tf.reshape(tf.to_int32(tf.train.get_global_step()), [1])
+    gs_t = tf.reshape(tf.cast(tf.train.get_global_step(), dtype=tf.int32), [1])
     summary_kwargs["global_step"] = gs_t
 
     summary_fns = collections.defaultdict(list)
@@ -319,18 +324,15 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
         List of summary ops to run on the CPU host.
       """
 
-      gs = tf.to_int64(kwargs.pop("global_step")[0])
-      if not training:
-        return [tf.no_op()]
-
+      gs = tf.cast(kwargs.pop("global_step")[0], dtype=tf.int64)
       for i, summary in enumerate(current_iteration.summaries):
-        with tf.contrib.summary.create_file_writer(summary.logdir).as_default():
-          with tf.contrib.summary.record_summaries_every_n_global_steps(
+        with summary_ops_v2.create_file_writer(summary.logdir).as_default():
+          with summary_ops_v2.record_summaries_every_n_global_steps(
               n=self.config.save_summary_steps, global_step=gs):
             for j, summary_fn in enumerate(summary_fns[i]):
               tensor = kwargs["summary_{}_{}".format(i, j)]
               summary_fn(tensor, step=gs)
         summary.clear_summary_tuples()
-      return tf.contrib.summary.all_summary_ops()
+      return tf.compat.v1.summary.all_v2_summary_ops()
 
     return _host_call_fn, summary_kwargs

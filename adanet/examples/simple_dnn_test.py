@@ -24,12 +24,17 @@ import adanet
 from adanet.examples import simple_dnn
 import tensorflow as tf
 
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
+
 
 class _FakeEnsemble(object):
   """A fake ensemble of one subnetwork."""
 
   def __init__(self, num_layers):
-    shared_tensors = {"num_layers": tf.constant(num_layers)}
+    shared_tensors = {"num_layers": num_layers}
     self._weighted_subnetworks = [
         adanet.WeightedSubnetwork(
             name=None,
@@ -78,6 +83,7 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
       "want_mixture_weight_losses": [.932, .660],
       "want_complexities": [1., 1.414],
   })
+  @test_util.run_in_graph_and_eager_modes
   def test_generate_candidates(self,
                                want_names,
                                want_subnetwork_losses,
@@ -89,13 +95,13 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
     feature_columns = [tf.feature_column.numeric_column("x")]
     generator = simple_dnn.Generator(
         feature_columns=feature_columns,
-        optimizer=tf.train.GradientDescentOptimizer(.1),
+        optimizer=tf.compat.v1.train.GradientDescentOptimizer(.1),
         layer_size=3,
         initial_num_layers=initial_num_layers,
         learn_mixture_weights=learn_mixture_weights,
         seed=42)
-    with tf.Graph().as_default() as g:
-      iteration_step = tf.train.create_global_step()
+    with context.graph_mode(), tf.Graph().as_default() as g:
+      iteration_step = tf.compat.v1.train.create_global_step()
       features = {"x": [[1.], [2.]]}
       labels = tf.constant([[0.], [1.]])
       names = []
@@ -140,7 +146,7 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
         subnetwork_logits = tf.stop_gradient(subnetwork.logits)
 
         # Mixture weight will initialize to a one-valued scalar.
-        mixture_weight_logits = tf.layers.dense(
+        mixture_weight_logits = tf.compat.v1.layers.dense(
             subnetwork_logits,
             units=1,
             use_bias=False,
@@ -157,7 +163,7 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
             summary=tf.summary)
 
         with self.test_session(graph=g) as sess:
-          sess.run(tf.global_variables_initializer())
+          sess.run(tf.compat.v1.global_variables_initializer())
           sess.run(subnetwork_train_op)
           sess.run(mixture_weight_train_op)
           subnetwork_losses.append(sess.run(subnetwork_loss))
@@ -189,7 +195,7 @@ class GeneratorTest(parameterized.TestCase, tf.test.TestCase):
     with self.assertRaises(ValueError):
       simple_dnn.Generator(
           feature_columns=feature_columns,
-          optimizer=tf.train.GradientDescentOptimizer(.1),
+          optimizer=tf.compat.v1.train.GradientDescentOptimizer(.1),
           layer_size=layer_size,
           initial_num_layers=initial_num_layers)
 

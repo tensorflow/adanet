@@ -154,27 +154,44 @@ def metric_op(metric):
 
   if not isinstance(metric, tf.keras.metrics.Metric):
     return metric
-  vars_to_add = set()
-  vars_to_add.update(metric.variables)
+  vars_to_add = {}
+  for var in metric.variables:
+    vars_to_add[_hashable_var_key(var)] = var
   metric = (metric.result(), metric.updates[0])
-  _update_variable_collection(tf.GraphKeys.LOCAL_VARIABLES, vars_to_add)
-  _update_variable_collection(tf.GraphKeys.METRIC_VARIABLES, vars_to_add)
+  _update_variable_collection(v1.GraphKeys.LOCAL_VARIABLES, vars_to_add)
+  _update_variable_collection(v1.GraphKeys.METRIC_VARIABLES, vars_to_add)
   return metric
+
+
+def _hashable_var_key(var):
+  """Returns a hashable key to identify the given Variable."""
+
+  # In TF 2, Variables themselves are not hashable, so cannot be dict keys.
+  # Error is "Tensor is unhashable if Tensor equality is enabled. Instead, use
+  # tensor.experimental_ref() as the key". For a related issue, see:
+  # https://github.com/tensorflow/tensorflow/issues/32139
+  ref_op = getattr(var, "experimental_ref", None)
+  if callable(ref_op):
+    return ref_op()
+  return var
 
 
 def _update_variable_collection(collection_name, vars_to_add):
   """Add variables to collection."""
-  collection = set(tf.get_collection(collection_name))
+  collection = {}
+  for var in v1.get_collection(collection_name):
+    collection[_hashable_var_key(var)] = var
   # Skip variables that are in the collection already: O(n) runtime.
-  vars_to_add = vars_to_add - collection
-  for v in vars_to_add:
-    tf.add_to_collection(collection_name, v)
+  for var_ref in vars_to_add:
+    if var_ref in collection:
+      continue
+    v1.add_to_collection(collection_name, vars_to_add[var_ref])
 
 
 def skip_for_tf2(f):
   """Decorator that skips tests when using TensorFlow 2."""
 
-  def wrapper(*args, **kwargs):
+  def test_wrapper(*args, **kwargs):
     """Wraps the decorated function to determine whether to skip."""
 
     # Extract test case instance from args.
@@ -186,13 +203,13 @@ def skip_for_tf2(f):
       self.skipTest("Skipping test in TF 2.0.")
     return f(*args, **kwargs)
 
-  return wrapper
+  return test_wrapper
 
 
 def skip_for_tf1(f):
   """Decorator that skips tests when using TensorFlow 1."""
 
-  def wrapper(*args, **kwargs):
+  def test_wrapper(*args, **kwargs):
     """Wraps the decorated function to determine whether to skip."""
 
     # Extract test case instance from args.
@@ -205,7 +222,7 @@ def skip_for_tf1(f):
     self.skipTest("Skipping test in TF 1.0.")
     return f(*args, **kwargs)
 
-  return wrapper
+  return test_wrapper
 
 
 def is_v2_behavior_enabled():

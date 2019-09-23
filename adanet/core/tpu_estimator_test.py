@@ -34,6 +34,9 @@ from adanet.subnetwork import Subnetwork
 import numpy as np
 import tensorflow as tf
 
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow_estimator.contrib.estimator.python.estimator import head as head_lib
+# pylint: enable=g-direct-tensorflow-import
 
 
 class _DNNBuilder(Builder):
@@ -68,17 +71,17 @@ class _DNNBuilder(Builder):
     if previous_ensemble:
       # Increment seed so different iterations don't learn the exact same thing.
       seed += 1
-    with tf.variable_scope("dnn"):
+    with tf.compat.v1.variable_scope("dnn"):
       persisted_tensors = {}
-      with tf.variable_scope("hidden_layer"):
+      with tf.compat.v1.variable_scope("hidden_layer"):
         if self._feature_columns:
-          input_layer = tf.feature_column.input_layer(
+          input_layer = tf.compat.v1.feature_column.input_layer(
               features=features, feature_columns=self._feature_columns)
         else:
           input_layer = features["x"]
-        w = tf.get_variable(
+        w = tf.compat.v1.get_variable(
             shape=[input_layer.shape[1], self._layer_size],
-            initializer=tf.glorot_uniform_initializer(seed=seed),
+            initializer=tf.compat.v1.glorot_uniform_initializer(seed=seed),
             name="weight")
         hidden_layer = tf.matmul(input_layer, w)
 
@@ -97,15 +100,15 @@ class _DNNBuilder(Builder):
         # `freeze_training_graph` is `True`.
         persisted_tensors["hidden_layer"] = 2 * hidden_layer
 
-    with tf.variable_scope("logits"):
-      logits = tf.layers.dense(
+    with tf.compat.v1.variable_scope("logits"):
+      logits = tf.compat.v1.layers.dense(
           hidden_layer,
           logits_dimension,
-          kernel_initializer=tf.glorot_uniform_initializer(seed=seed))
+          kernel_initializer=tf.compat.v1.glorot_uniform_initializer(seed=seed))
 
     summary.scalar("scalar", 3)
     summary.image("image", tf.ones([1, 3, 3, 1]))
-    with tf.variable_scope("nested"):
+    with tf.compat.v1.variable_scope("nested"):
       summary.scalar("scalar", 5)
 
     return Subnetwork(
@@ -116,10 +119,10 @@ class _DNNBuilder(Builder):
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
-    optimizer = tf.train.GradientDescentOptimizer(
+    optimizer = tf.compat.v1.train.GradientDescentOptimizer(
         learning_rate=self._learning_rate)
     if self._use_tpu:
-      optimizer = tf.tpu.CrossShardOptimizer(optimizer)
+      optimizer = tf.compat.v1.tpu.CrossShardOptimizer(optimizer)
     return optimizer.minimize(loss, var_list=var_list)
 
   def build_subnetwork_report(self):
@@ -158,33 +161,6 @@ class _NanLossBuilder(Builder):
     return tf.no_op()
 
 
-# TODO: merge this function with _check_eventfile_for_keyword and place
-# in test_utils.
-def _get_summary_value(keyword, dir_):
-  """Returns the latest summary value for the given keyword in TF events."""
-
-  tf.summary.FileWriterCache.clear()
-
-  filenames = os.path.join(dir_, "events*")
-  event_paths = tf.gfile.Glob(filenames)
-  if not event_paths:
-    raise ValueError("Path '{!r}' not found.".format(filenames))
-  for last_event in tf.train.summary_iterator(event_paths[-1]):
-    if last_event.summary is not None:
-      for value in last_event.summary.value:
-        if keyword == value.tag:
-          if value.HasField("simple_value"):
-            return value.simple_value
-          if value.HasField("image"):
-            return (value.image.height, value.image.width,
-                    value.image.colorspace)
-          if value.HasField("tensor"):
-            return value.tensor.string_val
-
-  raise ValueError("Keyword '{}' not found in path '{}'.".format(
-      keyword, filenames))
-
-
 class TPUEstimatorTest(tu.AdanetTestCase):
 
   def setUp(self):
@@ -214,7 +190,8 @@ class TPUEstimatorTest(tu.AdanetTestCase):
                                           want_loss):
     config = tf_compat.v1.estimator.tpu.RunConfig(master="", tf_random_seed=42)
     estimator = TPUEstimator(
-        head=tf.contrib.estimator.regression_head(
+        # TODO: Add test with estimator Head v2.
+        head=head_lib.regression_head(
             loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE),
         subnetwork_generator=subnetwork_generator,
         max_iteration_steps=10,
@@ -243,16 +220,13 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     # Export SavedModel.
     def serving_input_fn():
       """Input fn for serving export, starting from serialized example."""
-      serialized_example = tf.placeholder(
+      serialized_example = tf.compat.v1.placeholder(
           dtype=tf.string, shape=(None), name="serialized_example")
       return tf.estimator.export.ServingInputReceiver(
           features={"x": tf.constant([[0., 0.]], name="serving_x")},
           receiver_tensors=serialized_example)
 
-    export_saved_model_fn = getattr(estimator, "export_saved_model", None)
-    if not callable(export_saved_model_fn):
-      export_saved_model_fn = estimator.export_savedmodel
-    export_saved_model_fn(
+    estimator.export_saved_model(
         export_dir_base=estimator.model_dir,
         serving_input_receiver_fn=serving_input_fn)
 
@@ -278,9 +252,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
                                    want_eval_summary_loss, want_predictions):
     max_steps = 10
     config = tf_compat.v1.estimator.tpu.RunConfig(
-        tf_random_seed=42,
-        save_summary_steps=max_steps,
-        log_step_count_steps=max_steps)
+        tf_random_seed=42, save_summary_steps=2, log_step_count_steps=max_steps)
     assert config.log_step_count_steps
 
     def metric_fn(predictions):
@@ -289,7 +261,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
       }
 
     estimator = TPUEstimator(
-        head=tf.contrib.estimator.regression_head(
+        head=head_lib.regression_head(
             loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE),
         subnetwork_generator=SimpleGenerator(
             [_DNNBuilder("dnn", use_tpu=use_tpu)]),
@@ -318,32 +290,37 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     # TODO: Why is the adanet_loss written to 'loss'?
     self.assertAlmostEqual(
         want_adanet_loss,
-        _get_summary_value("loss", self.test_subdirectory),
+        tu.check_eventfile_for_keyword("loss", self.test_subdirectory),
         places=1)
     self.assertEqual(
         0.,
-        _get_summary_value("iteration/adanet/iteration",
-                           self.test_subdirectory))
+        tu.check_eventfile_for_keyword("iteration/adanet/iteration",
+                                       self.test_subdirectory))
     self.assertAlmostEqual(
-        3., _get_summary_value("scalar", subnetwork_subdir), places=3)
+        3.,
+        tu.check_eventfile_for_keyword("scalar", subnetwork_subdir),
+        places=3)
     self.assertEqual((3, 3, 1),
-                     _get_summary_value("image/image/0", subnetwork_subdir))
+                     tu.check_eventfile_for_keyword("image/image/0",
+                                                    subnetwork_subdir))
     self.assertAlmostEqual(
-        5., _get_summary_value("nested/scalar", subnetwork_subdir), places=3)
+        5.,
+        tu.check_eventfile_for_keyword("nested/scalar", subnetwork_subdir),
+        places=3)
     self.assertAlmostEqual(
         want_adanet_loss,
-        _get_summary_value("adanet_loss/adanet/adanet_weighted_ensemble",
-                           ensemble_subdir),
+        tu.check_eventfile_for_keyword(
+            "adanet_loss/adanet/adanet_weighted_ensemble", ensemble_subdir),
         places=1)
     self.assertAlmostEqual(
         0.,
-        _get_summary_value(
+        tu.check_eventfile_for_keyword(
             "complexity_regularization/adanet/adanet_weighted_ensemble",
             ensemble_subdir),
         places=1)
     self.assertAlmostEqual(
         1.,
-        _get_summary_value(
+        tu.check_eventfile_for_keyword(
             "mixture_weight_norms/adanet/"
             "adanet_weighted_ensemble/subnetwork_0", ensemble_subdir),
         places=1)
@@ -352,29 +329,29 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     subnetwork_eval_subdir = os.path.join(subnetwork_subdir, "eval")
     self.assertAlmostEqual(
         want_eval_summary_loss,
-        _get_summary_value("loss", subnetwork_eval_subdir),
+        tu.check_eventfile_for_keyword("loss", subnetwork_eval_subdir),
         places=1)
     self.assertAlmostEqual(
         want_eval_summary_loss,
-        _get_summary_value("average_loss", subnetwork_eval_subdir),
+        tu.check_eventfile_for_keyword("average_loss", subnetwork_eval_subdir),
         places=1)
     self.assertAlmostEqual(
         want_predictions,
-        _get_summary_value("predictions", subnetwork_eval_subdir),
+        tu.check_eventfile_for_keyword("predictions", subnetwork_eval_subdir),
         places=3)
 
     eval_subdir = os.path.join(self.test_subdirectory, "eval")
     ensemble_eval_subdir = os.path.join(ensemble_subdir, "eval")
     for subdir in [ensemble_eval_subdir, eval_subdir]:
       self.assertEqual([b"| dnn |"],
-                       _get_summary_value("architecture/adanet/ensembles/0",
-                                          subdir))
+                       tu.check_eventfile_for_keyword(
+                           "architecture/adanet/ensembles/0", subdir))
       if subdir == eval_subdir:
         self.assertAlmostEqual(
-            want_loss, _get_summary_value("loss", subdir), places=1)
+            want_loss, tu.check_eventfile_for_keyword("loss", subdir), places=1)
       self.assertAlmostEqual(
           want_eval_summary_loss,
-          _get_summary_value("average_loss", subdir),
+          tu.check_eventfile_for_keyword("average_loss", subdir),
           places=1)
 
 

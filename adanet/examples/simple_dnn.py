@@ -72,46 +72,50 @@ class _SimpleDNNBuilder(adanet.subnetwork.Builder):
                        previous_ensemble=None):
     """See `adanet.subnetwork.Builder`."""
 
-    input_layer = tf.feature_column.input_layer(
+    input_layer = tf.compat.v1.feature_column.input_layer(
         features=features, feature_columns=self._feature_columns)
     last_layer = input_layer
     for _ in range(self._num_layers):
-      last_layer = tf.layers.dense(
+      last_layer = tf.compat.v1.layers.dense(
           last_layer,
           units=self._layer_size,
           activation=tf.nn.relu,
-          kernel_initializer=tf.glorot_uniform_initializer(seed=self._seed))
-      last_layer = tf.layers.dropout(
+          kernel_initializer=tf.compat.v1.glorot_uniform_initializer(
+              seed=self._seed))
+      last_layer = tf.compat.v1.layers.dropout(
           last_layer, rate=self._dropout, seed=self._seed, training=training)
-    logits = tf.layers.dense(
+    logits = tf.compat.v1.layers.dense(
         last_layer,
         units=logits_dimension,
-        kernel_initializer=tf.glorot_uniform_initializer(seed=self._seed))
+        kernel_initializer=tf.compat.v1.glorot_uniform_initializer(
+            seed=self._seed))
 
     # Approximate the Rademacher complexity of this subnetwork as the square-
     # root of its depth.
-    complexity = tf.sqrt(tf.to_float(self._num_layers))
+    complexity = tf.sqrt(tf.cast(self._num_layers, dtype=tf.float32))
 
     with tf.name_scope(""):
       summary.scalar("complexity", complexity)
       summary.scalar("num_layers", self._num_layers)
 
-    shared_tensors = {_NUM_LAYERS_KEY: tf.constant(self._num_layers)}
+    shared = {_NUM_LAYERS_KEY: self._num_layers}
     return adanet.Subnetwork(
         last_layer=last_layer,
         logits=logits,
         complexity=complexity,
-        shared=shared_tensors)
+        shared=shared)
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
     """See `adanet.subnetwork.Builder`."""
 
     # NOTE: The `adanet.Estimator` increments the global step.
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
       return self._optimizer.minimize(loss=loss, var_list=var_list)
 
+  # TODO: Delete deprecated build_mixture_weights_train_op method.
+  # Use adanet.ensemble.Ensembler instead.
   def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
                                      iteration_step, summary):
     """See `adanet.subnetwork.Builder`."""
@@ -206,9 +210,8 @@ class Generator(adanet.subnetwork.Generator):
 
     num_layers = self._initial_num_layers
     if previous_ensemble:
-      num_layers = tf.contrib.util.constant_value(
-          previous_ensemble.weighted_subnetworks[-1].subnetwork
-          .shared[_NUM_LAYERS_KEY])
+      num_layers = previous_ensemble.weighted_subnetworks[-1].subnetwork.shared[
+          _NUM_LAYERS_KEY]
     return [
         self._dnn_builder_fn(num_layers=num_layers),
         self._dnn_builder_fn(num_layers=num_layers + 1),

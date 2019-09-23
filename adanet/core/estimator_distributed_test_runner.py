@@ -50,7 +50,12 @@ import tensorflow as tf
 # pylint: disable=g-direct-tensorflow-import
 
 # Contrib
-from tensorflow.contrib.boosted_trees.python.utils import losses as bt_losses
+try:
+  from tensorflow.contrib.boosted_trees.python.utils import losses as bt_losses
+except ImportError:
+  # Not much we can do here except skip the test.
+  pass
+
 from tensorflow.python.ops import partitioned_variables
 from tensorflow.python.training import session_manager as session_manager_lib
 from tensorflow_estimator.python.estimator.canned import head as head_lib
