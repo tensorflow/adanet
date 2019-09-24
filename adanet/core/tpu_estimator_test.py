@@ -300,9 +300,12 @@ class TPUEstimatorTest(tu.AdanetTestCase):
         3.,
         tu.check_eventfile_for_keyword("scalar", subnetwork_subdir),
         places=3)
-    self.assertEqual((3, 3, 1),
-                     tu.check_eventfile_for_keyword("image/image/0",
-                                                    subnetwork_subdir))
+    self.assertEqual(
+        (3, 3, 1),
+        tu.check_eventfile_for_keyword(
+            # When TF 2 behavior is enabled AdaNet uses V2 summaries.
+            "image" if tf_compat.is_v2_behavior_enabled() else "image/image/0",
+            subnetwork_subdir))
     self.assertAlmostEqual(
         5.,
         tu.check_eventfile_for_keyword("nested/scalar", subnetwork_subdir),
