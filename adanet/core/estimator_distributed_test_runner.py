@@ -87,21 +87,10 @@ FLAGS = flags.FLAGS
 class SessionManager(session_manager_lib.SessionManager):
   """A session manager with a shorter recovery time."""
 
-  def __init__(self,
-               local_init_op=None,
-               ready_op=None,
-               ready_for_local_init_op=None,
-               graph=None,
-               recovery_wait_secs=None,
-               local_init_run_options=None):
+  def __init__(self, *args, **kwargs):
     # Reduced wait time.
-    super(SessionManager, self).__init__(
-        local_init_op,
-        ready_op,
-        ready_for_local_init_op,
-        graph,
-        recovery_wait_secs=.5,
-        local_init_run_options=local_init_run_options)
+    kwargs["recovery_wait_secs"] = .5
+    super(SessionManager, self).__init__(*args, **kwargs)
 
 
 @contextlib.contextmanager
