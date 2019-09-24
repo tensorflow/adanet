@@ -724,27 +724,19 @@ class Estimator(tf.estimator.Estimator):
       return _ScopedSummary(
           scope=scope, skip_summary=skip_summary, namespace=namespace)
 
-  def _latest_checkpoint_iteration_number(self):
+  def _checkpoint_iteration_number(self, checkpoint_path):
     """Returns the iteration number from the latest checkpoint."""
 
-    latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
-    if latest_checkpoint is None:
+    if checkpoint_path is None:
       return 0
-    return tf.train.load_variable(latest_checkpoint,
-                                  self._Keys.CURRENT_ITERATION)
-
-  def _checkpoint_path_iteration_number(self, checkpoint_path):
-    """Returns the iteration number from checkpoint_path."""
-
     return tf.train.load_variable(checkpoint_path, self._Keys.CURRENT_ITERATION)
 
-  def _latest_checkpoint_global_step(self):
-    """Returns the global step from the latest checkpoint."""
+  def _checkpoint_global_step(self, checkpoint_path):
+    """Returns the global step from the given checkpoint."""
 
-    latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
-    if latest_checkpoint is None:
+    if checkpoint_path is None:
       return 0
-    return tf.train.load_variable(latest_checkpoint,
+    return tf.train.load_variable(checkpoint_path,
                                   tf_compat.v1.GraphKeys.GLOBAL_STEP)
 
   def train(self,
@@ -810,7 +802,8 @@ class Estimator(tf.estimator.Estimator):
     if steps is not None and steps <= 0:
       raise ValueError("Must specify steps > 0, given: {}".format(steps))
 
-    latest_global_steps = self._latest_checkpoint_global_step()
+    latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
+    latest_global_steps = self._checkpoint_global_step(latest_checkpoint)
     if steps is not None:
       max_steps = latest_global_steps + steps
 
@@ -819,8 +812,9 @@ class Estimator(tf.estimator.Estimator):
     # that training can be stopped and started at anytime.
     with monkey_patch_default_variable_placement_strategy():
       while True:
-        latest_global_steps = self._latest_checkpoint_global_step()
-        current_iteration = self._latest_checkpoint_iteration_number()
+        latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
+        latest_global_steps = self._checkpoint_global_step(latest_checkpoint)
+        current_iteration = self._checkpoint_iteration_number(latest_checkpoint)
         logging.info("Beginning training AdaNet iteration %s",
                      current_iteration)
         self._iteration_ended = False
@@ -828,8 +822,10 @@ class Estimator(tf.estimator.Estimator):
         # Delegate training to a temporary estimator instead of super to make
         # passing arguments more functional (via params).
         temp_estimator = self._create_temp_estimator(
-            self.config, params={
+            self.config,
+            params={
                 "is_inside_training_loop": True,
+                "checkpoint_path": latest_checkpoint,
             })
         result = temp_estimator.train(
             input_fn=input_fn,
@@ -845,7 +841,8 @@ class Estimator(tf.estimator.Estimator):
 
         # If training ended because the maximum number of training steps
         # occurred, exit training.
-        global_steps = self._latest_checkpoint_global_step()
+        latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
+        global_steps = self._checkpoint_global_step(latest_checkpoint)
         if max_steps is not None and global_steps >= max_steps:
           logging.info("Training ended after %s global steps", global_steps)
           return result
@@ -874,7 +871,10 @@ class Estimator(tf.estimator.Estimator):
         if self.config.is_chief:
           with self._force_replication_strategy():
             self._execute_bookkeeping_phase(
-                input_fn, current_iteration, train_hooks=hooks or [])
+                input_fn,
+                current_iteration,
+                train_hooks=hooks or [],
+                checkpoint_path=latest_checkpoint)
 
         # This inner loop serves mainly for synchronizing the workers with the
         # chief during distributed training. Workers that finish training early
@@ -885,18 +885,21 @@ class Estimator(tf.estimator.Estimator):
         wait_for_chief = not self.config.is_chief
         timer = _CountDownTimer(self._worker_wait_timeout_secs)
         while wait_for_chief:
+          # Fetch the latest checkpoint.
+          latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
+
           # If the chief hits max_steps, it will stop training itself and not
           # increment the iteration number, so this is how the worker knows to
           # exit if it wakes up and the chief is gone.
           # TODO: Support steps parameter.
-          if self._latest_checkpoint_global_step() >= max_steps:
+          if self._checkpoint_global_step(latest_checkpoint) >= max_steps:
             return result
 
           # In distributed training, a worker may end training before the chief
           # overwrites the checkpoint with the incremented iteration number. If
           # that is the case, it should wait for the chief to do so. Otherwise
           # the worker will get stuck waiting for its weights to be initialized.
-          next_iteration = self._latest_checkpoint_iteration_number()
+          next_iteration = self._checkpoint_iteration_number(latest_checkpoint)
           if next_iteration > current_iteration:
             break
 
@@ -934,11 +937,12 @@ class Estimator(tf.estimator.Estimator):
                name=None):
     if not checkpoint_path:
       checkpoint_path = tf.train.latest_checkpoint(self.model_dir)
+    logging.info("Evaluating AdaNet model at checkpoint: %s", checkpoint_path)
 
     # Ensure that the read to get the iteration number and read to restore
     # variable values come from the same checkpoint during evaluation.
     params = {
-        "evaluation_checkpoint_path":
+        "checkpoint_path":
             checkpoint_path,
         "evaluation_name":
             name,
@@ -964,6 +968,10 @@ class Estimator(tf.estimator.Estimator):
               hooks=None,
               checkpoint_path=None,
               yield_single_examples=True):
+    if not checkpoint_path:
+      checkpoint_path = tf.train.latest_checkpoint(self.model_dir)
+    logging.info("Computing predictions for AdaNet model at checkpoint: %s",
+                 checkpoint_path)
     # Delegate predicting to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(
@@ -971,6 +979,8 @@ class Estimator(tf.estimator.Estimator):
         params={
             "best_ensemble_index":
                 self._compute_best_ensemble_index(checkpoint_path),
+            "checkpoint_path":
+                checkpoint_path,
         })
     return temp_estimator.predict(input_fn, predict_keys, hooks,
                                   checkpoint_path, yield_single_examples)
@@ -984,6 +994,10 @@ class Estimator(tf.estimator.Estimator):
                         as_text=False,
                         checkpoint_path=None,
                         strip_default_attrs=False):
+    if not checkpoint_path:
+      checkpoint_path = tf.train.latest_checkpoint(self.model_dir)
+    logging.info("Exporting SavedModel for AdaNet model at checkpoint: %s",
+                 checkpoint_path)
     # Delegate exporting to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(
@@ -991,6 +1005,8 @@ class Estimator(tf.estimator.Estimator):
         params={
             "best_ensemble_index":
                 self._compute_best_ensemble_index(checkpoint_path),
+            "checkpoint_path":
+                checkpoint_path,
         })
     with self._force_replication_strategy():
       return temp_estimator.export_savedmodel(
@@ -1008,6 +1024,10 @@ class Estimator(tf.estimator.Estimator):
                          as_text=False,
                          checkpoint_path=None,
                          experimental_mode=tf.estimator.ModeKeys.PREDICT):
+    if not checkpoint_path:
+      checkpoint_path = tf.train.latest_checkpoint(self.model_dir)
+    logging.info("Exporting SavedModel for AdaNet model at checkpoint: %s",
+                 checkpoint_path)
     # Delegate exporting to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(
@@ -1015,6 +1035,8 @@ class Estimator(tf.estimator.Estimator):
         params={
             "best_ensemble_index":
                 self._compute_best_ensemble_index(checkpoint_path),
+            "checkpoint_path":
+                checkpoint_path,
         })
     with self._force_replication_strategy():
       return temp_estimator.export_saved_model(
@@ -1031,6 +1053,10 @@ class Estimator(tf.estimator.Estimator):
                                            assets_extra=None,
                                            as_text=False,
                                            checkpoint_path=None):
+    if not checkpoint_path:
+      checkpoint_path = tf.train.latest_checkpoint(self.model_dir)
+    logging.info("Exporting SavedModel for AdaNet model at checkpoint: %s",
+                 checkpoint_path)
     # Delegate exporting to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(
@@ -1038,6 +1064,8 @@ class Estimator(tf.estimator.Estimator):
         params={
             "best_ensemble_index":
                 self._compute_best_ensemble_index(checkpoint_path),
+            "checkpoint_path":
+                checkpoint_path,
         })
     with self._force_replication_strategy():
       return temp_estimator.experimental_export_all_saved_models(
@@ -1052,9 +1080,7 @@ class Estimator(tf.estimator.Estimator):
 
     # AdaNet Replay.
     if self._replay_config:
-      iteration_number = (
-          self._checkpoint_path_iteration_number(checkpoint_path)
-          if checkpoint_path else self._latest_checkpoint_iteration_number())
+      iteration_number = self._checkpoint_iteration_number(checkpoint_path)
       best_index = self._replay_config.get_best_ensemble_index(iteration_number)
       if best_index is not None:
         return best_index
@@ -1140,7 +1166,7 @@ class Estimator(tf.estimator.Estimator):
         model_fn=self._adanet_model_fn, config=config, params=params)
 
   def _execute_bookkeeping_phase(self, train_input_fn, iteration_number,
-                                 train_hooks):
+                                 train_hooks, checkpoint_path):
     """Run the AdaNet bookkeeping phase to prepare the next iteration.
 
     This method creates a TensorFlow graph up to three times:
@@ -1154,6 +1180,7 @@ class Estimator(tf.estimator.Estimator):
       train_input_fn: The input_fn used during training.
       iteration_number: Integer current iteration number.
       train_hooks: List of `SessionRunHook` passed for training.
+      checkpoint_path: Path to the checkpoint to restore from.
     """
 
     next_iteration_number = iteration_number + 1
@@ -1163,25 +1190,28 @@ class Estimator(tf.estimator.Estimator):
       evaluator_input_fn = self._evaluator.input_fn
     else:
       evaluator_input_fn = train_input_fn
+
     best_ensemble_index = self._execute_candidate_evaluation_phase(
-        evaluator_input_fn, export_best_architecture=True)
-    self._execute_report_materialization_phase(best_ensemble_index)
-    self._execute_graph_growing_phase(train_input_fn, train_hooks)
+        evaluator_input_fn,
+        export_best_architecture=True,
+        checkpoint_path=checkpoint_path)
+    self._execute_report_materialization_phase(
+        best_ensemble_index, checkpoint_path=checkpoint_path)
+    self._execute_graph_growing_phase(train_input_fn, train_hooks,
+                                      checkpoint_path)
 
     logging.info("Finished preparing iteration %s.", next_iteration_number)
 
-  def _execute_candidate_evaluation_phase(self,
-                                          evaluator_input_fn,
+  def _execute_candidate_evaluation_phase(self, evaluator_input_fn,
                                           export_best_architecture,
-                                          checkpoint_path=None):
+                                          checkpoint_path):
     """Evaluates and chooses the best ensemble for this iteration.
 
     Args:
       evaluator_input_fn: The input_fn for evaluation.
       export_best_architecture: Boolean whether to persist the best ensemble's
         architecture to the model_dir.
-      checkpoint_path: Optional path to the checkpoint to restore from. If None,
-        effectively assumes the latest checkpoint path.
+      checkpoint_path: Path to the checkpoint to restore from.
 
     Returns:
       Integer index of the best ensemble withing the list of candidate ensembles
@@ -1195,24 +1225,29 @@ class Estimator(tf.estimator.Estimator):
                                           config) as (features, labels,
                                                       input_hooks):
       current_iteration, _ = self._create_iteration(
-          features, labels, mode, config, is_growing_phase=False)
+          features,
+          labels,
+          mode,
+          config,
+          is_growing_phase=False,
+          checkpoint_path=checkpoint_path)
       best_ensemble_index = self._get_best_ensemble_index(
           current_iteration, input_hooks, checkpoint_path)
       architecture = current_iteration.candidates[
           best_ensemble_index].ensemble_spec.architecture
     if export_best_architecture:
-      iteration_number = (
-          self._checkpoint_path_iteration_number(checkpoint_path)
-          if checkpoint_path else self._latest_checkpoint_iteration_number())
+      iteration_number = self._checkpoint_iteration_number(checkpoint_path)
       new_architecture_filename = self._architecture_filename(iteration_number)
       logging.info("Exporting best ensemble architecture to %s",
                    new_architecture_filename)
-      self._save_architecture(new_architecture_filename, architecture)
+      self._save_architecture(new_architecture_filename, architecture,
+                              checkpoint_path)
     logging.info("Done evaluating candidates.")
 
     return best_ensemble_index
 
-  def _execute_report_materialization_phase(self, best_ensemble_index):
+  def _execute_report_materialization_phase(self, best_ensemble_index,
+                                            checkpoint_path):
     """Materializes and store subnetwork reports."""
 
     if not self._report_materializer:
@@ -1226,12 +1261,18 @@ class Estimator(tf.estimator.Estimator):
                                           config) as (features, labels,
                                                       input_hooks):
       current_iteration, _ = self._create_iteration(
-          features, labels, mode, config, is_growing_phase=False)
+          features,
+          labels,
+          mode,
+          config,
+          is_growing_phase=False,
+          checkpoint_path=checkpoint_path)
       self._materialize_report(current_iteration, input_hooks,
-                               best_ensemble_index)
+                               best_ensemble_index, checkpoint_path)
     logging.info("Done materializing reports.")
 
-  def _execute_graph_growing_phase(self, train_input_fn, train_hooks):
+  def _execute_graph_growing_phase(self, train_input_fn, train_hooks,
+                                   checkpoint_path):
     """Grows the tensorflow graph for the next iteration.
 
     Normally the MonitoredTrainingSession does not allow one to add new ops to
@@ -1242,6 +1283,7 @@ class Estimator(tf.estimator.Estimator):
     Args:
       train_input_fn: The input_fn used during training.
       train_hooks: List of `SessionRunHook` passed for training.
+      checkpoint_path: Path of the checkpoint to use for restoring variables.
     """
 
     logging.info("Adapting graph and incrementing iteration number...")
@@ -1259,6 +1301,7 @@ class Estimator(tf.estimator.Estimator):
         params={
             "is_growing_phase": True,
             "is_inside_training_loop": True,
+            "checkpoint_path": checkpoint_path,
         })
     # Do not train with any saving_listeners since this is just a temporary
     # estimator.
@@ -1289,8 +1332,7 @@ class Estimator(tf.estimator.Estimator):
     Args:
       current_iteration: Current `_Iteration`.
       input_hooks: List of SessionRunHooks to be included when running.
-      checkpoint_path: Checkpoint to use when determining the best index. When
-        `None`, this method uses the latest checkpoint instead.
+      checkpoint_path: Checkpoint to use when determining the best index.
 
     Returns:
       Index of the best ensemble in the iteration's list of `_Candidates`.
@@ -1316,8 +1358,6 @@ class Estimator(tf.estimator.Estimator):
                    current_iteration.candidates[1].ensemble_spec.name)
       return 1
 
-    if checkpoint_path is None:
-      checkpoint_path = tf.train.latest_checkpoint(self.model_dir)
     logging.info("Starting ensemble evaluation for iteration %s",
                  current_iteration.number)
     for hook in input_hooks:
@@ -1377,7 +1417,7 @@ class Estimator(tf.estimator.Estimator):
     return index
 
   def _materialize_report(self, current_iteration, input_hooks,
-                          best_ensemble_index):
+                          best_ensemble_index, checkpoint_path):
     """Generates reports as defined by `Builder`s.
 
     Materializes the Tensors and metrics defined in the `Builder`s'
@@ -1388,9 +1428,9 @@ class Estimator(tf.estimator.Estimator):
       current_iteration: Current `_Iteration`.
       input_hooks: List of SessionRunHooks to be included when running.
       best_ensemble_index: Integer index of the best candidate ensemble.
+      checkpoint_path: Path of the checkpoint to use.
     """
 
-    latest_checkpoint = tf.train.latest_checkpoint(self.model_dir)
     logging.info("Starting metric logging for iteration %s",
                  current_iteration.number)
 
@@ -1415,7 +1455,7 @@ class Estimator(tf.estimator.Estimator):
       for hook in input_hooks:
         hook.after_create_session(sess, coord)
       saver = tf_compat.v1.train.Saver(sharded=True)
-      saver.restore(sess, latest_checkpoint)
+      saver.restore(sess, checkpoint_path)
       tf_compat.v1.train.start_queue_runners(sess=sess, coord=coord)
       materialized_reports = (
           self._report_materializer.materialize_subnetwork_reports(
@@ -1571,7 +1611,7 @@ class Estimator(tf.estimator.Estimator):
         eval_metrics=eval_metrics,
         output_dir=os.path.join(self.model_dir, kind, name, eval_subdir))
 
-  def _save_architecture(self, filename, architecture):
+  def _save_architecture(self, filename, architecture, checkpoint_path):
     """Persists the ensemble's architecture in a serialized format.
 
     Writes to a text file with one subnetwork's iteration number and name
@@ -1580,13 +1620,15 @@ class Estimator(tf.estimator.Estimator):
     Args:
       filename: String filename to persist the ensemble architecture.
       architecture: Target `_Architecture` instance.
+      checkpoint_path: Path of the checkpoint to use.
     """
 
     # Make directories since model_dir may not have been created yet.
     tf.io.gfile.makedirs(os.path.dirname(filename))
     with tf.io.gfile.GFile(filename, "w") as record_file:
       record_file.write(
-          architecture.serialize(self._latest_checkpoint_global_step().item()))
+          architecture.serialize(
+              self._checkpoint_global_step(checkpoint_path).item()))
 
   def _read_architecture(self, filename):
     """Reads an ensemble architecture from disk.
@@ -1836,7 +1878,7 @@ class Estimator(tf.estimator.Estimator):
                         mode,
                         config,
                         is_growing_phase,
-                        evaluation_checkpoint_path=None,
+                        checkpoint_path,
                         best_ensemble_index_override=None):
     """Constructs the TF ops and variables for the current iteration.
 
@@ -1848,8 +1890,8 @@ class Estimator(tf.estimator.Estimator):
         `ModeKeys`.
       config: The current `tf.estimator.RunConfig`.
       is_growing_phase: Whether we are in the AdaNet graph growing phase.
-      evaluation_checkpoint_path: Path of the evaluation checkpoint to use. When
-        `None`, this method uses the latest checkpoint instead.
+      checkpoint_path: Path of the checkpoint to use. When `None`, this method
+        uses the latest checkpoint instead.
       best_ensemble_index_override: Integer index to identify the latest
         iteration's best ensemble candidate instead of computing the best
         ensemble index dynamically conditional on the ensemble AdaNet losses.
@@ -1859,17 +1901,16 @@ class Estimator(tf.estimator.Estimator):
         the previous iteration for restoring during the graph growing phase.
     """
 
-    iteration_number = (
-        self._checkpoint_path_iteration_number(evaluation_checkpoint_path)
-        if evaluation_checkpoint_path else
-        self._latest_checkpoint_iteration_number())
-
     # Use the evaluation checkpoint path to get both the iteration number and
     # variable values to avoid any race conditions between the first and second
     # checkpoint reads.
-    if mode == tf.estimator.ModeKeys.EVAL and evaluation_checkpoint_path:
-      iteration_number = tf.train.load_variable(evaluation_checkpoint_path,
-                                                self._Keys.CURRENT_ITERATION)
+    iteration_number = self._checkpoint_iteration_number(checkpoint_path)
+
+    if mode == tf.estimator.ModeKeys.EVAL and checkpoint_path is None:
+      # This should only happen during some tests, so we log instead of
+      # asserting here.
+      logging.warning("There are no checkpoints available during evaluation. "
+                      "Variables will be initialized to their defaults.")
 
     if is_growing_phase:
       assert mode == tf.estimator.ModeKeys.TRAIN
@@ -1973,7 +2014,6 @@ class Estimator(tf.estimator.Estimator):
     # Unpack params.
     is_growing_phase = params.get("is_growing_phase", False)
     is_inside_training_loop = params.get("is_inside_training_loop", False)
-    evaluation_checkpoint_path = params.get("evaluation_checkpoint_path", None)
     evaluation_name = params.get("evaluation_name", None)
     best_ensemble_index = params.get("best_ensemble_index", None)
 
@@ -1992,7 +2032,7 @@ class Estimator(tf.estimator.Estimator):
         mode,
         config,
         is_growing_phase,
-        evaluation_checkpoint_path=evaluation_checkpoint_path,
+        checkpoint_path=params["checkpoint_path"],  # Should always be present.
         best_ensemble_index_override=best_ensemble_index)
 
     # Variable which allows us to read the current iteration from a checkpoint.

@@ -169,11 +169,22 @@ class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
     logging.warning(
         "The adanet.TPUEstimator does not support predicting on TPU. "
         "Instead, all predictions are run on CPU.")
+    if not checkpoint_path:
+      checkpoint_path = tf.train.latest_checkpoint(self.model_dir)
+    logging.info("Computing predictions for AdaNet model at checkpoint: %s",
+                 checkpoint_path)
+    params = self.params
+    params.update({
+        "best_ensemble_index":
+            self._compute_best_ensemble_index(checkpoint_path),
+        "checkpoint_path":
+            checkpoint_path,
+    })
     tpu_estimator = tf_compat.v1.estimator.tpu.TPUEstimator(
         model_fn=self._adanet_model_fn,
         model_dir=self.model_dir,
         config=self._original_config,
-        params=self.params,
+        params=params,
         use_tpu=False,
         eval_on_tpu=False,
         embedding_config_spec=self._embedding_config_spec)

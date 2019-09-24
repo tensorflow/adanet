@@ -212,6 +212,13 @@ def train_and_evaluate_estimator():
   # https://www.tensorflow.org/api_docs/python/tf/estimator/RunConfig.
   config = tf.estimator.RunConfig(
       tf_random_seed=42,
+      save_checkpoints_steps=10,
+      save_checkpoints_secs=None,
+      # Keep all checkpoints to avoid checkpoint GC causing failures during
+      # evaluation.
+      # TODO: Prevent checkpoints that are currently being
+      # evaluated by another process from being garbage collected.
+      keep_checkpoint_max=None,
       model_dir=FLAGS.model_dir,
       session_config=tf_compat.v1.ConfigProto(
           log_device_placement=False,
@@ -371,7 +378,7 @@ def train_and_evaluate_estimator():
   train_spec = tf.estimator.TrainSpec(
       input_fn=input_fn, max_steps=300, hooks=train_hooks)
   eval_spec = tf.estimator.EvalSpec(
-      input_fn=input_fn, steps=1, start_delay_secs=.5, throttle_secs=.5)
+      input_fn=input_fn, steps=1, start_delay_secs=.5, throttle_secs=.05)
 
   # Calling train_and_evaluate is the official way to perform distributed
   # training with an Estimator. Calling Estimator#train directly results

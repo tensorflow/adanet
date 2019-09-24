@@ -69,6 +69,7 @@ class _TrainManager(object):
         spec.name: not self._is_done_training(spec)
         for spec in subnetwork_specs + ensemble_specs
     }
+    self._ensemble_specs = set([e.name for e in ensemble_specs])
 
     self._is_chief = is_chief
 
@@ -107,6 +108,10 @@ class _TrainManager(object):
     """Whether all specs are done training and the iteration is over."""
 
     for k in sorted(self._is_training):
+      if k in self._ensemble_specs:
+        # In case the sub-estimator is done training (e.g. dataset ran out of
+        # data without repeat) but the "max_iteration_steps" is not reached.
+        continue
       if self._is_training[k]:
         # Still needs to train.
         return False
