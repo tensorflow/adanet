@@ -107,8 +107,6 @@ class _SubnetworkMetrics(object):
         function, namely a `(metric_tensor, update_op)` tuple.
     """
 
-    # TODO: Create CPU eval metrics non-lazily, similar to summaries.py.
-
     # If estimator_spec is not a TPUEstimatorSpec we create dummy metric_fn
     # and args.
     if isinstance(estimator_spec, tf.estimator.EstimatorSpec):
@@ -118,18 +116,20 @@ class _SubnetworkMetrics(object):
     self._eval_metrics_store.add_eval_metrics(
         self._templatize_metric_fn(spec_fn), spec_args)
 
-    if tf_compat.version_greater_or_equal("1.13.0") and tf.executing_eagerly():
-      loss_metrics = tf.keras.metrics.Mean("mean_loss")
-      loss_metrics(estimator_spec.loss)
-    else:
-      loss_metrics = tf_compat.v1.metrics.mean(estimator_spec.loss)
-
     def loss_fn(loss):
-      if self._use_tpu:
-        return {"loss": tf_compat.v1.metrics.mean(loss)}
+      if tf_compat.version_greater_or_equal(
+          "1.13.0") and tf.executing_eagerly():
+        loss_metrics = tf.keras.metrics.Mean("mean_loss")
+        loss_metrics(estimator_spec.loss)
+      else:
+        loss_metrics = tf_compat.v1.metrics.mean(loss)
       return {"loss": loss_metrics}
 
     loss_fn_args = [tf.reshape(estimator_spec.loss, [1])]
+
+    if not self._use_tpu:
+      loss_ops = call_eval_metrics((loss_fn, loss_fn_args))
+      loss_fn, loss_fn_args = lambda: loss_ops, []
     self._eval_metrics_store.add_eval_metrics(
         self._templatize_metric_fn(loss_fn), loss_fn_args)
 
@@ -144,15 +144,12 @@ class _SubnetworkMetrics(object):
         metric_fn_args["labels"] = labels
       if "predictions" in argspec:
         metric_fn_args["predictions"] = estimator_spec.predictions
-      additional_metrics = call_eval_metrics((metric_fn, metric_fn_args))
 
-      def additional_metrics_fn(**kwargs):
-        if self._use_tpu:
-          return call_eval_metrics((metric_fn, kwargs))
-        return additional_metrics
-
+      if not self._use_tpu:
+        metric_fn_ops = call_eval_metrics((metric_fn, metric_fn_args))
+        metric_fn, metric_fn_args = lambda: metric_fn_ops, []
       self._eval_metrics_store.add_eval_metrics(
-          self._templatize_metric_fn(additional_metrics_fn), metric_fn_args)
+          self._templatize_metric_fn(metric_fn), metric_fn_args)
 
   def _templatize_metric_fn(self, metric_fn):
     """Wraps the given metric_fn with a template so it's Variables are shared.
@@ -285,7 +282,11 @@ class _EnsembleMetrics(_SubnetworkMetrics):
         metric = (architecture_summary, tf.no_op())
       return {"architecture/adanet/ensembles": metric}
 
-    return _architecture_metric_fn
+    if not self._use_tpu:
+      ops = _architecture_metric_fn()
+      return lambda: ops
+    else:
+      return _architecture_metric_fn
 
 
 class _IterationMetrics(object):
@@ -389,7 +390,7 @@ class _IterationMetrics(object):
 
         metric_fns = self._subnetworks_eval_metrics_store.metric_fns
         metric_fn_args = self._subnetworks_eval_metrics_store.pack_args(
-            args[-len(subnetwork_args):])
+            args[(len(args) - len(subnetwork_args)):])
         subnetwork_grouped_metrics = self._group_metric_ops(
             metric_fns, metric_fn_args)
 
