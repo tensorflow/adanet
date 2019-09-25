@@ -31,6 +31,7 @@ from adanet.core.summary import monkey_patched_summaries
 from six.moves import range
 import tensorflow as tf
 
+from tensorflow.python.ops import summary_ops_v2
 
 def decode(proto_str):
   """Decodes a proto string."""
@@ -409,14 +410,14 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
 
   def write_summaries(self, summary):
     summary_ops = []
-    writer = tf.contrib.summary.create_file_writer(summary.logdir)
-    with writer.as_default(), tf.contrib.summary.always_record_summaries():
+    writer = summary_ops_v2.create_file_writer(summary.logdir)
+    with writer.as_default(), summary_ops_v2.always_record_summaries():
       for summary_fn, tensor in summary.summary_tuples():
         summary_ops.append(summary_fn(tensor, step=10))
 
     with self.test_session() as sess:
       sess.run(tf.global_variables_initializer())
-      sess.run(tf.contrib.summary.summary_writer_initializer_op())
+      sess.run(summary_ops_v2.summary_writer_initializer_op())
       sess.run(summary_ops)
       sess.run(writer.flush())
 
@@ -733,15 +734,21 @@ class TPUScopedSummaryTest(tu.AdanetTestCase):
 def _summaries():
   """Returns all summary functions."""
 
-  return [
+  fns = [
       tf.summary.scalar, tf.summary.audio, tf.summary.histogram,
-      tf.summary.image, tf.contrib.summary.scalar, tf.contrib.summary.audio,
-      tf.contrib.summary.histogram, tf.contrib.summary.image,
+      tf.summary.image,
       tf_compat.v1.summary.scalar, tf_compat.v1.summary.audio,
       tf_compat.v1.summary.histogram, tf_compat.v1.summary.image,
       tf_compat.v2.summary.scalar, tf_compat.v2.summary.audio,
       tf_compat.v2.summary.histogram, tf_compat.v2.summary.image
   ]
+  try:
+   fns += [tf.contrib.summary.scalar, tf.contrib.summary.audio,
+      tf.contrib.summary.histogram, tf.contrib.summary.image]
+  except (AttributeError, ImportError):
+    # TF 2.0 eliminates tf.contrib.
+    pass
+  return fns
 
 
 class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
@@ -773,12 +780,18 @@ class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
       tf.summary.histogram("histogram", 1, ["collection"], "family")
       tf.summary.audio("audio", 1, 3, 3, ["collection"], "family")
 
-      tf.contrib.summary.scalar("scalar_v2", 1, "family", 10)
-      tf.contrib.summary.image("image_v2", 1, True, 3, "family", 10)
-      tf.contrib.summary.histogram("histogram_v2", 1, "family", 10)
-      tf.contrib.summary.audio("audio_v2", 1, 3, 3, "family", 10)
+      want_summary_fn_count = 4
+      try:
+        tf.contrib.summary.scalar("scalar_v2", 1, "family", 10)
+        tf.contrib.summary.image("image_v2", 1, True, 3, "family", 10)
+        tf.contrib.summary.histogram("histogram_v2", 1, "family", 10)
+        tf.contrib.summary.audio("audio_v2", 1, 3, 3, "family", 10)
+        want_summary_fn_count += 4
+      except (AttributeError, ImportError):
+        # TF 2.0 eliminates tf.contrib.
+        pass
     self.assertEqual(before, _summaries())
-    self.assertLen(self._get_summary_ops(summary), 8)
+    self.assertLen(self._get_summary_ops(summary), want_summary_fn_count)
 
   @parameterized.named_parameters(
       {
@@ -818,26 +831,32 @@ class MonkeyPatchTest(parameterized.TestCase, tf.test.TestCase):
           collections=["collection"],
           family="family")
 
-      tf.contrib.summary.scalar(
-          name="scalar_v2", tensor=1, family="family", step=10)
-      tf.contrib.summary.image(
-          name="image_v2",
-          tensor=1,
-          bad_color=True,
-          max_images=3,
-          family="family",
-          step=10)
-      tf.contrib.summary.histogram(
-          name="histogram_v2", tensor=1, family="family", step=10)
-      tf.contrib.summary.audio(
-          name="audio_v2",
-          tensor=1,
-          sample_rate=3,
-          max_outputs=3,
-          family="family",
-          step=10)
+      want_summary_fn_count = 4
+      try:
+        tf.contrib.summary.scalar(
+            name="scalar_v2", tensor=1, family="family", step=10)
+        tf.contrib.summary.image(
+            name="image_v2",
+            tensor=1,
+            bad_color=True,
+            max_images=3,
+            family="family",
+            step=10)
+        tf.contrib.summary.histogram(
+            name="histogram_v2", tensor=1, family="family", step=10)
+        tf.contrib.summary.audio(
+            name="audio_v2",
+            tensor=1,
+            sample_rate=3,
+            max_outputs=3,
+            family="family",
+            step=10)
+        want_summary_fn_count += 4
+      except (AttributeError, ImportError):
+        # TF 2.0 eliminates tf.contrib.
+        pass
     self.assertEqual(before, _summaries())
-    self.assertLen(self._get_summary_ops(summary), 8)
+    self.assertLen(self._get_summary_ops(summary), want_summary_fn_count)
 
 
 if __name__ == "__main__":

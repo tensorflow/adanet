@@ -35,7 +35,7 @@ import numpy as np
 import tensorflow as tf
 
 # pylint: disable=g-direct-tensorflow-import
-from tensorflow_estimator.contrib.estimator.python.estimator import head as head_lib
+from tensorflow_estimator.python.estimator.head import regression_head
 # pylint: enable=g-direct-tensorflow-import
 
 
@@ -161,6 +161,16 @@ class _NanLossBuilder(Builder):
     return tf.no_op()
 
 
+def make_regression_head(use_tpu):
+  if use_tpu:
+    # AdaNet TPU currently requires the old head.
+    return tf.contrib.estimator.regression_head(
+        loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE)
+  # TF 2.0 eliminates tf.contrib.
+  return regression_head.RegressionHead(
+      loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
+
+
 class TPUEstimatorTest(tu.AdanetTestCase):
 
   def setUp(self):
@@ -184,15 +194,13 @@ class TPUEstimatorTest(tu.AdanetTestCase):
               SimpleGenerator([_DNNBuilder("dnn", use_tpu=False)]),
           "want_loss":
               0.41315794,
-      },
-  )
+      },)
   def test_tpu_estimator_simple_lifecycle(self, use_tpu, subnetwork_generator,
                                           want_loss):
     config = tf_compat.v1.estimator.tpu.RunConfig(master="", tf_random_seed=42)
     estimator = TPUEstimator(
         # TODO: Add test with estimator Head v2.
-        head=head_lib.regression_head(
-            loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE),
+        head=make_regression_head(use_tpu),
         subnetwork_generator=subnetwork_generator,
         max_iteration_steps=10,
         model_dir=self.test_subdirectory,
@@ -236,8 +244,6 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     for prediction in predictions:
       self.assertIsNotNone(prediction["predictions"])
 
-
-
   @parameterized.named_parameters(
       {
           "testcase_name": "not_use_tpu",
@@ -246,8 +252,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
           "want_adanet_loss": .64416,
           "want_eval_summary_loss": 0.555849,
           "want_predictions": 0.46818,
-      },
-  )
+      },)
   def test_tpu_estimator_summaries(self, use_tpu, want_loss, want_adanet_loss,
                                    want_eval_summary_loss, want_predictions):
     max_steps = 10
@@ -261,8 +266,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
       }
 
     estimator = TPUEstimator(
-        head=head_lib.regression_head(
-            loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE),
+        head=make_regression_head(use_tpu),
         subnetwork_generator=SimpleGenerator(
             [_DNNBuilder("dnn", use_tpu=use_tpu)]),
         max_iteration_steps=max_steps,

@@ -199,7 +199,7 @@ def skip_for_tf2(f):
     try:
       # If tf.contrib doesn't exist, we are in TF 2.0.
       _ = tf.contrib
-    except AttributeError:
+    except (AttributeError, ImportError):
       self.skipTest("Skipping test in TF 2.0.")
     return f(*args, **kwargs)
 
@@ -217,7 +217,7 @@ def skip_for_tf1(f):
     try:
       # If tf.contrib doesn't exist, we are in TF 2.0.
       _ = tf_v2.contrib
-    except AttributeError:
+    except (AttributeError, ImportError):
       return f(*args, **kwargs)
     self.skipTest("Skipping test in TF 1.0.")
     return f(*args, **kwargs)
