@@ -116,15 +116,7 @@ class _SubnetworkMetrics(object):
     self._eval_metrics_store.add_eval_metrics(
         self._templatize_metric_fn(spec_fn), spec_args)
 
-    def loss_fn(loss):
-      if tf_compat.version_greater_or_equal(
-          "1.13.0") and tf.executing_eagerly():
-        loss_metrics = tf.keras.metrics.Mean("mean_loss")
-        loss_metrics(estimator_spec.loss)
-      else:
-        loss_metrics = tf_compat.v1.metrics.mean(loss)
-      return {"loss": loss_metrics}
-
+    loss_fn = lambda loss: {"loss": tf_compat.v1.metrics.mean(loss)}
     loss_fn_args = [tf.reshape(estimator_spec.loss, [1])]
 
     if not self._use_tpu:
@@ -164,10 +156,6 @@ class _SubnetworkMetrics(object):
     Returns:
       The original metric_fn wrapped with a template function.
     """
-
-    if tf.executing_eagerly():
-      return metric_fn
-
     def _metric_fn(*args, **kwargs):
       """The wrapping function to be returned."""
 
@@ -275,12 +263,9 @@ class _EnsembleMetrics(_SubnetworkMetrics):
       architecture_summary = tf.convert_to_tensor(
           value=summary_proto.SerializeToString(), name="architecture")
 
-      if tf.executing_eagerly():
-        metric = _ArchitectureMetric()
-        metric(architecture_summary)
-      else:
-        metric = (architecture_summary, tf.no_op())
-      return {"architecture/adanet/ensembles": metric}
+      return {
+          "architecture/adanet/ensembles": (architecture_summary, tf.no_op())
+      }
 
     if not self._use_tpu:
       ops = _architecture_metric_fn()
@@ -374,13 +359,7 @@ class _IterationMetrics(object):
 
       with tf_compat.v1.variable_scope("best_eval_metrics"):
         args = list(args)
-        if tf.executing_eagerly():
-          mean = tf.keras.metrics.Mean()
-          idx_update_op = mean.update_state(args.pop())
-          idx = mean.result()
-        else:
-          idx, idx_update_op = tf_compat.v1.metrics.mean(args.pop())
-
+        idx, idx_update_op = tf_compat.v1.metrics.mean(args.pop())
         idx = tf.cast(idx, tf.int32)
         metric_fns = self._candidates_eval_metrics_store.metric_fns
         metric_fn_args = self._candidates_eval_metrics_store.pack_args(
@@ -400,11 +379,6 @@ class _IterationMetrics(object):
           if len(metric_ops) != len(self._candidates):
             continue
           if metric_name == "loss":
-            continue
-          if tf.executing_eagerly():
-            values = [m.result() for m in metric_ops]
-            best_value = tf.stack(values)[idx]
-            eval_metric_ops[metric_name] = (best_value, None)
             continue
           values, ops = list(six.moves.zip(*metric_ops))
           best_value = tf.stack(values)[idx]
