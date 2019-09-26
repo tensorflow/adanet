@@ -2016,6 +2016,8 @@ class Estimator(tf.estimator.Estimator):
     is_inside_training_loop = params.get("is_inside_training_loop", False)
     evaluation_name = params.get("evaluation_name", None)
     best_ensemble_index = params.get("best_ensemble_index", None)
+    checkpoint_path = params.get("checkpoint_path",
+                                 tf.train.latest_checkpoint(self.model_dir))
 
     training = mode == tf.estimator.ModeKeys.TRAIN
     if training and not is_inside_training_loop:
@@ -2032,7 +2034,7 @@ class Estimator(tf.estimator.Estimator):
         mode,
         config,
         is_growing_phase,
-        checkpoint_path=params["checkpoint_path"],  # Should always be present.
+        checkpoint_path=checkpoint_path,
         best_ensemble_index_override=best_ensemble_index)
 
     # Variable which allows us to read the current iteration from a checkpoint.

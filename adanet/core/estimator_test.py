@@ -1621,6 +1621,32 @@ class EstimatorCallingModelFnDirectlyTest(tu.AdanetTestCase):
           labels=labels,
           config={})
 
+  def test_calling_model_fn_directly_for_predict(self):
+    with context.graph_mode():
+      subnetwork_generator = SimpleGenerator([_DNNBuilder("dnn")])
+      report_materializer = ReportMaterializer(
+          input_fn=tu.dummy_input_fn([[1., 1.]], [[0.]]), steps=1)
+      estimator = Estimator(
+          head=tu.head(),
+          subnetwork_generator=subnetwork_generator,
+          report_materializer=report_materializer,
+          max_iteration_steps=3,
+          use_bias=True,
+          model_dir=self.test_subdirectory)
+      model_fn = estimator.model_fn
+      train_input_fn = tu.dummy_input_fn([[1., 0.]], [[1.]])
+      tf_compat.v1.train.create_global_step()
+      features, labels = train_input_fn()
+      model_fn(
+          features=features,
+          mode=tf.estimator.ModeKeys.PREDICT,
+          labels=labels,
+          config=tf.estimator.RunConfig(
+              save_checkpoints_steps=1,
+              keep_checkpoint_max=3,
+              model_dir=self.test_subdirectory,
+          ))
+
 
 class EstimatorCheckpointTest(tu.AdanetTestCase):
   """Tests estimator checkpoints."""
