@@ -29,6 +29,8 @@ from absl.testing import parameterized
 from adanet import tf_compat
 from adanet.core.architecture import _Architecture
 from adanet.core.ensemble_builder import _EnsembleSpec
+from adanet.core.eval_metrics import _EnsembleMetrics
+from adanet.core.eval_metrics import _SubnetworkMetrics
 from adanet.ensemble import ComplexityRegularized
 from adanet.ensemble import WeightedSubnetwork
 from adanet.subnetwork import Subnetwork
@@ -322,3 +324,103 @@ def check_eventfile_for_keyword(keyword, dir_):
 
   raise ValueError("Keyword '{}' not found in path '{}'.".format(
       keyword, filenames))
+
+
+def create_ensemble_metrics_for_testing(metric_fn,
+                                        use_tpu=False,
+                                        features=None,
+                                        labels=None,
+                                        estimator_spec=None,
+                                        architecture=None):
+  """Creates an instance of the _EnsembleMetrics class.
+
+  Args:
+    metric_fn: A function which should obey the following signature:
+    - Args: can only have following three arguments in any order:
+        * predictions: Predictions `Tensor` or dict of `Tensor` created by given
+          `Head`.
+        * features: Input `dict` of `Tensor` objects created by `input_fn` which
+          is given to `estimator.evaluate` as an argument.
+        * labels:  Labels `Tensor` or dict of `Tensor` (for multi-head) created
+          by `input_fn` which is given to `estimator.evaluate` as an argument.
+      - Returns: Dict of metric results keyed by name. Final metrics are a union
+        of this and `estimator`s existing metrics. If there is a name conflict
+        between this and `estimator`s existing metrics, this will override the
+        existing one. The values of the dict are the results of calling a metric
+        function, namely a `(metric_tensor, update_op)` tuple.
+    use_tpu: Whether to use TPU-specific variable sharing logic.
+    features: Input `dict` of `Tensor` objects.
+    labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
+      (for multi-head).
+    estimator_spec: The `EstimatorSpec` created by a `Head` instance.
+    architecture: `_Architecture` object.
+
+  Returns:
+    An instance of _EnsembleMetrics.
+  """
+
+  if not estimator_spec:
+    estimator_spec = tf_compat.v1.estimator.tpu.TPUEstimatorSpec(
+        mode=tf.estimator.ModeKeys.EVAL,
+        loss=tf.constant(2.),
+        predictions=None,
+        eval_metrics=None)
+    if not use_tpu:
+      estimator_spec = estimator_spec.as_estimator_spec()
+
+  if not architecture:
+    architecture = _Architecture(None, None)
+
+  metrics = _EnsembleMetrics(use_tpu=use_tpu)
+  metrics.create_eval_metrics(features, labels, estimator_spec, metric_fn,
+                              architecture)
+
+  return metrics
+
+
+def create_subnetwork_metrics_for_testing(metric_fn,
+                                          use_tpu=False,
+                                          features=None,
+                                          labels=None,
+                                          estimator_spec=None):
+  """Creates an instance of the _SubnetworkMetrics class.
+
+  Args:
+    metric_fn: A function which should obey the following signature:
+    - Args: can only have following three arguments in any order:
+        * predictions: Predictions `Tensor` or dict of `Tensor` created by given
+          `Head`.
+        * features: Input `dict` of `Tensor` objects created by `input_fn` which
+          is given to `estimator.evaluate` as an argument.
+        * labels:  Labels `Tensor` or dict of `Tensor` (for multi-head) created
+          by `input_fn` which is given to `estimator.evaluate` as an argument.
+      - Returns: Dict of metric results keyed by name. Final metrics are a union
+        of this and `estimator`s existing metrics. If there is a name conflict
+        between this and `estimator`s existing metrics, this will override the
+        existing one. The values of the dict are the results of calling a metric
+        function, namely a `(metric_tensor, update_op)` tuple.
+    use_tpu: Whether to use TPU-specific variable sharing logic.
+    features: Input `dict` of `Tensor` objects.
+    labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
+      (for multi-head).
+    estimator_spec: The `EstimatorSpec` created by a `Head` instance.
+
+  Returns:
+    An instance of _SubnetworkMetrics.
+  """
+
+  if not estimator_spec:
+    estimator_spec = tf_compat.v1.estimator.tpu.TPUEstimatorSpec(
+        mode=tf.estimator.ModeKeys.EVAL,
+        loss=tf.constant(2.),
+        predictions=None,
+        eval_metrics=None)
+    if not use_tpu:
+      estimator_spec = estimator_spec.as_estimator_spec()
+
+  metrics = _SubnetworkMetrics(use_tpu=use_tpu)
+  metrics.create_eval_metrics(features, labels, estimator_spec, metric_fn)
+
+  return metrics
+
+

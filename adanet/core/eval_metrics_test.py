@@ -24,9 +24,7 @@ from adanet import tf_compat
 from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _Candidate
 from adanet.core.ensemble_builder import _EnsembleSpec
-from adanet.core.eval_metrics import _EnsembleMetrics
 from adanet.core.eval_metrics import _IterationMetrics
-from adanet.core.eval_metrics import _SubnetworkMetrics
 from adanet.core.eval_metrics import call_eval_metrics
 import adanet.core.testing_utils as tu
 import tensorflow as tf
@@ -104,10 +102,12 @@ class MetricsTest(tu.AdanetTestCase):
       spec = self._estimator_spec
       if not use_tpu:
         spec = spec.as_estimator_spec()
-      metrics = _SubnetworkMetrics()
-      metrics.create_eval_metrics(self._features, self._labels, spec,
-                                  self._metric_fn)
-
+      metrics = tu.create_subnetwork_metrics_for_testing(
+          self._metric_fn,
+          use_tpu=use_tpu,
+          features=self._features,
+          labels=self._labels,
+          estimator_spec=spec)
       actual = self._run_metrics(metrics.eval_metrics_tuple())
 
       expected = {"loss": 2., "metric_1": 1., "metric_2": 2.}
@@ -121,12 +121,13 @@ class MetricsTest(tu.AdanetTestCase):
 
       def _overriding_metric_fn():
         value = tf.constant(overridden_value)
-
         return {"metric_1": tf_compat.v1.metrics.mean(value)}
 
-      metrics = _SubnetworkMetrics()
-      metrics.create_eval_metrics(self._features, self._labels,
-                                  self._estimator_spec, _overriding_metric_fn)
+      metrics = tu.create_subnetwork_metrics_for_testing(
+          _overriding_metric_fn,
+          features=self._features,
+          labels=self._labels,
+          estimator_spec=self._estimator_spec)
 
       actual = self._run_metrics(metrics.eval_metrics_tuple())
 
@@ -143,10 +144,12 @@ class MetricsTest(tu.AdanetTestCase):
       architecture.add_subnetwork(iteration_number=1, builder_name="b_1_0")
       architecture.add_subnetwork(iteration_number=2, builder_name="b_2_0")
 
-      metrics = _EnsembleMetrics()
-      metrics.create_eval_metrics(self._features, self._labels,
-                                  self._estimator_spec, self._metric_fn,
-                                  architecture)
+      metrics = tu.create_ensemble_metrics_for_testing(
+          self._metric_fn,
+          features=self._features,
+          labels=self._labels,
+          estimator_spec=self._estimator_spec,
+          architecture=architecture)
 
       actual = self._run_metrics(metrics.eval_metrics_tuple())
 
@@ -215,6 +218,26 @@ class MetricsTest(tu.AdanetTestCase):
       else:
         expected = {}
       self.assertEqual(actual, expected)
+
+  @test_util.run_in_graph_and_eager_modes
+  def test_metric_ops_not_duplicated_on_cpu(self):
+
+    with context.graph_mode():
+      self.setup_graph()
+      metric_fn = lambda: {"metric": tf.constant(5)}
+
+      ensemble_metrics = tu.create_ensemble_metrics_for_testing(metric_fn)
+      ensemble_ops1 = call_eval_metrics(ensemble_metrics.eval_metrics_tuple())
+      ensemble_ops2 = call_eval_metrics(ensemble_metrics.eval_metrics_tuple())
+      self.assertEqual(ensemble_ops1, ensemble_ops2)
+
+      subnetwork_metrics = tu.create_subnetwork_metrics_for_testing(
+          metric_fn)
+      subnetwork_ops1 = call_eval_metrics(
+          subnetwork_metrics.eval_metrics_tuple())
+      subnetwork_ops2 = call_eval_metrics(
+          subnetwork_metrics.eval_metrics_tuple())
+      self.assertEqual(subnetwork_ops1, subnetwork_ops2)
 
 
 if __name__ == "__main__":
