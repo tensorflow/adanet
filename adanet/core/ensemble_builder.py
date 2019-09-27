@@ -24,6 +24,7 @@ import contextlib
 import copy
 import functools
 import inspect
+import os
 
 from absl import logging
 from adanet import tf_compat
@@ -49,6 +50,7 @@ class _EnsembleSpec(
         "ensemble",
         "architecture",
         "subnetwork_builders",
+        "subnetwork_specs",
         "predictions",
         "step",
         "loss",
@@ -84,6 +86,7 @@ class _EnsembleSpec(
       fetching.
     export_outputs: Describes the output signatures to be exported to
       `SavedModel` and used during serving. See `tf.estimator.EstimatorSpec`.
+    subnetwork_specs: Iterable of `_SubnetworkSpecs` for this iteration.
 
   Returns:
     An `EnsembleSpec` object.
@@ -100,13 +103,17 @@ class _EnsembleSpec(
               adanet_loss=None,
               train_op=None,
               eval_metrics=None,
-              export_outputs=None):
+              export_outputs=None,
+              subnetwork_specs=None):
+    if subnetwork_specs is None:
+      subnetwork_specs = []
     return super(_EnsembleSpec, cls).__new__(
         cls,
         name=name,
         ensemble=ensemble,
         architecture=architecture,
         subnetwork_builders=subnetwork_builders,
+        subnetwork_specs=subnetwork_specs,
         predictions=predictions,
         step=step,
         loss=loss,
@@ -318,6 +325,7 @@ class _EnsembleBuilder(object):
       architecture = _Architecture(candidate.name, ensembler.name,
                                    replay_indices=replay_indices)
       previous_subnetworks = []
+      previous_subnetwork_specs = []
       subnetwork_builders = []
       previous_ensemble = None
       if previous_ensemble_spec:
@@ -342,15 +350,18 @@ class _EnsembleBuilder(object):
           if builder not in candidate.previous_ensemble_subnetwork_builders:
             continue
           previous_subnetworks.append(previous_ensemble.subnetworks[i])
+          previous_subnetwork_specs.append(
+              previous_ensemble_spec.subnetwork_specs[i])
           subnetwork_builders.append(builder)
           architecture.add_subnetwork(*previous_architecture.subnetworks[i])
       for builder in candidate.subnetwork_builders:
         architecture.add_subnetwork(iteration_number, builder.name)
         subnetwork_builders.append(builder)
-      subnetwork_map = {s.builder.name: s.subnetwork for s in subnetwork_specs}
-      subnetworks = [
+      subnetwork_map = {s.builder.name: s for s in subnetwork_specs}
+      used_subnetwork_specs = [
           subnetwork_map[s.name] for s in candidate.subnetwork_builders
       ]
+      subnetworks = [s.subnetwork for s in used_subnetwork_specs]
       ensemble_scope = tf_compat.v1.get_variable_scope()
       before_var_list = tf_compat.v1.trainable_variables()
       with summary.current_scope(), _monkey_patch_context(
@@ -385,12 +396,13 @@ class _EnsembleBuilder(object):
       export_outputs = estimator_spec.export_outputs
 
       if self._export_subnetwork_logits and export_outputs and subnetwork_map:
-        first_subnetwork_logits = list(subnetwork_map.values())[0].logits
+        first_subnetwork_logits = list(
+            subnetwork_map.values())[0].subnetwork.logits
         if isinstance(first_subnetwork_logits, dict):
           for head_name in first_subnetwork_logits.keys():
             subnetwork_logits = {
-                subnetwork_name: subnetwork.logits[head_name]
-                for subnetwork_name, subnetwork in subnetwork_map.items()
+                subnetwork_name: subnetwork_spec.subnetwork.logits[head_name]
+                for subnetwork_name, subnetwork_spec in subnetwork_map.items()
             }
             export_outputs.update({
                 "{}_{}".format(
@@ -400,8 +412,8 @@ class _EnsembleBuilder(object):
             })
         else:
           subnetwork_logits = {
-              subnetwork_name: subnetwork.logits
-              for subnetwork_name, subnetwork in subnetwork_map.items()
+              subnetwork_name: subnetwork_spec.subnetwork.logits
+              for subnetwork_name, subnetwork_spec in subnetwork_map.items()
           }
           export_outputs.update({
               _EnsembleBuilder._SUBNETWORK_LOGITS_EXPORT_SIGNATURE:
@@ -410,14 +422,15 @@ class _EnsembleBuilder(object):
 
       if (self._export_subnetwork_last_layer and export_outputs and
           subnetwork_map and
-          list(subnetwork_map.values())[0].last_layer is not None):
+          list(subnetwork_map.values())[0].subnetwork.last_layer is not None):
         first_subnetwork_last_layer = list(
-            subnetwork_map.values())[0].last_layer
+            subnetwork_map.values())[0].subnetwork.last_layer
         if isinstance(first_subnetwork_last_layer, dict):
           for head_name in first_subnetwork_last_layer.keys():
             subnetwork_last_layer = {
-                subnetwork_name: subnetwork.last_layer[head_name]
-                for subnetwork_name, subnetwork in subnetwork_map.items()
+                subnetwork_name:
+                subnetwork_spec.subnetwork.last_layer[head_name]
+                for subnetwork_name, subnetwork_spec in subnetwork_map.items()
             }
             export_outputs.update({
                 "{}_{}".format(
@@ -427,8 +440,8 @@ class _EnsembleBuilder(object):
             })
         else:
           subnetwork_last_layer = {
-              subnetwork_name: subnetwork.last_layer
-              for subnetwork_name, subnetwork in subnetwork_map.items()
+              subnetwork_name: subnetwork_spec.subnetwork.last_layer
+              for subnetwork_name, subnetwork_spec in subnetwork_map.items()
           }
           export_outputs.update({
               _EnsembleBuilder._SUBNETWORK_LAST_LAYER_EXPORT_SIGNATURE:
@@ -498,6 +511,7 @@ class _EnsembleBuilder(object):
         name=name,
         architecture=architecture,
         subnetwork_builders=subnetwork_builders,
+        subnetwork_specs=previous_subnetwork_specs + used_subnetwork_specs,
         ensemble=ensemble,
         predictions=predictions,
         step=step,
@@ -533,6 +547,7 @@ class _SubnetworkSpec(
         "loss",
         "train_op",
         "eval_metrics",
+        "asset_dir",
     ])):
   """Subnetwork training and evaluation `Tensors` and `Ops`.
 
@@ -553,6 +568,7 @@ class _SubnetworkSpec(
       on state (typically is a pure computation based on variables.). For
       example, it should not trigger the `update_op` or require any input
       fetching.
+    asset_dir: Checkpoint directory for the sub-estimators.
 
   Returns:
     A `_SubnetworkSpec` object.
@@ -566,7 +582,8 @@ class _SubnetworkSpec(
               step,
               loss=None,
               train_op=None,
-              eval_metrics=None):
+              eval_metrics=None,
+              asset_dir=None):
     return super(_SubnetworkSpec, cls).__new__(
         cls,
         name=name,
@@ -576,7 +593,8 @@ class _SubnetworkSpec(
         step=step,
         loss=loss,
         train_op=train_op,
-        eval_metrics=eval_metrics)
+        eval_metrics=eval_metrics,
+        asset_dir=asset_dir)
 
 
 class _SubnetworkManager(object):
@@ -622,7 +640,8 @@ class _SubnetworkManager(object):
                             features,
                             mode,
                             labels=None,
-                            previous_ensemble=None):
+                            previous_ensemble=None,
+                            config=None):
     """Builds a `_SubnetworkSpec` from the given `adanet.subnetwork.Builder`.
 
     Args:
@@ -636,6 +655,7 @@ class _SubnetworkManager(object):
         (for multi-head). Can be `None`.
       previous_ensemble: The previous `Ensemble` from iteration t-1. Used for
         creating the subnetwork train_op.
+      config: The `tf.estimator.RunConfig` to use this iteration.
 
     Returns:
       An new `EnsembleSpec` instance with the `Subnetwork` appended.
@@ -654,6 +674,12 @@ class _SubnetworkManager(object):
       step_tensor = tf.convert_to_tensor(value=step)
       with summary.current_scope():
         summary.scalar("iteration_step/adanet/iteration_step", step_tensor)
+      if config:
+        subnetwork_config = config.replace(
+            model_dir=os.path.join(config.model_dir, "assets", name))
+      else:
+        subnetwork_config = tf.estimator.RunConfig()
+
       build_subnetwork = functools.partial(
           subnetwork_builder.build_subnetwork,
           features=features,
@@ -668,6 +694,9 @@ class _SubnetworkManager(object):
           subnetwork_builder.build_subnetwork).args
       if "labels" in defined_args:
         build_subnetwork = functools.partial(build_subnetwork, labels=labels)
+      if "config" in defined_args:
+        build_subnetwork = functools.partial(
+            build_subnetwork, config=subnetwork_config)
       subnetwork_scope = tf_compat.v1.get_variable_scope()
       with summary.current_scope(), _monkey_patch_context(
           iteration_step_scope=subnetwork_scope,
@@ -716,4 +745,5 @@ class _SubnetworkManager(object):
         loss=estimator_spec.loss,
         step=step,
         train_op=train_op,
-        eval_metrics=subnetwork_metrics.eval_metrics_tuple())
+        eval_metrics=subnetwork_metrics.eval_metrics_tuple(),
+        asset_dir=subnetwork_config.model_dir)

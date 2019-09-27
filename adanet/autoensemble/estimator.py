@@ -20,6 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import inspect
 
 from adanet import tf_compat
 from adanet.core import Estimator
@@ -107,9 +108,9 @@ class _BuilderFromSubestimator(Builder):
   def name(self):
     return self._name
 
-  def _call_model_fn(self, features, labels, mode, summary):
+  def _call_model_fn(self, subestimator, features, labels, mode, summary):
     with summary.current_scope():
-      model_fn = self._subestimator.estimator.model_fn
+      model_fn = subestimator.estimator.model_fn
       estimator_spec = model_fn(
           features=features, labels=labels, mode=mode, config=self._config)
       logits = self._logits_fn(estimator_spec=estimator_spec)
@@ -128,8 +129,15 @@ class _BuilderFromSubestimator(Builder):
           hooks=estimator_spec.training_hooks)
     return logits, last_layer, train_op, local_init_op
 
-  def build_subnetwork(self, features, labels, logits_dimension, training,
-                       iteration_step, summary, previous_ensemble):
+  def build_subnetwork(self,
+                       features,
+                       labels,
+                       logits_dimension,
+                       training,
+                       iteration_step,
+                       summary,
+                       previous_ensemble,
+                       config=None):
     # We don't need an EVAL mode since AdaNet takes care of evaluation for us.
     mode = tf.estimator.ModeKeys.PREDICT
     if training:
@@ -140,9 +148,10 @@ class _BuilderFromSubestimator(Builder):
                                                         self._call_model_fn)
     subestimator_features, subestimator_labels = features, labels
     local_init_ops = []
-    if training and self._subestimator.train_input_fn:
+    subestimator = self._subestimator(config)
+    if training and subestimator.train_input_fn:
       # TODO: Consider tensorflow_estimator/python/estimator/util.py.
-      inputs = self._subestimator.train_input_fn()
+      inputs = subestimator.train_input_fn()
       if isinstance(inputs, (tf_compat.DatasetV1, tf_compat.DatasetV2)):
         subestimator_features, subestimator_labels = (
             tf_compat.make_one_shot_iterator(inputs).get_next())
@@ -151,10 +160,11 @@ class _BuilderFromSubestimator(Builder):
 
       # Construct subnetwork graph first because of dependencies on scope.
       _, _, bagging_train_op_spec, sub_local_init_op = call_model_fn_template(
-          subestimator_features, subestimator_labels, mode, summary)
+          subestimator, subestimator_features, subestimator_labels, mode,
+          summary)
       # Graph for ensemble learning gets model_fn_1 for scope.
       logits, last_layer, _, ensemble_local_init_op = call_model_fn_template(
-          features, labels, mode, summary)
+          subestimator, features, labels, mode, summary)
 
       if sub_local_init_op:
         local_init_ops.append(sub_local_init_op)
@@ -171,7 +181,7 @@ class _BuilderFromSubestimator(Builder):
           hooks=hooks)
     else:
       logits, last_layer, train_op_spec, local_init_op = call_model_fn_template(
-          features, labels, mode, summary)
+          subestimator, features, labels, mode, summary)
       if local_init_op:
         local_init_ops.append(local_init_op)
 
@@ -190,11 +200,13 @@ class _BuilderFromSubestimator(Builder):
 
 
 def _convert_to_subestimator(candidate):
-  if isinstance(candidate, AutoEnsembleSubestimator):
+  if callable(candidate):
     return candidate
+  if isinstance(candidate, AutoEnsembleSubestimator):
+    return lambda config: candidate
   if isinstance(candidate,
                 (estimator_lib.Estimator, estimator_lib.EstimatorV2)):
-    return AutoEnsembleSubestimator(candidate)
+    return lambda config: AutoEnsembleSubestimator(candidate)
   raise ValueError(
       "subestimator in candidate_pool must have type tf.estimator.Estimator or "
       "adanet.AutoEnsembleSubestimator but got {}".format(candidate.__class__))
@@ -214,10 +226,8 @@ class _GeneratorFromCandidatePool(Generator):
                           previous_ensemble_reports, all_reports, config):
     assert config
     builders = []
-    candidate_pool = self._candidate_pool
-    if callable(candidate_pool):
-      # candidate_pool can be a function.
-      candidate_pool = candidate_pool(config=config)
+    candidate_pool = self._maybe_call_candidate_pool(config, iteration_number)
+
     if isinstance(candidate_pool, dict):
       for name in sorted(candidate_pool):
         builders.append(
@@ -240,6 +250,18 @@ class _GeneratorFromCandidatePool(Generator):
               last_layer_fn=self._last_layer_fn,
               config=config))
     return builders
+
+  def _maybe_call_candidate_pool(self, config, iteration_number):
+    if callable(self._candidate_pool):
+      # candidate_pool can be a function.
+      if "iteration_number" in inspect.getargspec(self._candidate_pool).args:
+        # TODO: Make the "config" argument optional using introspection.
+        return self._candidate_pool(
+            config=config, iteration_number=iteration_number)
+      else:
+        return self._candidate_pool(config=config)
+
+    return self._candidate_pool
 
 
 class AutoEnsembleEstimator(Estimator):

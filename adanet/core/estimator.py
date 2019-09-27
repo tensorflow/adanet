@@ -311,6 +311,25 @@ class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
       self._checkpoint_overwritten = True
 
 
+def _copy_recursively(source, destination):
+  """Copies a directory and its content.
+
+  Args:
+    source: Source directory.
+    destination: Destination directory.
+  """
+
+  for src_dir, _, src_files in tf.io.gfile.walk(source):
+    dst_dir = os.path.join(destination, os.path.relpath(src_dir, source))
+    if not tf.io.gfile.exists(dst_dir):
+      tf.io.gfile.makedirs(dst_dir)
+    for src_file in src_files:
+      tf.io.gfile.copy(
+          os.path.join(src_dir, src_file),
+          os.path.join(dst_dir, src_file),
+          overwrite=True)
+
+
 class _GraphGrowingHookDecorator(tf_compat.SessionRunHook):
   """Decorates a SessionRunHook to only run begin() and end() methods."""
 
@@ -1303,6 +1322,11 @@ class Estimator(tf.estimator.Estimator):
             "is_inside_training_loop": True,
             "checkpoint_path": checkpoint_path,
         })
+
+    _copy_recursively(
+        os.path.join(self._model_dir, "assets"),
+        os.path.join(temp_model_sub_dir, "assets"))
+
     # Do not train with any saving_listeners since this is just a temporary
     # estimator.
     temp_estimator.train(
@@ -1310,6 +1334,10 @@ class Estimator(tf.estimator.Estimator):
         max_steps=1,
         hooks=self._process_hooks_for_growing_phase(train_hooks),
         saving_listeners=None)
+
+    _copy_recursively(
+        os.path.join(temp_model_sub_dir, "assets"),
+        os.path.join(self._model_dir, "assets"))
 
     _delete_directory(temp_model_dir)
     logging.info("Done adapting graph and incrementing iteration number.")

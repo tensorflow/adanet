@@ -637,7 +637,8 @@ class _IterationBuilder(object):
               features=features,
               mode=builder_mode,
               labels=labels,
-              previous_ensemble=previous_ensemble)
+              previous_ensemble=previous_ensemble,
+              config=config)
           subnetwork_specs.append(subnetwork_spec)
           # Workers that don't build ensembles need a dummy candidate in order
           # to train the subnetwork.

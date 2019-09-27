@@ -289,6 +289,7 @@ class _FakeSubnetworkManager(object):
                             mode,
                             labels=None,
                             previous_ensemble=None,
+                            config=None,
                             params=None):
     del summary
     del features
@@ -296,6 +297,7 @@ class _FakeSubnetworkManager(object):
     del labels
     del previous_ensemble
     del params
+    del config
 
     return _SubnetworkSpec(
         name=name,

@@ -78,6 +78,69 @@ class CheckLocalInitOpEstimator(tf.estimator.Estimator):
     return _model_fn
 
 
+# Creates an a file in the model directory during training, and check the
+# presence of this file during eval and inference.
+class CheckAssetEstimator(tf.estimator.Estimator):
+
+  def __init__(self, config):
+    super(CheckAssetEstimator, self).__init__(
+        config=config, model_fn=self._get_model_fn())
+
+  def _get_model_fn(self):
+
+    def _model_fn(features, labels, mode, params):
+
+      del labels
+      del params
+
+      scaffold = None
+      training_hooks = None
+
+      if mode == tf.estimator.ModeKeys.TRAIN:
+
+        class CheckpointSaverListener(tf.train.CheckpointSaverListener):
+
+          def after_save(subself, session, global_step_value):  # pylint: disable=no-self-argument
+            tf.logging.info("Creating data in %s", self._model_dir)
+            with tf.gfile.Open(os.path.join(self._model_dir, "data"), "w") as f:
+              f.write("Hello")
+            assert tf.io.gfile.exists(os.path.join(self._model_dir, "data"))
+
+        listener = CheckpointSaverListener()
+        saver_hook = tf.estimator.CheckpointSaverHook(
+            self._model_dir, listeners=[listener], save_steps=1000000)
+        training_hooks = [saver_hook]
+
+      else:
+
+        def check_asset():
+          tf.logging.info("Checking data %s", self._model_dir)
+          assert tf.io.gfile.exists(os.path.join(self._model_dir, "data"))
+          return 1
+
+        check_asset_op = tf.compat.v1.py_func(check_asset, [], tf.int64)
+        scaffold = tf.train.Scaffold(
+            local_init_op=tf.group(tf.train.Scaffold.default_local_init_op(),
+                                   check_asset_op))
+
+      feature = next(iter(features.values()))
+      with tf.control_dependencies([feature]):
+        batch_size = tf.shape(feature)[0]
+        predictions = tf.zeros([batch_size, 1])
+        train_op = tf.no_op()
+        loss = tf.constant(-1.0)
+
+      return tf.estimator.EstimatorSpec(
+          mode,
+          loss=loss,
+          train_op=train_op,
+          scaffold=scaffold,
+          predictions=predictions,
+          training_hooks=training_hooks)
+
+    return _model_fn
+
+
 class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
 
   def setUp(self):
@@ -228,7 +291,55 @@ class AutoEnsembleEstimatorTest(parameterized.TestCase, tf.test.TestCase):
           "want_loss":
               1.0,
       },
-  )
+      {
+          "testcase_name":
+              "check_iteration_count",
+          "max_train_steps":
+              10,
+          "candidate_pool":
+              lambda head, feature_columns, optimizer:
+              (lambda config, iteration_number: {
+                  "dnn":
+                      AutoEnsembleSubestimator(
+                          tf.estimator.DNNEstimator(
+                              head=head,
+                              feature_columns=feature_columns,
+                              optimizer=optimizer,
+                              hidden_units=[3])),
+                  "linear":
+                      AutoEnsembleSubestimator(
+                          tf.estimator.LinearEstimator(
+                              head=head,
+                              feature_columns=feature_columns,
+                              optimizer=optimizer)),
+              }),
+          "want_loss":
+              .209,
+      },
+      {
+          "testcase_name":
+              "check_has_asset",
+          "max_train_steps":
+              10,
+          "candidate_pool":
+              lambda head, feature_columns, optimizer: {
+                  "linear":
+                      lambda subconfig: AutoEnsembleSubestimator(
+                          tf.estimator.LinearEstimator(
+                              head=head,
+                              feature_columns=feature_columns,
+                              optimizer=optimizer,
+                              config=subconfig)),
+                  "check_asset_1":
+                      lambda subconfig: AutoEnsembleSubestimator(
+                          CheckAssetEstimator(config=subconfig)),
+                  "check_asset_2":
+                      lambda subconfig: AutoEnsembleSubestimator(
+                          CheckAssetEstimator(config=subconfig)),
+              },
+          "want_loss":
+              .209,
+      })
   # pylint: enable=g-long-lambda
   @tf_compat.skip_for_tf2
   def test_auto_ensemble_estimator_lifecycle(self,

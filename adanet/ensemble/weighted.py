@@ -468,7 +468,15 @@ class ComplexityRegularizedEnsembler(Ensembler):
       prior = tf_compat.v1.zeros_initializer()
       logits = _lookup_if_dict(weighted_subnetworks[0].subnetwork.logits, key)
       dims = logits.shape.as_list()
-      shape = dims[-1] if len(dims) > 1 else 1
+
+      if len(dims) == 1:
+        num_dims = 1
+      else:
+        assert len(dims) == 2
+        num_dims = dims[-1]
+        assert num_dims is not None
+      shape = num_dims
+
     else:
       prior = self._load_variable_from_model_dir(_lookup_if_dict(prior, key))
     return tf_compat.v1.get_variable(
