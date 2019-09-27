@@ -200,8 +200,8 @@ def skip_for_tf2(f):
       # If tf.contrib doesn't exist, we are in TF 2.0.
       _ = tf.contrib
       _ = tf.contrib.estimator.regression_head(
-          loss_reduction=SUM_OVER_BATCH_SIZE)
-    except (AttributeError, ImportError):
+          loss_reduction=tf.compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE)
+    except (AttributeError, ImportError, ModuleNotFoundError):
       self.skipTest("Skipping test in TF 2.0.")
     return f(*args, **kwargs)
 
@@ -219,9 +219,7 @@ def skip_for_tf1(f):
     try:
       # If tf.contrib doesn't exist, we are in TF 2.0.
       _ = tf_v2.contrib
-      _ = tf_v2.contrib.estimator.regression_head(
-          loss_reduction=SUM_OVER_BATCH_SIZE)
-    except (AttributeError, ImportError):
+    except (AttributeError, ImportError, ModuleNotFoundError):
       return f(*args, **kwargs)
     self.skipTest("Skipping test in TF 1.0.")
     return f(*args, **kwargs)
