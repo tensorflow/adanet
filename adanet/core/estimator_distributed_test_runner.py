@@ -37,6 +37,7 @@ sys.path.insert(
 # pylint: disable=g-import-not-at-top
 from absl import app
 from absl import flags
+from absl import logging
 from adanet import tf_compat
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
 from adanet.core.estimator import Estimator
@@ -54,18 +55,12 @@ try:
   from tensorflow.contrib.boosted_trees.python.utils import losses as bt_losses
 except ImportError:
   # Not much we can do here except skip the test.
-  pass
+  bt_losses = None
 
 from tensorflow.python.ops import partitioned_variables
 from tensorflow.python.training import session_manager as session_manager_lib
+from tensorflow_estimator.python.estimator import training as training_lib
 from tensorflow_estimator.python.estimator.canned import head as head_lib
-
-# Module path changed. Try importing from new and old location to maintain
-# backwards compatibility.
-try:
-  from tensorflow_estimator.python.estimator import training as training_lib
-except ImportError:
-  from tensorflow.python.estimator import training as training_lib
 # pylint: enable=g-import-not-at-top
 # pylint: enable=g-direct-tensorflow-import
 
@@ -286,6 +281,11 @@ def train_and_evaluate_estimator():
     estimator = Estimator(
         head=head, subnetwork_generator=subnetwork_generator, **kwargs)
   elif FLAGS.estimator_type == "autoensemble_trees_multiclass":
+    if not bt_losses:
+      logging.warning(
+          "Skipped autoensemble_trees_multiclass test since contrib is missing."
+      )
+      return
     n_classes = 3
     head = head_lib._multi_class_head_with_softmax_cross_entropy_loss(  # pylint: disable=protected-access
         n_classes=n_classes,

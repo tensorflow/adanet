@@ -35,7 +35,13 @@ import numpy as np
 import tensorflow as tf
 
 # pylint: disable=g-direct-tensorflow-import
-from tensorflow_estimator.contrib.estimator.python.estimator import head as head_lib
+# pylint: disable=g-import-not-at-top
+from tensorflow_estimator.python.estimator.head import regression_head
+try:
+  from tensorflow_estimator.contrib.estimator.python.estimator import head as head_lib
+except (AttributeError, ImportError):
+  head_lib = None
+# pylint: enable=g-direct-tensorflow-import
 # pylint: enable=g-direct-tensorflow-import
 
 
@@ -161,6 +167,16 @@ class _NanLossBuilder(Builder):
     return tf.no_op()
 
 
+def make_regression_head(use_tpu):
+  if use_tpu and head_lib:
+    # AdaNet TPU currently requires the old head.
+    return head_lib.regression_head(
+        loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE)
+  # TF 2.0 eliminates tf.contrib.
+  return regression_head.RegressionHead(
+      loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
+
+
 class TPUEstimatorTest(tu.AdanetTestCase):
 
   def setUp(self):
@@ -191,8 +207,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     config = tf_compat.v1.estimator.tpu.RunConfig(master="", tf_random_seed=42)
     estimator = TPUEstimator(
         # TODO: Add test with estimator Head v2.
-        head=head_lib.regression_head(
-            loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE),
+        head=make_regression_head(use_tpu),
         subnetwork_generator=subnetwork_generator,
         max_iteration_steps=10,
         model_dir=self.test_subdirectory,
@@ -261,8 +276,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
       }
 
     estimator = TPUEstimator(
-        head=head_lib.regression_head(
-            loss_reduction=tf_compat.v1.losses.Reduction.SUM_OVER_BATCH_SIZE),
+        head=make_regression_head(use_tpu),
         subnetwork_generator=SimpleGenerator(
             [_DNNBuilder("dnn", use_tpu=use_tpu)]),
         max_iteration_steps=max_steps,

@@ -914,13 +914,14 @@ def monkey_patched_summaries(summary):
     setattr(tf_v1.contrib.summary, "image", wrapped_summary.image_v2)
     setattr(tf_v1.contrib.summary, "histogram", wrapped_summary.histogram_v2)
     setattr(tf_v1.contrib.summary, "audio", wrapped_summary.audio_v2)
-  except AttributeError:
+  except (AttributeError, ImportError):
     # TF 2.0 eliminates tf.contrib.
     # Also set the new tf.summary to be use the new summaries in TF 2.
-    setattr(tf.summary, "scalar", wrapped_summary.scalar_v3)
-    setattr(tf.summary, "image", wrapped_summary.image_v3)
-    setattr(tf.summary, "histogram", wrapped_summary.histogram_v3)
-    setattr(tf.summary, "audio", wrapped_summary.audio_v3)
+    if tf_compat.version_greater_or_equal("2.0.0"):
+      setattr(tf.summary, "scalar", wrapped_summary.scalar_v3)
+      setattr(tf.summary, "image", wrapped_summary.image_v3)
+      setattr(tf.summary, "histogram", wrapped_summary.histogram_v3)
+      setattr(tf.summary, "audio", wrapped_summary.audio_v3)
 
   try:
     yield
@@ -931,7 +932,7 @@ def monkey_patched_summaries(summary):
       setattr(tf_v1.contrib.summary, "histogram", old_summary_v2_histogram)
       setattr(tf_v1.contrib.summary, "image", old_summary_v2_image)
       setattr(tf_v1.contrib.summary, "scalar", old_summary_v2_scalar)
-    except AttributeError:
+    except (AttributeError, ImportError):
       # TF 2.0 eliminates tf.contrib.
       pass
     setattr(summary_v2_lib, "audio", old_summary_v2_audio)
