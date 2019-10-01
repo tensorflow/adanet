@@ -326,12 +326,12 @@ def check_eventfile_for_keyword(keyword, dir_):
       keyword, filenames))
 
 
-def create_ensemble_metrics_for_testing(metric_fn,
-                                        use_tpu=False,
-                                        features=None,
-                                        labels=None,
-                                        estimator_spec=None,
-                                        architecture=None):
+def create_ensemble_metrics(metric_fn,
+                            use_tpu=False,
+                            features=None,
+                            labels=None,
+                            estimator_spec=None,
+                            architecture=None):
   """Creates an instance of the _EnsembleMetrics class.
 
   Args:
@@ -378,11 +378,11 @@ def create_ensemble_metrics_for_testing(metric_fn,
   return metrics
 
 
-def create_subnetwork_metrics_for_testing(metric_fn,
-                                          use_tpu=False,
-                                          features=None,
-                                          labels=None,
-                                          estimator_spec=None):
+def create_subnetwork_metrics(metric_fn,
+                              use_tpu=False,
+                              features=None,
+                              labels=None,
+                              estimator_spec=None):
   """Creates an instance of the _SubnetworkMetrics class.
 
   Args:
@@ -422,5 +422,3 @@ def create_subnetwork_metrics_for_testing(metric_fn,
   metrics.create_eval_metrics(features, labels, estimator_spec, metric_fn)
 
   return metrics
-
-
