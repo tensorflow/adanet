@@ -23,9 +23,9 @@ env:
     - TF_VERSION="tf-nightly" NODE_INDEX=0
     - TF_VERSION="tf-nightly" NODE_INDEX=1
     - TF_VERSION="tf-nightly" NODE_INDEX=2
-    - TF_VERSION="2.0.0-rc2" NODE_INDEX=0
-    - TF_VERSION="2.0.0-rc2" NODE_INDEX=1
-    - TF_VERSION="2.0.0-rc2" NODE_INDEX=2
+    - TF_VERSION="2.0.0" NODE_INDEX=0
+    - TF_VERSION="2.0.0" NODE_INDEX=1
+    - TF_VERSION="2.0.0" NODE_INDEX=2
     - TF_VERSION="tf-nightly-2.0-preview" NODE_INDEX=0
     - TF_VERSION="tf-nightly-2.0-preview" NODE_INDEX=1
     - TF_VERSION="tf-nightly-2.0-preview" NODE_INDEX=2

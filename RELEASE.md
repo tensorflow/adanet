@@ -13,18 +13,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================-->
 
-# Current version (0.8.0.dev)
+# Current version (0.9.0.dev)
  * Under development.
+
+# Release 0.8.0
+ * Add support for TensorFlow 2.0.
+ * Begin developing experimental Keras API for auto-ensembling.
+ * Support advanced subnetworks and subestimators that need to read and write from disk by giving them a dedicated subdirectory in `model_dir`.
+ * Fix race condition in parallel evaluation during distributed training.
  * Support subnetwork hooks requesting early stopping.
  * Adding AdaNet replay. The ability to rerun training without having to determine the best candidate for the iteration. A list of best indices from the previous run is provided and honored by AdaNet.
- * TODO: Add official Keras Model support, including Keras layers, Sequential, and Model subclasses for defining subnetworks.
  * Introduced `adanet.ensemble.MeanEnsembler` with a basic implementation for taking the mean of logits of subnetworks. This also supports including the mean of last_layer (helpful if subnetworks have same configurations) in the `predictions` and `export_outputs` of the EstimatorSpec.
  * **BREAKING CHANGE**: AdaNet now supports arbitrary metrics when choosing the best ensemble. To achieve this, the interface of `adanet.Evaluator` is changing. The `Evaluator.evaluate_adanet_losses(sess, adanet_losses)` function is being replaced with `Evaluator.evaluate(sess, ensemble_metrics)`. The `ensemble_metrics` parameter contains all computed metrics for each candidate ensemble as well as the `adanet_loss`. Code which overrides `evaluate_adanet_losses` must migrate over to use the new `evaluate` method (we suspect that such cases are very rare).
  * Allow user to specify a maximum number of AdaNet iterations.
  * **BREAKING CHANGE**: When supplied, run the `adanet.Evaluator` before `Estimator#evaluate`, `Estimator#predict`, and `Estimator#export_saved_model`. This can have the effect of changing the best candidate chosen at the final round. When the user passes an Evaluator, we run it to establish the best candidate during evaluation, predict, and export_saved_model. Previously they used the adanet_loss moving average collected during training. While the previous ensemble would have been established by the Evaluator, the current set of candidate ensembles that were not done training would be considered according to the adanet_loss. Now when a user passes an Evaluator that, for example, uses a hold-out set, AdaNet runs it before making predictions or exporting a SavedModel to use the best new candidate according to the hold-out set.
  * Support `tf.keras.metrics.Metrics` during evaluation.
+ * Allow users to disable summaries to reduce memory and disk footprint.
  * Stop individual subnetwork training on `OutOfRangeError` raised during bagging.
- * Gracefully handle NaN losses from ensembles during training. When an ensemble or subnetwork has a NaN loss during training, its training is marked as terminated. As long as one ensemble (and therefore underlying subnetworks) does not have a NaN loss, training will continue.
  * Train forever if `max_steps` and `steps` are both `None`.
 
 # Release 0.7.0
