@@ -757,7 +757,7 @@ class _IterationBuilder(object):
         if best_loss is not None:
           summary.scalar("loss", best_loss)
       iteration_metrics = _IterationMetrics(iteration_number, candidates,
-                                            subnetwork_specs,
+                                            subnetwork_specs, self._use_tpu,
                                             replay_indices_for_all)
       if self._use_tpu:
         estimator_spec = tf_compat.v1.estimator.tpu.TPUEstimatorSpec(

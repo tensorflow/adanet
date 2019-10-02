@@ -204,24 +204,6 @@ class _SubnetworkMetrics(object):
     return _metric_fn, self._eval_metrics_store.flatten_args()
 
 
-class _ArchitectureMetric(tf_compat.Metric):
-  """Tracks the current ensemble architecture as a metric."""
-
-  def __init__(self, name="architecture_metric", **kwargs):
-    # NOTE: This should not be called when Metric is not supported.
-    super(_ArchitectureMetric, self).__init__(name=name, **kwargs)
-    self._value = self.add_weight(
-        name="value",
-        initializer=tf.keras.initializers.Constant(""),
-        dtype=tf.string)
-
-  def update_state(self, value):
-    self._value.assign(value)
-
-  def result(self):
-    return self._value
-
-
 class _EnsembleMetrics(_SubnetworkMetrics):
   """A object which creates evaluation metrics for Ensembles."""
 
@@ -281,16 +263,20 @@ class _IterationMetrics(object):
                iteration_number,
                candidates,
                subnetwork_specs,
+               use_tpu=False,
                replay_indices_for_all=None):
     self._iteration_number = iteration_number
     self._candidates = candidates
     self._subnetwork_specs = subnetwork_specs
+    self._use_tpu = use_tpu
     self._replay_indices_for_all = replay_indices_for_all
 
     self._candidates_eval_metrics_store = self._build_eval_metrics_store(
         [candidate.ensemble_spec for candidate in self._candidates])
     self._subnetworks_eval_metrics_store = self._build_eval_metrics_store(
         self._subnetwork_specs)
+
+    self._best_eval_metrics_tuple = None
 
   def _build_eval_metrics_store(self, specs):
     """Creates an _EvalMetricsStore from Subnetwork or Ensemble specs."""
@@ -305,6 +291,7 @@ class _IterationMetrics(object):
 
   def best_eval_metric_ops(self, best_candidate_index, mode):
     """Returns best ensemble's metrics."""
+
     return call_eval_metrics(
         self.best_eval_metrics_tuple(best_candidate_index, mode))
 
@@ -403,6 +390,12 @@ class _IterationMetrics(object):
         # its eval_metrics.
         assert "loss" not in eval_metric_ops
         return eval_metric_ops
+
+    if not self._use_tpu:
+      if not self._best_eval_metrics_tuple:
+        best_ops = call_eval_metrics((_best_eval_metrics_fn, args))
+        self._best_eval_metrics_tuple = lambda: best_ops, []
+      return self._best_eval_metrics_tuple
 
     return _best_eval_metrics_fn, args
 

@@ -226,6 +226,8 @@ py_library(
     name = "eval_metrics",
     srcs = ["eval_metrics.py"],
     deps = [
+        "//adanet/tf_compat",
+        "@absl_py//absl/logging",
         "@six_archive//:six",
     ],
 )
@@ -239,6 +241,7 @@ py_test(
         ":ensemble_builder",
         ":eval_metrics",
         ":testing_utils",
+        "//adanet/tf_compat",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -291,9 +294,13 @@ py_library(
     srcs = ["testing_utils.py"],
     deps = [
         ":architecture",
+        ":candidate",
         ":ensemble_builder",
+        ":eval_metrics",
         "//adanet/ensemble",
         "//adanet/subnetwork",
+        "//adanet/tf_compat",
+        "@absl_py//absl/flags",
         "@absl_py//absl/testing:parameterized",
     ],
 )

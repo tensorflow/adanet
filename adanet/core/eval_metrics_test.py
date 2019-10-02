@@ -22,9 +22,6 @@ from __future__ import print_function
 from absl.testing import parameterized
 from adanet import tf_compat
 from adanet.core.architecture import _Architecture
-from adanet.core.candidate import _Candidate
-from adanet.core.ensemble_builder import _EnsembleSpec
-from adanet.core.eval_metrics import _IterationMetrics
 from adanet.core.eval_metrics import call_eval_metrics
 import adanet.core.testing_utils as tu
 import tensorflow as tf
@@ -180,7 +177,7 @@ class MetricsTest(tu.AdanetTestCase):
     with context.graph_mode():
       self.setup_graph()
       best_candidate_index = 3
-      candidates = []
+      ensemble_metrics = []
       for i in range(10):
 
         def metric_fn(val=i):
@@ -191,17 +188,8 @@ class MetricsTest(tu.AdanetTestCase):
               "ensemble_keras_metric": metric
           }
 
-        spec = _EnsembleSpec(
-            name="ensemble_{}".format(i),
-            ensemble=None,
-            architecture=None,
-            subnetwork_builders=None,
-            predictions=None,
-            step=None,
-            eval_metrics=(metric_fn, {}))
-        candidate = _Candidate(ensemble_spec=spec, adanet_loss=tf.constant(i))
-        candidates.append(candidate)
-      metrics = _IterationMetrics(1, candidates, subnetwork_specs=[])
+        ensemble_metrics.append(tu.create_ensemble_metrics(metric_fn))
+      metrics = tu.create_iteration_metrics(ensemble_metrics=ensemble_metrics)
 
       metrics_fn = (
           metrics.best_eval_metrics_tuple
@@ -215,6 +203,9 @@ class MetricsTest(tu.AdanetTestCase):
             "ensemble_keras_metric": best_candidate_index,
             "iteration": 1
         }
+        # We don't actually provide an architecture, so the default will be
+        # inside.
+        del actual["architecture/adanet/ensembles"]
       else:
         expected = {}
       self.assertEqual(actual, expected)
@@ -224,19 +215,31 @@ class MetricsTest(tu.AdanetTestCase):
 
     with context.graph_mode():
       self.setup_graph()
-      metric_fn = lambda: {"metric": tf.constant(5)}
-
+      metric_fn = lambda: {"metric": (tf.constant(5), tf.constant(5))}
+      best_candidate_index = 3
+      mode = tf.estimator.ModeKeys.EVAL
       ensemble_metrics = tu.create_ensemble_metrics(metric_fn)
+      subnetwork_metrics = tu.create_subnetwork_metrics(metric_fn)
+      iteration_metrics = tu.create_iteration_metrics(
+          ensemble_metrics=[ensemble_metrics],
+          subnetwork_metrics=[subnetwork_metrics])
+
       ensemble_ops1 = call_eval_metrics(ensemble_metrics.eval_metrics_tuple())
       ensemble_ops2 = call_eval_metrics(ensemble_metrics.eval_metrics_tuple())
-      self.assertEqual(ensemble_ops1, ensemble_ops2)
-
-      subnetwork_metrics = tu.create_subnetwork_metrics(metric_fn)
       subnetwork_ops1 = call_eval_metrics(
           subnetwork_metrics.eval_metrics_tuple())
       subnetwork_ops2 = call_eval_metrics(
           subnetwork_metrics.eval_metrics_tuple())
+      iteration_ops1 = iteration_metrics.best_eval_metric_ops(
+          best_candidate_index, mode)
+      iteration_ops2 = iteration_metrics.best_eval_metric_ops(
+          best_candidate_index, mode)
+
       self.assertEqual(subnetwork_ops1, subnetwork_ops2)
+      self.assertEqual(ensemble_ops1, ensemble_ops2)
+      self.assertEqual(iteration_ops1, iteration_ops2)
+      for ops in [ensemble_ops1, subnetwork_ops1, iteration_ops1]:
+        self.assertIsNotNone(ops)
 
 
 if __name__ == "__main__":

@@ -28,8 +28,11 @@ from absl import flags
 from absl.testing import parameterized
 from adanet import tf_compat
 from adanet.core.architecture import _Architecture
+from adanet.core.candidate import _Candidate
 from adanet.core.ensemble_builder import _EnsembleSpec
+from adanet.core.ensemble_builder import _SubnetworkSpec
 from adanet.core.eval_metrics import _EnsembleMetrics
+from adanet.core.eval_metrics import _IterationMetrics
 from adanet.core.eval_metrics import _SubnetworkMetrics
 from adanet.ensemble import ComplexityRegularized
 from adanet.ensemble import WeightedSubnetwork
@@ -422,3 +425,57 @@ def create_subnetwork_metrics(metric_fn,
   metrics.create_eval_metrics(features, labels, estimator_spec, metric_fn)
 
   return metrics
+
+
+def create_iteration_metrics(subnetwork_metrics=None,
+                             ensemble_metrics=None,
+                             use_tpu=False,
+                             iteration_number=1):
+  """Creates an instance of the _IterationMetrics class.
+
+  Args:
+    subnetwork_metrics: List of _SubnetworkMetrics objects.
+    ensemble_metrics: List of _EnsembleMetrics objects.
+    use_tpu: Whether to use TPU-specific variable sharing logic.
+    iteration_number: What number iteration these metrics are for.
+
+  Returns:
+    An instance of _IterationMetrics that has been populated with the
+    input metrics.
+  """
+  subnetwork_metrics = subnetwork_metrics or []
+  ensemble_metrics = ensemble_metrics or []
+
+  candidates = []
+  for i, metric in enumerate(ensemble_metrics):
+    spec = _EnsembleSpec(
+        name="ensemble_{}".format(i),
+        ensemble=None,
+        architecture=None,
+        subnetwork_builders=None,
+        predictions=None,
+        step=None,
+        eval_metrics=metric.eval_metrics_tuple())
+
+    candidate = _Candidate(ensemble_spec=spec, adanet_loss=tf.constant(i))
+    candidates.append(candidate)
+
+  subnetwork_specs = []
+  for i, metric in enumerate(subnetwork_metrics):
+    spec = _SubnetworkSpec(
+        name="subnetwork_{}".format(i),
+        subnetwork=None,
+        builder=None,
+        predictions=None,
+        step=None,
+        loss=None,
+        train_op=None,
+        asset_dir=None,
+        eval_metrics=metric.eval_metrics_tuple())
+    subnetwork_specs.append(spec)
+
+  return _IterationMetrics(
+      iteration_number,
+      candidates,
+      subnetwork_specs=subnetwork_specs,
+      use_tpu=use_tpu)
