@@ -21,6 +21,8 @@ py_library(
     ],
     deps = [
         "//adanet/core",
+        "//adanet/subnetwork",
+        "//adanet/tf_compat",
     ],
 )
 
@@ -31,6 +33,20 @@ py_test(
     shard_count = 5,
     deps = [
         ":estimator",
+        "//adanet/tf_compat",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+py_test(
+    name = "tpu_estimator_test",
+    size = "large",
+    srcs = ["tpu_estimator_test.py"],
+    shard_count = 4,
+    deps = [
+        ":estimator",
+        "//adanet/tf_compat",
+        "@absl_py//absl/flags",
         "@absl_py//absl/testing:parameterized",
     ],
 )

@@ -15,6 +15,7 @@ limitations under the License.
 
 # Current version (0.9.0.dev)
  * Under development.
+ * Introduce support for `AutoEnsembleTPUEstimator`.
 
 # Release 0.8.0
  * Add support for TensorFlow 2.0.
