@@ -236,11 +236,10 @@ class _FakeEnsembleBuilder(object):
                eval_metric_ops_fn=None,
                export_output_key=None):
     self._dict_predictions = dict_predictions
+    if not eval_metric_ops_fn:
+      eval_metric_ops_fn = lambda: {"a": (tf.constant(1), tf.constant(1))}
+    self._eval_metric_ops_fn = eval_metric_ops_fn
     self._export_output_key = export_output_key
-    if eval_metric_ops_fn:
-      self._eval_metrics = (eval_metric_ops_fn, {})
-    else:
-      self._eval_metrics = None
 
   def build_ensemble_spec(self,
                           name,
@@ -275,7 +274,8 @@ class _FakeEnsembleBuilder(object):
         random_seed=candidate.subnetwork_builders[0].seed,
         subnetwork_builders=candidate.subnetwork_builders,
         dict_predictions=self._dict_predictions,
-        eval_metrics=self._eval_metrics,
+        eval_metrics=tu.create_ensemble_metrics(
+            metric_fn=self._eval_metric_ops_fn),
         export_output_key=self._export_output_key)
 
 
@@ -308,7 +308,8 @@ class _FakeSubnetworkManager(object):
         loss=None,
         train_op=subnetwork_builder.build_subnetwork_train_op(
             *[None for _ in range(7)]),
-        eval_metrics=None)
+        eval_metrics=tu.create_subnetwork_metrics(
+            metric_fn=lambda: {"a": (tf.constant(1), tf.constant(1))}))
 
 
 class _FakeCandidateBuilder(object):
@@ -507,9 +508,9 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "previous_ensemble_spec":
               lambda: tu.dummy_ensemble_spec(
                   "old",
-                  eval_metrics=(lambda: {
+                  eval_metrics=tu.create_ensemble_metrics(metric_fn=lambda: {
                       "a": (tf.constant(1), tf.constant(2))
-                  }, {})),
+                  })),
           "want_loss":
               1.403943,
           "want_predictions":
@@ -755,8 +756,14 @@ class IterationBuilderTest(tu.AdanetTestCase):
           want_predictions,
           self.evaluate(estimator_spec.predictions),
           atol=1e-3)
-      self.assertEqual(
-          set(want_eval_metric_ops), set(estimator_spec.eval_metric_ops.keys()))
+
+      # A default architecture metric is always included, even if we don't
+      # specify one.
+      eval_metric_ops = estimator_spec.eval_metric_ops
+      if "architecture/adanet/ensembles" in eval_metric_ops:
+        del eval_metric_ops["architecture/adanet/ensembles"]
+      self.assertEqual(set(want_eval_metric_ops), set(eval_metric_ops.keys()))
+
       self.assertEqual(want_best_candidate_index,
                        self.evaluate(iteration.best_candidate_index))
 
@@ -826,28 +833,29 @@ class IterationBuilderTest(tu.AdanetTestCase):
                                  previous_ensemble_spec_fn=lambda: None,
                                  mode=tf.estimator.ModeKeys.TRAIN,
                                  summary_maker=_ScopedSummary):
-    builder = _IterationBuilder(
-        _FakeCandidateBuilder(),
-        _FakeSubnetworkManager(),
-        ensemble_builder,
-        summary_maker=summary_maker,
-        ensemblers=[_FakeEnsembler()],
-        max_steps=100)
-    features = [[1., -1., 0.]]
-    labels = [1]
-    with self.assertRaises(want_raises):
-      builder.build_iteration(
-          base_global_step=0,
-          iteration_number=0,
-          ensemble_candidates=[
-              EnsembleCandidate("test", subnetwork_builders, None)
-          ],
-          subnetwork_builders=subnetwork_builders,
-          features=features,
-          labels=labels,
-          mode=mode,
-          config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
-          previous_ensemble_spec=previous_ensemble_spec_fn())
+    with context.graph_mode():
+      builder = _IterationBuilder(
+          _FakeCandidateBuilder(),
+          _FakeSubnetworkManager(),
+          ensemble_builder,
+          summary_maker=summary_maker,
+          ensemblers=[_FakeEnsembler()],
+          max_steps=100)
+      features = [[1., -1., 0.]]
+      labels = [1]
+      with self.assertRaises(want_raises):
+        builder.build_iteration(
+            base_global_step=0,
+            iteration_number=0,
+            ensemble_candidates=[
+                EnsembleCandidate("test", subnetwork_builders, None)
+            ],
+            subnetwork_builders=subnetwork_builders,
+            features=features,
+            labels=labels,
+            mode=mode,
+            config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
+            previous_ensemble_spec=previous_ensemble_spec_fn())
 
 
 class _HeadEnsembleBuilder(object):
@@ -906,75 +914,80 @@ class IterationExportOutputsTest(tu.AdanetTestCase):
       })
   @test_util.run_in_graph_and_eager_modes
   def test_head_export_outputs(self, head):
-    ensemble_builder = _HeadEnsembleBuilder(head)
-    builder = _IterationBuilder(
-        _FakeCandidateBuilder(),
-        _FakeSubnetworkManager(),
-        ensemble_builder,
-        summary_maker=_ScopedSummary,
-        ensemblers=[_FakeEnsembler()],
-        max_steps=10)
-    features = [[1., -1., 0.]]
-    labels = [1]
-    mode = tf.estimator.ModeKeys.PREDICT
-    subnetwork_builders = [_FakeBuilder("test")]
-    iteration = builder.build_iteration(
-        base_global_step=0,
-        iteration_number=0,
-        ensemble_candidates=[
-            EnsembleCandidate("test", subnetwork_builders, None)
-        ],
-        subnetwork_builders=subnetwork_builders,
-        features=features,
-        labels=labels,
-        config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
-        mode=mode)
+    with context.graph_mode():
+      ensemble_builder = _HeadEnsembleBuilder(head)
+      builder = _IterationBuilder(
+          _FakeCandidateBuilder(),
+          _FakeSubnetworkManager(),
+          ensemble_builder,
+          summary_maker=_ScopedSummary,
+          ensemblers=[_FakeEnsembler()],
+          max_steps=10)
+      features = [[1., -1., 0.]]
+      labels = [1]
+      mode = tf.estimator.ModeKeys.PREDICT
+      subnetwork_builders = [_FakeBuilder("test")]
+      iteration = builder.build_iteration(
+          base_global_step=0,
+          iteration_number=0,
+          ensemble_candidates=[
+              EnsembleCandidate("test", subnetwork_builders, None)
+          ],
+          subnetwork_builders=subnetwork_builders,
+          features=features,
+          labels=labels,
+          config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
+          mode=mode)
 
-    # Compare iteration outputs with default head outputs.
-    spec = head.create_estimator_spec(
-        features=features, labels=labels, mode=mode, logits=[[.5]])
-    self.assertEqual(
-        len(spec.export_outputs), len(iteration.estimator_spec.export_outputs))
-    for key in spec.export_outputs:
-      if isinstance(spec.export_outputs[key],
-                    tf.estimator.export.RegressionOutput):
-        self.assertAlmostEqual(
-            self.evaluate(spec.export_outputs[key].value),
-            self.evaluate(iteration.estimator_spec.export_outputs[key].value))
-        continue
-      if isinstance(spec.export_outputs[key],
-                    tf.estimator.export.ClassificationOutput):
-        self.assertAllClose(
-            self.evaluate(spec.export_outputs[key].scores),
-            self.evaluate(iteration.estimator_spec.export_outputs[key].scores))
-        self.assertAllEqual(
-            self.evaluate(spec.export_outputs[key].classes),
-            self.evaluate(iteration.estimator_spec.export_outputs[key].classes))
-        continue
-      if isinstance(spec.export_outputs[key],
-                    tf.estimator.export.PredictOutput):
-        if "classes" in spec.export_outputs[key].outputs:
-          # Verify string Tensor outputs separately.
+      # Compare iteration outputs with default head outputs.
+      spec = head.create_estimator_spec(
+          features=features, labels=labels, mode=mode, logits=[[.5]])
+      self.assertEqual(
+          len(spec.export_outputs),
+          len(iteration.estimator_spec.export_outputs))
+      for key in spec.export_outputs:
+        if isinstance(spec.export_outputs[key],
+                      tf.estimator.export.RegressionOutput):
+          self.assertAlmostEqual(
+              self.evaluate(spec.export_outputs[key].value),
+              self.evaluate(iteration.estimator_spec.export_outputs[key].value))
+          continue
+        if isinstance(spec.export_outputs[key],
+                      tf.estimator.export.ClassificationOutput):
+          self.assertAllClose(
+              self.evaluate(spec.export_outputs[key].scores),
+              self.evaluate(
+                  iteration.estimator_spec.export_outputs[key].scores))
           self.assertAllEqual(
-              self.evaluate(spec.export_outputs[key].outputs["classes"]),
-              self.evaluate(iteration.estimator_spec.export_outputs[key]
-                            .outputs["classes"]))
-          del spec.export_outputs[key].outputs["classes"]
-          del iteration.estimator_spec.export_outputs[key].outputs["classes"]
-        if "all_classes" in spec.export_outputs[key].outputs:
-          # Verify string Tensor outputs separately.
-          self.assertAllEqual(
-              self.evaluate(spec.export_outputs[key].outputs["all_classes"]),
-              self.evaluate(iteration.estimator_spec.export_outputs[key]
-                            .outputs["all_classes"]))
-          del spec.export_outputs[key].outputs["all_classes"]
-          del iteration.estimator_spec.export_outputs[key].outputs[
-              "all_classes"]
-        self.assertAllClose(
-            self.evaluate(spec.export_outputs[key].outputs),
-            self.evaluate(iteration.estimator_spec.export_outputs[key].outputs))
-        continue
-      self.fail("Invalid export_output for {}.".format(key))
+              self.evaluate(spec.export_outputs[key].classes),
+              self.evaluate(
+                  iteration.estimator_spec.export_outputs[key].classes))
+          continue
+        if isinstance(spec.export_outputs[key],
+                      tf.estimator.export.PredictOutput):
+          if "classes" in spec.export_outputs[key].outputs:
+            # Verify string Tensor outputs separately.
+            self.assertAllEqual(
+                self.evaluate(spec.export_outputs[key].outputs["classes"]),
+                self.evaluate(iteration.estimator_spec.export_outputs[key]
+                              .outputs["classes"]))
+            del spec.export_outputs[key].outputs["classes"]
+            del iteration.estimator_spec.export_outputs[key].outputs["classes"]
+          if "all_classes" in spec.export_outputs[key].outputs:
+            # Verify string Tensor outputs separately.
+            self.assertAllEqual(
+                self.evaluate(spec.export_outputs[key].outputs["all_classes"]),
+                self.evaluate(iteration.estimator_spec.export_outputs[key]
+                              .outputs["all_classes"]))
+            del spec.export_outputs[key].outputs["all_classes"]
+            del iteration.estimator_spec.export_outputs[key].outputs[
+                "all_classes"]
+          self.assertAllClose(
+              self.evaluate(spec.export_outputs[key].outputs),
+              self.evaluate(
+                  iteration.estimator_spec.export_outputs[key].outputs))
+          continue
+        self.fail("Invalid export_output for {}.".format(key))
 
 
 if __name__ == "__main__":

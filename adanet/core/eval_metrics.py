@@ -29,7 +29,7 @@ import tensorflow as tf
 from tensorflow.python.util import nest  # pylint: disable=g-direct-tensorflow-import
 
 
-def call_eval_metrics(eval_metrics):
+def _call_eval_metrics(eval_metrics):
   if not eval_metrics:
     return {}
   fn, args = eval_metrics
@@ -120,7 +120,7 @@ class _SubnetworkMetrics(object):
     loss_fn_args = [tf.reshape(estimator_spec.loss, [1])]
 
     if not self._use_tpu:
-      loss_ops = call_eval_metrics((loss_fn, loss_fn_args))
+      loss_ops = _call_eval_metrics((loss_fn, loss_fn_args))
       loss_fn, loss_fn_args = lambda: loss_ops, []
     self._eval_metrics_store.add_eval_metrics(
         self._templatize_metric_fn(loss_fn), loss_fn_args)
@@ -138,7 +138,7 @@ class _SubnetworkMetrics(object):
         metric_fn_args["predictions"] = estimator_spec.predictions
 
       if not self._use_tpu:
-        metric_fn_ops = call_eval_metrics((metric_fn, metric_fn_args))
+        metric_fn_ops = _call_eval_metrics((metric_fn, metric_fn_args))
         metric_fn, metric_fn_args = lambda: metric_fn_ops, []
       self._eval_metrics_store.add_eval_metrics(
           self._templatize_metric_fn(metric_fn), metric_fn_args)
@@ -161,7 +161,7 @@ class _SubnetworkMetrics(object):
 
       # We can only be passed in either a dict or a list of tensors.
       args = args if args else kwargs
-      metrics = call_eval_metrics((metric_fn, args))
+      metrics = _call_eval_metrics((metric_fn, args))
       if not self._use_tpu:
         return metrics
 
@@ -198,10 +198,15 @@ class _SubnetworkMetrics(object):
       metric_fn_args = self._eval_metrics_store.pack_args(args)
       eval_metric_ops = {}
       for metric_fn, args in zip(metric_fns, metric_fn_args):
-        eval_metric_ops.update(call_eval_metrics((metric_fn, args)))
+        eval_metric_ops.update(_call_eval_metrics((metric_fn, args)))
       return eval_metric_ops
 
     return _metric_fn, self._eval_metrics_store.flatten_args()
+
+  def eval_metrics_ops(self):
+    """Returns the eval_metrics_ops."""
+
+    return _call_eval_metrics(self.eval_metrics_tuple())
 
 
 class _EnsembleMetrics(_SubnetworkMetrics):
@@ -283,16 +288,16 @@ class _IterationMetrics(object):
 
     store = _EvalMetricsStore()
     for spec in specs:
-      if not spec.eval_metrics:
+      if not spec.eval_metrics or not spec.eval_metrics.eval_metrics_tuple():
         continue
-      metric_fn, args = spec.eval_metrics
+      metric_fn, args = spec.eval_metrics.eval_metrics_tuple()
       store.add_eval_metrics(metric_fn, args)
     return store
 
   def best_eval_metric_ops(self, best_candidate_index, mode):
     """Returns best ensemble's metrics."""
 
-    return call_eval_metrics(
+    return _call_eval_metrics(
         self.best_eval_metrics_tuple(best_candidate_index, mode))
 
   def best_eval_metrics_tuple(self, best_candidate_index, mode):
@@ -393,7 +398,7 @@ class _IterationMetrics(object):
 
     if not self._use_tpu:
       if not self._best_eval_metrics_tuple:
-        best_ops = call_eval_metrics((_best_eval_metrics_fn, args))
+        best_ops = _call_eval_metrics((_best_eval_metrics_fn, args))
         self._best_eval_metrics_tuple = lambda: best_ops, []
       return self._best_eval_metrics_tuple
 
@@ -412,7 +417,7 @@ class _IterationMetrics(object):
 
     grouped_metrics = collections.defaultdict(list)
     for metric_fn, args in zip(metric_fns, metric_fn_args):
-      eval_metric_ops = call_eval_metrics((metric_fn, args))
+      eval_metric_ops = _call_eval_metrics((metric_fn, args))
       for metric_name in sorted(eval_metric_ops):
         metric_op = tf_compat.metric_op(eval_metric_ops[metric_name])
         grouped_metrics[metric_name].append(metric_op)

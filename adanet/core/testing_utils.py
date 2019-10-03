@@ -455,7 +455,7 @@ def create_iteration_metrics(subnetwork_metrics=None,
         subnetwork_builders=None,
         predictions=None,
         step=None,
-        eval_metrics=metric.eval_metrics_tuple())
+        eval_metrics=metric)
 
     candidate = _Candidate(ensemble_spec=spec, adanet_loss=tf.constant(i))
     candidates.append(candidate)
@@ -471,7 +471,7 @@ def create_iteration_metrics(subnetwork_metrics=None,
         loss=None,
         train_op=None,
         asset_dir=None,
-        eval_metrics=metric.eval_metrics_tuple())
+        eval_metrics=metric)
     subnetwork_specs.append(spec)
 
   return _IterationMetrics(

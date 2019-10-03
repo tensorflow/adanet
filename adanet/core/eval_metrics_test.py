@@ -22,7 +22,7 @@ from __future__ import print_function
 from absl.testing import parameterized
 from adanet import tf_compat
 from adanet.core.architecture import _Architecture
-from adanet.core.eval_metrics import call_eval_metrics
+from adanet.core.eval_metrics import _call_eval_metrics
 import adanet.core.testing_utils as tu
 import tensorflow as tf
 
@@ -56,7 +56,7 @@ class MetricsTest(tu.AdanetTestCase):
   def _run_metrics(self, metrics):
     metric_ops = metrics
     if isinstance(metric_ops, tuple):
-      metric_ops = call_eval_metrics(metric_ops)
+      metric_ops = _call_eval_metrics(metric_ops)
     self.evaluate((tf_compat.v1.global_variables_initializer(),
                    tf_compat.v1.local_variables_initializer()))
     self.evaluate(metric_ops)
@@ -224,12 +224,10 @@ class MetricsTest(tu.AdanetTestCase):
           ensemble_metrics=[ensemble_metrics],
           subnetwork_metrics=[subnetwork_metrics])
 
-      ensemble_ops1 = call_eval_metrics(ensemble_metrics.eval_metrics_tuple())
-      ensemble_ops2 = call_eval_metrics(ensemble_metrics.eval_metrics_tuple())
-      subnetwork_ops1 = call_eval_metrics(
-          subnetwork_metrics.eval_metrics_tuple())
-      subnetwork_ops2 = call_eval_metrics(
-          subnetwork_metrics.eval_metrics_tuple())
+      ensemble_ops1 = ensemble_metrics.eval_metrics_ops()
+      ensemble_ops2 = ensemble_metrics.eval_metrics_ops()
+      subnetwork_ops1 = subnetwork_metrics.eval_metrics_ops()
+      subnetwork_ops2 = subnetwork_metrics.eval_metrics_ops()
       iteration_ops1 = iteration_metrics.best_eval_metric_ops(
           best_candidate_index, mode)
       iteration_ops2 = iteration_metrics.best_eval_metric_ops(
