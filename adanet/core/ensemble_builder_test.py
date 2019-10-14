@@ -421,7 +421,7 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
       tf_compat.v1.train.get_or_create_global_step()
       # A trainable variable to later verify that creating models does not
       # affect the global variables collection.
-      _ = tf_compat.v1.get_variable("some_var", 0., trainable=True)
+      _ = tf_compat.v1.get_variable("some_var", shape=0, trainable=True)
 
       features = {"x": tf.constant([[1.], [2.]])}
       if multi_head:
