@@ -46,6 +46,10 @@ from tensorflow.python.training import training_util
 from tensorflow_estimator.python.estimator.head import binary_class_head
 from tensorflow_estimator.python.estimator.head import multi_head as multi_head_lib
 
+GPU_OPTIONS = tf.GPUOptions(allow_growth=True)
+CONFIG = tf.ConfigProto(gpu_options=GPU_OPTIONS)
+
+
 
 class _Builder(Builder):
 
@@ -471,7 +475,7 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
         self.assertAllEqual(want_replay_indices,
                             ensemble_spec.architecture.replay_indices)
 
-      with tf_compat.v1.Session(graph=g).as_default() as sess:
+      with tf_compat.v1.Session(graph=g, config=CONFIG).as_default() as sess:
         sess.run(tf_compat.v1.global_variables_initializer())
 
         # Equals the number of subnetwork and ensemble trainable variables,

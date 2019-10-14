@@ -53,6 +53,10 @@ from tensorflow.python.util import deprecation
 from tensorflow_estimator.python.estimator import util
 # pylint: enable=g-direct-tensorflow-import
 
+GPU_OPTIONS = tf.GPUOptions(allow_growth=True)
+CONFIG = tf.ConfigProto(gpu_options=GPU_OPTIONS)
+
+
 
 class _StopAfterTrainingHook(tf_compat.SessionRunHook):
   """Hook that requests stop once iteration is over."""
@@ -1390,7 +1394,7 @@ class Estimator(tf.estimator.Estimator):
                  current_iteration.number)
     for hook in input_hooks:
       hook.begin()
-    with tf_compat.v1.Session() as sess:
+    with tf_compat.v1.Session(config=CONFIG) as sess:
       init = tf.group(
           tf_compat.v1.global_variables_initializer(),
           tf_compat.v1.local_variables_initializer(),
@@ -1470,7 +1474,7 @@ class Estimator(tf.estimator.Estimator):
     ]
     for hook in input_hooks:
       hook.begin()
-    with tf_compat.v1.Session() as sess:
+    with tf_compat.v1.Session(config=CONFIG) as sess:
       init = tf.group(
           tf_compat.v1.global_variables_initializer(),
           tf_compat.v1.local_variables_initializer(),

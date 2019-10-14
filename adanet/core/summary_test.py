@@ -35,6 +35,11 @@ import tensorflow as tf
 from tensorflow.python.ops import summary_ops_v2
 # pylint: enable=g-direct-tensorflow-import
 
+GPU_OPTIONS = tf.GPUOptions(allow_growth=True)
+CONFIG = tf.ConfigProto(gpu_options=GPU_OPTIONS)
+
+
+
 
 def decode(proto_str):
   """Decodes a proto string."""
@@ -361,7 +366,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
     if nest_graph:
       with tf.Graph().as_default():
         scoped_summary2.scalar("c2", tf.constant(2))
-        with tf.Session() as sess:
+        with tf.Session(config=CONFIG) as sess:
           summaries = scoped_summary2.merge_all()
           tf.logging.warn("summaries %s", summaries)
           summary = tf.Summary()
@@ -369,7 +374,7 @@ class ScopedSummaryTest(parameterized.TestCase, tf.test.TestCase):
           self.assertEqual(["c2"], [s.tag for s in summary.value])
           self.assertEqual([2], [s.simple_value for s in summary.value])
 
-    with tf.Session() as sess:
+    with tf.Session(config=CONFIG) as sess:
       for scoped_summary in [scoped_summary0, scoped_summary1, scoped_summary2]:
         summaries = scoped_summary.merge_all()
         summary = tf.Summary()
