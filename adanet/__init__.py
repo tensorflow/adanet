@@ -36,6 +36,8 @@ from adanet.ensemble import MixtureWeightType
 from adanet.ensemble import WeightedSubnetwork
 from adanet.subnetwork import Subnetwork
 
+from adanet.version import __version__
+
 __all__ = [
     "AutoEnsembleEstimator",
     "AutoEnsembleSubestimator",
