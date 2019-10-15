@@ -24,6 +24,7 @@ import inspect
 
 from adanet import tf_compat
 from adanet.core import Estimator
+from adanet.core import TPUEstimator
 from adanet.subnetwork import Builder
 from adanet.subnetwork import Generator
 from adanet.subnetwork import Subnetwork
@@ -65,10 +66,12 @@ class _SecondaryTrainOpRunnerHook(tf_compat.SessionRunHook):
 class AutoEnsembleSubestimator(
     collections.namedtuple("AutoEnsembleSubestimator",
                            ["estimator", "train_input_fn"])):
+  # pylint: disable=g-classes-have-attributes
   """A subestimator to train and consider for ensembling.
 
   Args:
-    estimator: A `tf.estimator.Estimator` instance to consider for ensembling.
+    estimator: A `tf.estimator.Estimator` or `tf.estimator.tpu.TPUEstimator`
+      instance to consider for ensembling.
     train_input_fn: A function that provides input data for training as
       minibatches. It can be used to implement ensemble methods like bootstrap
       aggregating (a.k.a bagging) where each subnetwork trains on different
@@ -88,6 +91,7 @@ class AutoEnsembleSubestimator(
   Returns:
     An `AutoEnsembleSubestimator` instance to be auto-ensembled.
   """
+  # pylint: enable=g-classes-have-attributes
 
   def __new__(cls, estimator, train_input_fn=None):
     return super(AutoEnsembleSubestimator, cls).__new__(cls, estimator,
@@ -265,6 +269,7 @@ class _GeneratorFromCandidatePool(Generator):
 
 
 class AutoEnsembleEstimator(Estimator):
+  # pylint: disable=g-classes-have-attributes
   # pyformat: disable
   """A :class:`tf.estimator.Estimator` that learns to ensemble models.
 
@@ -412,6 +417,7 @@ class AutoEnsembleEstimator(Estimator):
       :class:`tf.estimator.Estimator` instances.
   """
   # pyformat: enable
+  # pylint: enable=g-classes-have-attributes
 
   def __init__(self,
                head,
@@ -450,6 +456,197 @@ class AutoEnsembleEstimator(Estimator):
         worker_wait_timeout_secs=worker_wait_timeout_secs,
         model_dir=model_dir,
         config=config,
+        debug=debug,
+        enable_ensemble_summaries=enable_ensemble_summaries,
+        enable_subnetwork_summaries=enable_subnetwork_summaries,
+        global_step_combiner_fn=global_step_combiner_fn,
+        max_iterations=max_iterations,
+        replay_config=replay_config,
+        **kwargs)
+
+
+class AutoEnsembleTPUEstimator(TPUEstimator):
+  # pylint: disable=g-classes-have-attributes
+  # pyformat: disable
+  """A :class:`tf.estimator.tpu.TPUEstimator` that learns to ensemble models.
+
+  Specifically, it learns to ensemble models from a candidate pool using the
+  Adanet algorithm.
+
+  This estimator is capable of training and evaluating on TPU. It can ensemble
+  both :class:`tf.estimator.tpu.TPUEstimator` candidates as well as regular
+  :class:`tf.estimator.Estimator` candidates, as long as these candidates are
+  TPU compatible.
+
+  Note the following restrictions compared to AutoEnsembleEstimator:
+    * All candidates must wrap their optimizers with a
+      :class:`tf.tpu.CrossShardOptimizer`.
+    * The `input_fn` must expose a `params` argument.
+    * The `model_fn` of :class:`tf.estimator.tpu.TPUEstimator` candidates must
+      also expose a `params` argument.
+
+  WARNING: This Estimator is a work in progress and the API could change at any
+  moment. May not support all AutoEnsembleEstimator features.
+
+    .. code-block:: python
+
+      # A simple example of learning to ensemble linear and neural network
+      # models on TPU.
+
+      import adanet
+      import tensorflow as tf
+
+      feature_columns = ...
+
+      head = MultiClassHead(n_classes=10)
+
+      # Learn to ensemble linear and DNN models.
+      estimator = adanet.AutoEnsembleEstimator(
+          head=head,
+          candidate_pool=lambda config: {
+              "linear":
+                  tf.estimator.LinearEstimator(
+                      head=head,
+                      feature_columns=feature_columns,
+                      config=config,
+                      optimizer=tf.tpu.CrossShardOptimizer(...)),
+              "dnn":
+                  tf.estimator.DNNEstimator(
+                      head=head,
+                      feature_columns=feature_columns,
+                      config=config,
+                      optimizer=tf.tpu.CrossShardOptimzier(...),
+                      hidden_units=[1000, 500, 100])},
+          max_iteration_steps=50)
+
+      # Input builders
+      def input_fn_train(params):
+        # Returns tf.data.Dataset of (x, y) tuple where y represents label's
+        # class index.
+        pass
+      def input_fn_eval(params):
+        # Returns tf.data.Dataset of (x, y) tuple where y represents label's
+        # class index.
+        pass
+      def input_fn_predict():
+        # Returns tf.data.Dataset of (x, None) tuple.
+        pass
+      estimator.train(input_fn=input_fn_train, steps=100)
+      metrics = estimator.evaluate(input_fn=input_fn_eval, steps=10)
+      predictions = estimator.predict(input_fn=input_fn_predict)
+
+  Args:
+    head: A :class:`tf.contrib.estimator.Head` instance for computing loss and
+      evaluation metrics for every candidate.
+    candidate_pool: List of :class:`tf.estimator.tpu.TPUEstimator` and
+      :class:`AutoEnsembleSubestimator` objects, or dict of string name to
+      :class:`tf.estimator.tpu.TPUEstimator` and
+      :class:`AutoEnsembleSubestimator` objects that are candidate subestimators
+      to ensemble at each iteration. The order does not directly affect which
+      candidates will be included in the final ensemble, but will affect the
+      name of the candidate. When using a dict, the string key becomes the
+      candidate subestimator's name. Alternatively, this argument can be a
+      function that takes a `config` argument and returns the aforementioned
+      values in case the objects need to be re-instantiated at each adanet
+      iteration.
+    max_iteration_steps: See :class:`adanet.Estimator`.
+    logits_fn: A function for fetching the subnetwork logits from a
+      :class:`tf.estimator.EstimatorSpec`, which should obey the following
+      signature:
+        - `Args`: Can only have following argument:
+          - estimator_spec: The candidate's :class:`tf.estimator.EstimatorSpec`.
+        - `Returns`: Logits :class:`tf.Tensor` or dict of string to logits
+          :class:`tf.Tensor` (for multi-head) for the candidate subnetwork
+          extracted from the given `estimator_spec`. When `None`, it will
+          default to returning `estimator_spec.predictions` when they are a
+          :class:`tf.Tensor` or the :class:`tf.Tensor` for the key 'logits' when
+          they are a dict of string to :class:`tf.Tensor`.
+    last_layer_fn: An optional function for fetching the subnetwork last_layer
+      from a :class:`tf.estimator.EstimatorSpec`, which should obey the
+      following signature:
+        - `Args`: Can only have following argument:
+          - estimator_spec: The candidate's :class:`tf.estimator.EstimatorSpec`.
+        - `Returns`: Last layer :class:`tf.Tensor` or dict of string to last
+          layer :class:`tf.Tensor` (for multi-head) for the candidate subnetwork
+          extracted from the given `estimator_spec`. The last_layer can be used
+          for learning ensembles or exporting them as embeddings.
+      When `None`, it will default to using the logits as the last_layer.
+    ensemblers: See :class:`adanet.Estimator`.
+    ensemble_strategies: See :class:`adanet.Estimator`.
+    evaluator:  See :class:`adanet.Estimator`.
+    metric_fn:  See :class:`adanet.Estimator`.
+    force_grow:  See :class:`adanet.Estimator`.
+    adanet_loss_decay: See :class:`adanet.Estimator`.
+    model_dir: See :class:`adanet.Estimator`.
+    config: See :class:`adanet.Estimator`.
+    use_tpu: See :class:`adanet.Estimator`.
+    eval_on_tpu: See :class:`adanet.Estimator`.
+    train_batch_size: See :class:`adanet.Estimator`.
+    eval_batch_size: See :class:`adanet.Estimator`.
+    embedding_config_spec: See :class:`adanet.Estimator`.
+    debug: See :class:`adanet.Estimator`.
+    enable_ensemble_summaries: See :class:`adanet.Estimator`.
+    enable_subnetwork_summaries: See :class:`adanet.Estimator`.
+    global_step_combiner_fn: See :class:`adanet.Estimator`.
+    max_iterations: See :class:`adanet.Estimator`.
+    replay_config: See :class:`adanet.Estimator`.
+    **kwargs: Extra keyword args passed to the parent.
+
+  Returns:
+    An :class:`adanet.AutoEnsembleEstimator` instance.
+
+  Raises:
+    ValueError: If any of the candidates in `candidate_pool` are not
+      :class:`tf.estimator.Estimator` instances.
+  """
+  # pyformat: enable
+  # pylint: disable=g-classes-have-attributes
+
+  def __init__(self,
+               head,
+               candidate_pool,
+               max_iteration_steps,
+               ensemblers=None,
+               ensemble_strategies=None,
+               logits_fn=None,
+               last_layer_fn=None,
+               evaluator=None,
+               metric_fn=None,
+               force_grow=False,
+               adanet_loss_decay=.9,
+               model_dir=None,
+               config=None,
+               use_tpu=True,
+               eval_on_tpu=True,
+               train_batch_size=None,
+               eval_batch_size=None,
+               embedding_config_spec=None,
+               debug=False,
+               enable_ensemble_summaries=True,
+               enable_subnetwork_summaries=True,
+               global_step_combiner_fn=tf.math.reduce_mean,
+               max_iterations=None,
+               replay_config=None,
+               **kwargs):
+    subnetwork_generator = _GeneratorFromCandidatePool(candidate_pool,
+                                                       logits_fn, last_layer_fn)
+    super(AutoEnsembleTPUEstimator, self).__init__(
+        head=head,
+        subnetwork_generator=subnetwork_generator,
+        max_iteration_steps=max_iteration_steps,
+        ensemblers=ensemblers,
+        ensemble_strategies=ensemble_strategies,
+        evaluator=evaluator,
+        metric_fn=metric_fn,
+        force_grow=force_grow,
+        adanet_loss_decay=adanet_loss_decay,
+        model_dir=model_dir,
+        config=config,
+        use_tpu=use_tpu,
+        eval_on_tpu=eval_on_tpu,
+        train_batch_size=train_batch_size,
+        eval_batch_size=eval_batch_size,
+        embedding_config_spec=embedding_config_spec,
         debug=debug,
         enable_ensemble_summaries=enable_ensemble_summaries,
         enable_subnetwork_summaries=enable_subnetwork_summaries,

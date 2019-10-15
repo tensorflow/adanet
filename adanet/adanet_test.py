@@ -27,6 +27,7 @@ import tensorflow as tf
 class AdaNetTest(tf.test.TestCase):
 
   def test_public(self):
+    self.assertIsNotNone(adanet.__version__)
     self.assertIsNotNone(adanet.AutoEnsembleEstimator)
     self.assertIsNotNone(adanet.AutoEnsembleSubestimator)
     self.assertIsNotNone(adanet.distributed.PlacementStrategy)

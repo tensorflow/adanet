@@ -31,7 +31,6 @@ from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _CandidateBuilder
 from adanet.core.ensemble_builder import _EnsembleBuilder
 from adanet.core.ensemble_builder import _SubnetworkManager
-from adanet.core.eval_metrics import call_eval_metrics
 from adanet.core.iteration import _IterationBuilder
 from adanet.core.report_accessor import _ReportAccessor
 from adanet.core.summary import _ScopedSummary
@@ -186,7 +185,7 @@ class _EvalMetricSaverHook(tf_compat.SessionRunHook):
     # The metric_fn is called with tf.placeholders to simply read the value of
     # the metric variables. The metrics themselves are computed as a result of
     # being returned in the EstimatorSpec by _adanet_model_fn.
-    metric_fn, tensors = self._eval_metrics
+    metric_fn, tensors = self._eval_metrics.eval_metrics_tuple()
     tensors = [tf_compat.v1.placeholder(t.dtype, t.shape) for t in tensors]
     eval_metric_ops = metric_fn(*tensors)
     self._eval_metric_tensors = {}
@@ -1413,7 +1412,7 @@ class Estimator(tf.estimator.Estimator):
       tf_compat.v1.train.start_queue_runners(sess=sess, coord=coord)
       ensemble_metrics = []
       for candidate in current_iteration.candidates:
-        metrics = call_eval_metrics(candidate.ensemble_spec.eval_metrics)
+        metrics = candidate.ensemble_spec.eval_metrics.eval_metrics_ops()
         metrics["adanet_loss"] = tf_compat.v1.metrics.mean(
             candidate.ensemble_spec.adanet_loss)
         ensemble_metrics.append(metrics)

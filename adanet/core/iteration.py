@@ -31,7 +31,6 @@ from adanet import subnetwork
 from adanet import tf_compat
 from adanet.core.ensemble_builder import _EnsembleSpec
 from adanet.core.eval_metrics import _IterationMetrics
-from adanet.core.eval_metrics import call_eval_metrics
 
 import numpy as np
 import tensorflow as tf
@@ -596,7 +595,7 @@ class _IterationBuilder(object):
 
         # Generate subnetwork reports.
         if mode == tf.estimator.ModeKeys.EVAL:
-          metrics = call_eval_metrics(previous_ensemble_spec.eval_metrics)
+          metrics = previous_ensemble_spec.eval_metrics.eval_metrics_ops()
           subnetwork_report = subnetwork.Report(
               hparams={},
               attributes={},
@@ -659,7 +658,7 @@ class _IterationBuilder(object):
           if not subnetwork_report:
             subnetwork_report = subnetwork.Report(
                 hparams={}, attributes={}, metrics={})
-          metrics = call_eval_metrics(subnetwork_spec.eval_metrics)
+          metrics = subnetwork_spec.eval_metrics.eval_metrics_ops()
           for metric_name in sorted(metrics):
             metric = metrics[metric_name]
             subnetwork_report.metrics[metric_name] = metric

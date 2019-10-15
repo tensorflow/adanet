@@ -25,7 +25,6 @@ from absl.testing import parameterized
 from adanet import tf_compat
 from adanet.core.ensemble_builder import _EnsembleBuilder
 from adanet.core.ensemble_builder import _SubnetworkManager
-from adanet.core.eval_metrics import call_eval_metrics
 from adanet.core.summary import Summary
 import adanet.core.testing_utils as tu
 from adanet.ensemble import Candidate as EnsembleCandidate
@@ -424,7 +423,7 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
       tf_compat.v1.train.get_or_create_global_step()
       # A trainable variable to later verify that creating models does not
       # affect the global variables collection.
-      _ = tf_compat.v1.get_variable("some_var", 0., trainable=True)
+      _ = tf_compat.v1.get_variable("some_var", shape=0, trainable=True)
 
       features = {"x": tf.constant([[1.], [2.]])}
       if multi_head:
@@ -626,8 +625,8 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
           iteration_number=0,
           labels=labels,
           mode=mode)
-      subnetwork_metric_ops = call_eval_metrics(subnetwork_spec.eval_metrics)
-      ensemble_metric_ops = call_eval_metrics(ensemble_spec.eval_metrics)
+      subnetwork_metric_ops = subnetwork_spec.eval_metrics.eval_metrics_ops()
+      ensemble_metric_ops = ensemble_spec.eval_metrics.eval_metrics_ops()
       evaluate = self.evaluate
       if sess is not None:
         evaluate = sess.run

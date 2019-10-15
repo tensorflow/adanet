@@ -77,13 +77,7 @@ class _EnsembleSpec(
       this objective which balances training loss with the total complexity of
       the subnetworks in the ensemble.
     train_op: Candidate ensemble's mixture weights `TrainOpSpec`.
-    eval_metrics: Tuple of (metric_fn, tensors) where metric_fn(tensors) returns
-      the dict of eval metrics keyed by name. The values of the dict are the
-      results of calling a metric function, namely a `(metric_tensor,
-      update_op)` tuple. `metric_tensor` should be evaluated without any impact
-      on state (typically is a pure computation based on variables.). For
-      example, it should not trigger the `update_op` or require any input
-      fetching.
+    eval_metrics: `_EnsembleMetrics` object.
     export_outputs: Describes the output signatures to be exported to
       `SavedModel` and used during serving. See `tf.estimator.EstimatorSpec`.
     subnetwork_specs: Iterable of `_SubnetworkSpecs` for this iteration.
@@ -518,7 +512,7 @@ class _EnsembleBuilder(object):
         loss=ensemble_loss,
         adanet_loss=adanet_loss,
         train_op=train_op,
-        eval_metrics=ensemble_metrics.eval_metrics_tuple(),
+        eval_metrics=ensemble_metrics,
         export_outputs=export_outputs)
 
 
@@ -561,13 +555,7 @@ class _SubnetworkSpec(
     loss: Loss `Tensor` as computed by the `Head`. Must be either scalar, or
       with shape `[1]`.
     train_op: Candidate subnetwork's `TrainOpSpec`.
-    eval_metrics: Tuple of (metric_fn, tensors) where metric_fn(tensors) returns
-      the dict of eval metrics keyed by name. The values of the dict are the
-      results of calling a metric function, namely a `(metric_tensor,
-      update_op)` tuple. `metric_tensor` should be evaluated without any impact
-      on state (typically is a pure computation based on variables.). For
-      example, it should not trigger the `update_op` or require any input
-      fetching.
+    eval_metrics: `_SubnetworkMetrics` object.
     asset_dir: Checkpoint directory for the sub-estimators.
 
   Returns:
@@ -747,5 +735,5 @@ class _SubnetworkManager(object):
         loss=estimator_spec.loss,
         step=step,
         train_op=train_op,
-        eval_metrics=subnetwork_metrics.eval_metrics_tuple(),
+        eval_metrics=subnetwork_metrics,
         asset_dir=subnetwork_config.model_dir)
