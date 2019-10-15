@@ -679,6 +679,7 @@ class _SubnetworkManager(object):
             model_dir=os.path.join(config.model_dir, "assets", name))
       else:
         subnetwork_config = tf.estimator.RunConfig()
+      if subnetwork_config.session_config is None:
         subnetwork_config.session_config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))
 
       build_subnetwork = functools.partial(
