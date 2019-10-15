@@ -34,9 +34,6 @@ from tensorflow.python.eager import context
 from tensorflow.python.framework import test_util
 # pylint: enable=g-direct-tensorflow-import
 
-GPU_OPTIONS = tf.GPUOptions(allow_growth=True)
-CONFIG = tf.ConfigProto(gpu_options=GPU_OPTIONS)
-
 
 
 class _FakeSummary(Summary):
@@ -584,7 +581,8 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
       train_op = ensembler.build_train_op(
           self._build_easy_ensemble([self._build_subnetwork()]), dummy_loss,
           [dummy_weight], *[None] * 4)
-      with tf_compat.v1.Session(config=CONFIG) as sess:
+      config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))
+      with tf_compat.v1.Session(config=config) as sess:
         sess.run(tf_compat.v1.global_variables_initializer())
         sess.run(train_op)
         self.assertAllClose(-.2, sess.run(dummy_weight))
@@ -599,7 +597,8 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
       train_op = ensembler.build_train_op(
           self._build_easy_ensemble([self._build_subnetwork()]), dummy_loss,
           [dummy_weight], *[None] * 4)
-      with tf_compat.v1.Session(config=CONFIG) as sess:
+      config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))
+      with tf_compat.v1.Session(config=config) as sess:
         sess.run(tf_compat.v1.global_variables_initializer())
         sess.run(train_op)
         self.assertAllClose(-.2, sess.run(dummy_weight))

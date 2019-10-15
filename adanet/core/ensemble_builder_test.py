@@ -46,8 +46,6 @@ from tensorflow.python.training import training_util
 from tensorflow_estimator.python.estimator.head import binary_class_head
 from tensorflow_estimator.python.estimator.head import multi_head as multi_head_lib
 
-GPU_OPTIONS = tf.GPUOptions(allow_growth=True)
-CONFIG = tf.ConfigProto(gpu_options=GPU_OPTIONS)
 
 
 
@@ -434,6 +432,9 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
       else:
         labels = tf.constant([0, 1])
 
+      subnetwork_config = tf.estimator.RunConfig()
+      subnetwork_config.session_config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))
+
       subnetwork_spec = subnetwork_manager.build_subnetwork_spec(
           name="test",
           subnetwork_builder=subnetwork_builder,
@@ -441,7 +442,8 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
           features=features,
           mode=mode,
           labels=labels,
-          previous_ensemble=previous_ensemble)
+          previous_ensemble=previous_ensemble, 
+          config=subnetwork_config)
       ensembler_kwargs = {}
       if ensembler_class is ComplexityRegularizedEnsembler:
         ensembler_kwargs.update({
@@ -475,7 +477,7 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
         self.assertAllEqual(want_replay_indices,
                             ensemble_spec.architecture.replay_indices)
 
-      with tf_compat.v1.Session(graph=g, config=CONFIG).as_default() as sess:
+      with tf_compat.v1.Session(graph=g, config=subnetwork_config.session_config).as_default() as sess:
         sess.run(tf_compat.v1.global_variables_initializer())
 
         # Equals the number of subnetwork and ensemble trainable variables,

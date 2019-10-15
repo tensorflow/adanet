@@ -53,9 +53,6 @@ from tensorflow.python.util import deprecation
 from tensorflow_estimator.python.estimator import util
 # pylint: enable=g-direct-tensorflow-import
 
-GPU_OPTIONS = tf.GPUOptions(allow_growth=True)
-CONFIG = tf.ConfigProto(gpu_options=GPU_OPTIONS)
-
 
 
 class _StopAfterTrainingHook(tf_compat.SessionRunHook):
@@ -666,6 +663,10 @@ class Estimator(tf.estimator.Estimator):
           "%s is an experimental feature. Its behavior is not guaranteed "
           "to be backwards compatible.", placement_strategy_arg)
 
+    self.config = config
+    if self.config.session_config is None:
+      gpu_options = tf.GPUOptions(allow_growth=True)
+      self.config.session_config = tf.ConfigProto(gpu_options=gpu_options)
     # Monkey patch the default variable placement strategy that Estimator uses
     # since it does not support workers having different graphs from the chief.
     # TODO: Consider using `RunConfig.replace` with the new device_fn,
@@ -680,7 +681,7 @@ class Estimator(tf.estimator.Estimator):
       super(Estimator, self).__init__(
           model_fn=self._adanet_model_fn,
           params={},
-          config=config,
+          config=self.config,
           model_dir=model_dir,
           **kwargs)
 
@@ -1394,7 +1395,7 @@ class Estimator(tf.estimator.Estimator):
                  current_iteration.number)
     for hook in input_hooks:
       hook.begin()
-    with tf_compat.v1.Session(config=CONFIG) as sess:
+    with tf_compat.v1.Session(config=self.config.session_config) as sess:
       init = tf.group(
           tf_compat.v1.global_variables_initializer(),
           tf_compat.v1.local_variables_initializer(),
@@ -1474,7 +1475,7 @@ class Estimator(tf.estimator.Estimator):
     ]
     for hook in input_hooks:
       hook.begin()
-    with tf_compat.v1.Session(config=CONFIG) as sess:
+    with tf_compat.v1.Session(config=self.config.session_config) as sess:
       init = tf.group(
           tf_compat.v1.global_variables_initializer(),
           tf_compat.v1.local_variables_initializer(),
