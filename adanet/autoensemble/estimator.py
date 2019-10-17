@@ -501,7 +501,7 @@ class AutoEnsembleTPUEstimator(TPUEstimator):
       head = MultiClassHead(n_classes=10)
 
       # Learn to ensemble linear and DNN models.
-      estimator = adanet.AutoEnsembleEstimator(
+      estimator = adanet.AutoEnsembleTPUEstimator(
           head=head,
           candidate_pool=lambda config: {
               "linear":
@@ -593,7 +593,7 @@ class AutoEnsembleTPUEstimator(TPUEstimator):
     **kwargs: Extra keyword args passed to the parent.
 
   Returns:
-    An :class:`adanet.AutoEnsembleEstimator` instance.
+    An :class:`adanet.AutoEnsembleTPUEstimator` instance.
 
   Raises:
     ValueError: If any of the candidates in `candidate_pool` are not

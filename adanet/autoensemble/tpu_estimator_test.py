@@ -56,7 +56,7 @@ class _DNNTPUEstimator(tf.estimator.tpu.TPUEstimator):
           use_tpu=use_tpu)
 
     super(_DNNTPUEstimator, self).__init__(
-        model_fn=model_fn, config=config, train_batch_size=64)
+        model_fn=model_fn, config=config, train_batch_size=64, use_tpu=use_tpu)
 
 
 class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
@@ -136,8 +136,11 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     head = tf.contrib.estimator.regression_head(
         loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate=.01)
-    optimizer = tf.tpu.CrossShardOptimizer(optimizer)
+    def optimizer_fn():
+      optimizer = tf.train.GradientDescentOptimizer(learning_rate=.01)
+      if use_tpu:
+        optimizer = tf.tpu.CrossShardOptimizer(optimizer)
+      return optimizer
     feature_columns = [tf.feature_column.numeric_column("xor", shape=[2])]
 
     def train_input_fn(params):
@@ -158,7 +161,7 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
 
     estimator = AutoEnsembleTPUEstimator(
         head=head,
-        candidate_pool=candidate_pool(head, feature_columns, optimizer),
+        candidate_pool=candidate_pool(head, feature_columns, optimizer_fn),
         max_iteration_steps=10,
         model_dir=self.test_subdirectory,
         config=run_config,

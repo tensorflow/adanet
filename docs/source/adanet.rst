@@ -28,6 +28,14 @@ High-level APIs for training, evaluating, predicting, and serving AdaNet model.
     :show-inheritance:
     :inherited-members:
 
+:hidden:`AutoEnsembleTPUEstimator`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: AutoEnsembleTPUEstimator
+    :members:
+    :show-inheritance:
+    :inherited-members:
+
 :hidden:`Estimator`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

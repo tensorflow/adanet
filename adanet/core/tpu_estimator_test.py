@@ -190,6 +190,10 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     tf_config = {"model_dir": self.test_subdirectory}
     os.environ["TF_CONFIG"] = json.dumps(tf_config)
 
+  def tearDown(self):
+    super(TPUEstimatorTest, self).tearDown()
+    del os.environ["TF_CONFIG"]
+
   @parameterized.named_parameters(
       {
           "testcase_name":
