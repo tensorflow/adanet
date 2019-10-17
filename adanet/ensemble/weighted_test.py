@@ -580,7 +580,9 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
       train_op = ensembler.build_train_op(
           self._build_easy_ensemble([self._build_subnetwork()]), dummy_loss,
           [dummy_weight], *[None] * 4)
-      with tf_compat.v1.Session() as sess:
+      config = tf.compat.v1.ConfigProto(
+          gpu_options=tf.compat.v1.GPUOptions(allow_growth=True))
+      with tf_compat.v1.Session(config=config) as sess:
         sess.run(tf_compat.v1.global_variables_initializer())
         sess.run(train_op)
         self.assertAllClose(-.2, sess.run(dummy_weight))
@@ -595,7 +597,9 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
       train_op = ensembler.build_train_op(
           self._build_easy_ensemble([self._build_subnetwork()]), dummy_loss,
           [dummy_weight], *[None] * 4)
-      with tf_compat.v1.Session() as sess:
+      config = tf.compat.v1.ConfigProto(
+          gpu_options=tf.compat.v1.GPUOptions(allow_growth=True))
+      with tf_compat.v1.Session(config=config) as sess:
         sess.run(tf_compat.v1.global_variables_initializer())
         sess.run(train_op)
         self.assertAllClose(-.2, sess.run(dummy_weight))

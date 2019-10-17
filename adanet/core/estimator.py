@@ -1389,7 +1389,7 @@ class Estimator(tf.estimator.Estimator):
                  current_iteration.number)
     for hook in input_hooks:
       hook.begin()
-    with tf_compat.v1.Session() as sess:
+    with tf_compat.v1.Session(config=self.config.session_config) as sess:
       init = tf.group(
           tf_compat.v1.global_variables_initializer(),
           tf_compat.v1.local_variables_initializer(),
@@ -1469,7 +1469,7 @@ class Estimator(tf.estimator.Estimator):
     ]
     for hook in input_hooks:
       hook.begin()
-    with tf_compat.v1.Session() as sess:
+    with tf_compat.v1.Session(config=self.config.session_config) as sess:
       init = tf.group(
           tf_compat.v1.global_variables_initializer(),
           tf_compat.v1.local_variables_initializer(),
