@@ -55,6 +55,19 @@ Measures :class:`adanet.Ensemble` performance on a given dataset.
 .. autoclass:: Evaluator
     :members:
 
+Keras
+---------------
+
+**Experimental** Keras API for training, evaluating, predicting, and serving
+AdaNet models.
+
+
+:hidden:`Model`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: Model
+    :members:
+
 Summary
 ---------------
 

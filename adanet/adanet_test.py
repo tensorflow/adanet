@@ -49,6 +49,8 @@ class AdaNetTest(tf.test.TestCase):
     self.assertIsNotNone(adanet.Ensemble)
     self.assertIsNotNone(adanet.Estimator)
     self.assertIsNotNone(adanet.Evaluator)
+    self.assertIsNotNone(adanet.keras.Model)
+    self.assertIsNotNone(adanet.Model)
     self.assertIsNotNone(adanet.MixtureWeightType)
     self.assertIsNotNone(adanet.replay.Config)
     self.assertIsNotNone(adanet.ReportMaterializer)

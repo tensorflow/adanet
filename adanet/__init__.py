@@ -20,6 +20,7 @@ from __future__ import print_function
 
 from adanet import distributed
 from adanet import ensemble
+from adanet import keras
 from adanet import replay
 from adanet import subnetwork
 from adanet.autoensemble import AutoEnsembleEstimator
@@ -34,6 +35,7 @@ from adanet.core import TPUEstimator
 from adanet.ensemble import ComplexityRegularized as Ensemble
 from adanet.ensemble import MixtureWeightType
 from adanet.ensemble import WeightedSubnetwork
+from adanet.keras import Model
 from adanet.subnetwork import Subnetwork
 
 from adanet.version import __version__
@@ -46,6 +48,8 @@ __all__ = [
     "Ensemble",
     "Estimator",
     "Evaluator",
+    "keras",
+    "Model",
     "replay",
     "ReportMaterializer",
     "subnetwork",

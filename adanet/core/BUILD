@@ -292,6 +292,7 @@ py_library(
     name = "testing_utils",
     testonly = 1,
     srcs = ["testing_utils.py"],
+    visibility = whitelist,
     deps = [
         ":architecture",
         ":candidate",

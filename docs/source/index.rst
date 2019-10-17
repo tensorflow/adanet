@@ -67,6 +67,7 @@ This is not an official Google product.
 
   adanet
   adanet.ensemble
+  adanet.keras
   adanet.subnetwork
   adanet.distributed
 

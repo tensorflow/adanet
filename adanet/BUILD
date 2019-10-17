@@ -3,7 +3,7 @@
 # adaptive neural network using the AdaNet algorithm.
 # This is a reference implementation of AdaNet as a TensorFlow library.
 
-licenses(["notice"])  # Apache 2.0
+licenses(["notice"])
 
 exports_files(["LICENSE"])
 
@@ -19,6 +19,7 @@ py_library(
         "//adanet/core",
         "//adanet/distributed",
         "//adanet/ensemble",
+        "//adanet/keras",
         "//adanet/replay",
         "//adanet/subnetwork",
     ],
