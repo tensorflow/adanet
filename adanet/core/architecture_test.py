@@ -88,11 +88,13 @@ class ArchitectureTest(parameterized.TestCase, tf.test.TestCase):
     self.assertEqual("dummy_ensembler_name", arch.ensembler_name)
     self.assertEqual(((0, ("linear", "dnn")), (1, ("dnn",))),
                      arch.subnetworks_grouped_by_iteration)
+    iteration_number = 2
     global_step = 100
-    serialized = arch.serialize(global_step)
+    serialized = arch.serialize(iteration_number, global_step)
     self.assertEqual(
         '{"ensemble_candidate_name": "foo", "ensembler_name": '
-        '"dummy_ensembler_name", "global_step": 100, "replay_indices": [1, 2], '
+        '"dummy_ensembler_name", "global_step": 100, "iteration_number": 2, '
+        '"replay_indices": [1, 2], '
         '"subnetworks": [{"builder_name": "linear", "iteration_number": 0}, '
         '{"builder_name": "dnn", "iteration_number": 0},'
         ' {"builder_name": "dnn", "iteration_number": 1}]}', serialized)

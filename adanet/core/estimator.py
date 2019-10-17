@@ -920,16 +920,19 @@ class Estimator(tf.estimator.Estimator):
           next_iteration = self._checkpoint_iteration_number(latest_checkpoint)
           if next_iteration > current_iteration:
             break
+          logging.info("Iteration number in latest checkpoint: %d",
+                       next_iteration)
 
           # Check timeout when waiting for potentially downed chief.
           if timer.secs_remaining() == 0:
             logging.error(
-                "Chief job did not prepare next iteration after %s secs. It "
+                "Chief job did not prepare iteration %d after %s secs. It "
                 "may have been preempted, been turned down, or crashed. This "
-                "worker is now exiting training.",
+                "worker is now exiting training.", current_iteration + 1,
                 self._worker_wait_timeout_secs)
             return result
-          logging.info("Waiting for chief to finish")
+          logging.info("Waiting for chief to prepare iteration %d",
+                       current_iteration + 1)
           time.sleep(self._worker_wait_secs)
 
         # Stagger starting workers to prevent training instability.
@@ -1652,10 +1655,14 @@ class Estimator(tf.estimator.Estimator):
 
     # Make directories since model_dir may not have been created yet.
     tf.io.gfile.makedirs(os.path.dirname(filename))
+    iteration_number = self._checkpoint_iteration_number(checkpoint_path).item()
+    global_step = self._checkpoint_global_step(checkpoint_path).item()
+    serialized_architecture = architecture.serialize(iteration_number,
+                                                     global_step)
+    logging.info("Saving architecture to %s:\n%s", filename,
+                 serialized_architecture)
     with tf.io.gfile.GFile(filename, "w") as record_file:
-      record_file.write(
-          architecture.serialize(
-              self._checkpoint_global_step(checkpoint_path).item()))
+      record_file.write(serialized_architecture)
 
   def _read_architecture(self, filename):
     """Reads an ensemble architecture from disk.

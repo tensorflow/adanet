@@ -37,10 +37,6 @@ from adanet import tf_compat
 from adanet.core.timer import _CountDownTimer
 import tensorflow as tf
 
-# Maximum number of characters to log per process.
-# NOTE: The full process output is written to disk.
-MAX_OUTPUT_CHARS = 15000
-
 # A process. name is a string identifying the process in logs. stderr is a file
 # object of the process's stderr.
 _ProcessInfo = collections.namedtuple("_ProcessInfo",
@@ -107,6 +103,19 @@ def _pick_unused_port():
   raise socket.error
 
 
+def log_all(process, status):
+  """Logs full text to INFO without truncating."""
+
+  logging.info("Logging STDERR for %s process %s", status, process.name)
+  logging.info("===================== BEGIN %s LOG =====================",
+               process.name)
+  process.stderr.seek(0)
+  for line in process.stderr:
+    logging.info("FROM %s: %s", process.name, line)
+  logging.info("====================== END %s LOG ======================",
+               process.name)
+
+
 class EstimatorDistributedTrainingTest(parameterized.TestCase,
                                        tf.test.TestCase):
   """Tests distributed training."""
@@ -141,7 +150,6 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
     """
 
     timer = _CountDownTimer(timeout_secs)
-    wait_process_stderrs = [None] * len(wait_processes)
     finished_wait_processes = set()
     poll_count = {wait_process: 0.0 for wait_process in wait_processes}
 
@@ -151,11 +159,7 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
         for i, wait_process in enumerate(wait_processes):
           if i in finished_wait_processes:
             continue
-          wait_process.stderr.seek(0)
-          wait_process_stderrs[i] = wait_process.stderr.read()
-          logging.info("stderr for incomplete %s (last %d chars): %s\n",
-                       wait_process.name, MAX_OUTPUT_CHARS,
-                       wait_process_stderrs[i][-MAX_OUTPUT_CHARS:])
+          log_all(wait_process, "incompleted")
         raise Exception("Timed out waiting for tasks to complete.")
       for i, wait_process in enumerate(wait_processes):
         if i in finished_wait_processes:
@@ -169,11 +173,7 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
                          wait_process.name)
           continue
         logging.info("%s finished", wait_process.name)
-        wait_process.stderr.seek(0)
-        wait_process_stderrs[i] = wait_process.stderr.read()
-        logging.info("stderr for %s (last %d chars): %s\n", wait_process.name,
-                     MAX_OUTPUT_CHARS,
-                     wait_process_stderrs[i][-MAX_OUTPUT_CHARS:])
+        log_all(wait_process, "completed")
         self.assertEqual(0, ret_code)
         finished_wait_processes.add(i)
       for kill_process in kill_processes:
@@ -183,10 +183,7 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
         if ret_code is not None:
           logging.error("kill process %s ended with ret_code %d",
                         kill_process.name, ret_code)
-          kill_process.stderr.seek(0)
-          logging.info("stderr for %s (last %d chars): %s\n", kill_process.name,
-                       MAX_OUTPUT_CHARS,
-                       kill_process.stderr.read()[-MAX_OUTPUT_CHARS:])
+          log_all(kill_process, "ended with code {}".format(ret_code))
           self.assertIsNone(ret_code)
       # Delay between polling loops.
       time.sleep(0.25)
@@ -195,11 +192,7 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
       # Kill each kill process.
       kill_process.popen.kill()
       kill_process.popen.wait()
-      kill_process.stderr.seek(0)
-      logging.info("stderr for %s (last %d chars): %s\n", kill_process.name,
-                   MAX_OUTPUT_CHARS,
-                   kill_process.stderr.read()[-MAX_OUTPUT_CHARS:])
-    return wait_process_stderrs
+      log_all(kill_process, "killed")
 
   # pylint: disable=g-complex-comprehension
   @parameterized.named_parameters(

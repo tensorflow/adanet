@@ -230,6 +230,8 @@ class _GlobalStepSetterHook(tf_compat.SessionRunHook):
     self._global_step_combiner_fn = global_step_combiner_fn
 
   def begin(self):
+    logging.info("Starting iteration at global step %s",
+                 self._base_global_step)
     steps = [
         self._base_global_step + s.step.read_value()
         for s in self._subnetwork_specs

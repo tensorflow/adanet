@@ -129,13 +129,14 @@ class _Architecture(object):
   def set_replay_indices(self, indices):
     self._replay_indices = copy.copy(indices)
 
-  def serialize(self, global_step):
+  def serialize(self, iteration_number, global_step):
     """Returns a string serialization of this object."""
 
     # TODO: Confirm that it makes sense to have global step of 0.
     assert global_step is not None
     ensemble_arch = {
         "ensemble_candidate_name": self.ensemble_candidate_name,
+        "iteration_number": iteration_number,
         "global_step": global_step,
         "ensembler_name": self.ensembler_name,
         "subnetworks": [],

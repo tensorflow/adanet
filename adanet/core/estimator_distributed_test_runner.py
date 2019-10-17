@@ -41,6 +41,7 @@ from absl import logging
 from adanet import tf_compat
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
 from adanet.core.estimator import Estimator
+from adanet.core.evaluator import Evaluator
 from adanet.distributed.placement import RoundRobinStrategy
 from adanet.subnetwork import Builder
 from adanet.subnetwork import SimpleGenerator
@@ -221,14 +222,20 @@ def train_and_evaluate_estimator():
           # Otherwise, when a chief/worker terminates, the others will hang.
           device_filters=["/job:ps"]))
 
+  def input_fn():
+    input_features = {"x": tf.constant(features, name="x")}
+    input_labels = tf.constant(labels, name="y")
+    return tf.data.Dataset.from_tensors((input_features, input_labels)).repeat()
+
   kwargs = {
       "max_iteration_steps": 100,
       "force_grow": True,
       "delay_secs_per_worker": .2,
       "max_worker_delay_secs": 1,
-      "worker_wait_secs": .5,
+      "worker_wait_secs": 1,
       # Set low timeout to reduce wait time for failures.
-      "worker_wait_timeout_secs": 60,
+      "worker_wait_timeout_secs": 180,
+      "evaluator": Evaluator(input_fn, steps=10),
       "config": config
   }
 
@@ -365,11 +372,6 @@ def train_and_evaluate_estimator():
     # that the distributed testing framework supports distribute strategies.
     estimator = tf.estimator.Estimator(
         model_fn=_model_fn, config=multiworker_config)
-
-  def input_fn():
-    input_features = {"x": tf.constant(features, name="x")}
-    input_labels = tf.constant(labels, name="y")
-    return tf.data.Dataset.from_tensors((input_features, input_labels)).repeat()
 
   train_hooks = [
       tf.estimator.ProfilerHook(save_steps=50, output_dir=FLAGS.model_dir)
