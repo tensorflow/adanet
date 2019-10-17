@@ -13,6 +13,7 @@ py_library(
     visibility = whitelist,
     deps = [
         ":model",
+        "//adanet/autoensemble",
     ],
 )
 

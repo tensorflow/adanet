@@ -28,6 +28,7 @@ class AdaNetTest(tf.test.TestCase):
 
   def test_public(self):
     self.assertIsNotNone(adanet.__version__)
+    self.assertIsNotNone(adanet.AutoEnsemble)
     self.assertIsNotNone(adanet.AutoEnsembleEstimator)
     self.assertIsNotNone(adanet.AutoEnsembleSubestimator)
     self.assertIsNotNone(adanet.distributed.PlacementStrategy)
@@ -50,6 +51,7 @@ class AdaNetTest(tf.test.TestCase):
     self.assertIsNotNone(adanet.Estimator)
     self.assertIsNotNone(adanet.Evaluator)
     self.assertIsNotNone(adanet.keras.Model)
+    self.assertIsNotNone(adanet.keras.AutoEnsemble)
     self.assertIsNotNone(adanet.Model)
     self.assertIsNotNone(adanet.MixtureWeightType)
     self.assertIsNotNone(adanet.replay.Config)

@@ -21,8 +21,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from adanet.autoensemble.keras import AutoEnsemble
 from adanet.keras.model import Model
 
 __all__ = [
+    "AutoEnsemble",
     "Model",
 ]

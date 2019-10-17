@@ -23,6 +23,7 @@ from adanet import ensemble
 from adanet import keras
 from adanet import replay
 from adanet import subnetwork
+from adanet.autoensemble import AutoEnsemble
 from adanet.autoensemble import AutoEnsembleEstimator
 from adanet.autoensemble import AutoEnsembleSubestimator
 from adanet.core import Estimator

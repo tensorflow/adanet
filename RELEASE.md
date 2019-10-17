@@ -17,6 +17,7 @@ limitations under the License.
  * Under development.
  * Introduce support for `AutoEnsembleTPUEstimator`.
  * Introduce experimental `adanet.keras.Model` API.
+ * Introduce experimental `adanet.keras.AutoEnsemble` API.
 
 # Release 0.8.0
  * Add support for TensorFlow 2.0.

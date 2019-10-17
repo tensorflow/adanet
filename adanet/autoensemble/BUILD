@@ -11,6 +11,16 @@ py_library(
     visibility = ["//adanet:__subpackages__"],
     deps = [
         ":estimator",
+        ":keras",
+    ],
+)
+
+py_library(
+    name = "keras",
+    srcs = ["keras.py"],
+    deps = [
+        ":estimator",
+        "//adanet/keras:model",
     ],
 )
 
@@ -23,6 +33,17 @@ py_library(
         "//adanet/core",
         "//adanet/subnetwork",
         "//adanet/tf_compat",
+    ],
+)
+
+py_test(
+    name = "keras_test",
+    size = "medium",
+    srcs = ["keras_test.py"],
+    deps = [
+        ":keras",
+        "//adanet/tf_compat",
+        "@absl_py//absl/testing:parameterized",
     ],
 )
 
