@@ -24,7 +24,7 @@ form a single prediction.
 ## Adaptive architecture search
 
 <div align="center" style="max-width: 450px; display: block; margin: 0 auto;">
-  <img src="https://tensorflow.github.io/adanet/images/adanet_animation.gif" alt="adanet_tangram_logo"><br><br>
+  <img src="https://raw.githubusercontent.com/tensorflow/adanet/master/images/adanet_animation.gif" alt="adanet_animation"><br><br>
 </div>
 
 In the animation above, the AdaNet algorithm iteratively performs the following

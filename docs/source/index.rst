@@ -13,7 +13,7 @@ AdaNet is a TensorFlow framework for fast and flexible AutoML with learning guar
 .. raw:: html
 
     <div align="center">
-      <img src="https://tensorflow.github.io/adanet/images/adanet_tangram_logo.png" alt="adanet_tangram_logo"><br><br>
+      <img src="https://raw.githubusercontent.com/tensorflow/adanet/master/images/adanet_tangram_logo.png" alt="adanet_tangram_logo"><br><br>
     </div>
 
 **AdaNet** is a lightweight TensorFlow-based framework for automatically learning high-quality models with minimal expert intervention. AdaNet builds on recent AutoML efforts to be fast and flexible while providing learning guarantees. Importantly, AdaNet provides a general framework for not only learning a neural network architecture, but also for learning to ensemble to obtain even better models.
@@ -32,7 +32,7 @@ The following animation shows AdaNet adaptively growing an ensemble of neural ne
 .. raw:: html
 
     <div align="center" style="max-width: 450px; display: block; margin: 0 auto;">
-      <img src="https://tensorflow.github.io/adanet/images/adanet_animation.gif" alt="adanet_tangram_logo"><br><br>
+      <img src="https://raw.githubusercontent.com/tensorflow/adanet/master/images/adanet_animation.gif" alt="adanet_animation"><br><br>
     </div>
 
 AdaNet was first announced on the Google AI research blog: "`Introducing AdaNet: Fast and Flexible AutoML with Learning Guarantees <https://ai.googleblog.com/2018/10/introducing-adanet-fast-and-flexible.html>`_".
