@@ -143,8 +143,9 @@ class Provider(object):
             tf.contrib.data.shuffle_and_repeat(
                 buffer_size=500, seed=self._seed))
       return dataset.batch(
-          batch_size_, drop_remainder=use_tpu).prefetch(
-              tf.contrib.data.AUTOTUNE).make_one_shot_iterator().get_next()
+          batch_size_,
+          drop_remainder=use_tpu).prefetch(tf.data.experimental.AUTOTUNE
+                                          ).make_one_shot_iterator().get_next()
 
     return input_fn
 
