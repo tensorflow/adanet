@@ -21,31 +21,18 @@ from __future__ import print_function
 
 from absl import logging
 from adanet.core import Estimator
-import tensorflow as tf
+from tensorflow_estimator.python.estimator.head import binary_class_head
+from tensorflow_estimator.python.estimator.head import multi_class_head
+from tensorflow_estimator.python.estimator.head import regression_head
 
 
-def _dataset_to_input_fn(dataset, predicting=False):
-  """Converts a `tf.data.Dataset` to an input_fn.
-
-  Args:
-    dataset: A `tf.data.Dataset` either containing the feature and label tensors
-      or just the feature tensors.
-    predicting: A Boolean representing whether the dataset is meant for
-      prediction (i.e. only contains feature tensors).
-
-  Returns:
-    An input_fn for usage with an Estimator.
-  """
+def _dataset_to_input_fn(dataset):
+  """Converts a `tf.data.Dataset` to an input_fn."""
 
   def input_fn(params=None):
     del params  # unused
-    iterator = tf.compat.v1.data.make_one_shot_iterator(dataset)
-    if predicting:
-      features = iterator.get_next()
-      return {"x": features}
-    else:
-      features, labels = iterator.get_next()
-      return {"x": features}, labels
+    return dataset()
+
   return input_fn
 
 
@@ -109,13 +96,13 @@ class Model(object):
     # Use lambdas to defer initialization of Head.
     self._loss_head_map = {
         "binary_crossentropy":
-            lambda: tf.estimator.BinaryClassHead,
+            lambda: binary_class_head.BinaryClassHead(),  # pylint: disable=unnecessary-lambda
         "mse":
-            lambda: tf.estimator.RegressionHead(self._logits_dimension),
+            lambda: regression_head.RegressionHead(self._logits_dimension),
         "mean_squared_error":
-            lambda: tf.estimator.RegressionHead(self._logits_dimension),
+            lambda: regression_head.RegressionHead(self._logits_dimension),
         "sparse_categorical_crossentropy":
-            lambda: tf.estimator.MultiClassHead(self._logits_dimension),
+            lambda: multi_class_head.MultiClassHead(self._logits_dimension),
     }
 
   @property
@@ -130,7 +117,7 @@ class Model(object):
     """Trains the model for a fixed number of epochs.
 
     Args:
-      x: A `tf.data` dataset. Should return a tuple of (inputs, targets).
+      x: A function that returns a `tf.data` dataset.
       epochs: Number of epochs to train the model.
       steps_per_epoch: Integer or None. Total number of steps (batches of
         samples) before declaring one epoch finished and starting the next
@@ -150,8 +137,8 @@ class Model(object):
 
     if self._model is not None:
       for _ in range(epochs):
-        input_fn = _dataset_to_input_fn(x)
-        self._model.train(input_fn=input_fn, steps=steps_per_epoch)
+        self._model.train(
+            input_fn=_dataset_to_input_fn(x), steps=steps_per_epoch)
     else:
       raise RuntimeError(
           "You must compile your model before training. Use `model.compile(loss)`."
@@ -164,7 +151,7 @@ class Model(object):
     """Returns the loss value & metrics values for the model in test mode.
 
     Args:
-      x: A `tf.data` dataset. Should return a tuple (inputs, targets).
+      x: A function that returns a `tf.data` dataset.
       steps: Integer or `None`.
         Total number of steps (batches of samples) before declaring the
         evaluation round finished. Ignored with the default value of `None`.
@@ -202,7 +189,7 @@ class Model(object):
     """Generates output predictions for the input samples.
 
     Args:
-      x: A `tf.data` Dataset.
+      x: A function that returns a `tf.data` Dataset.
       steps: Total number of steps (batches of samples) before declaring the
         prediction round finished. Ignored with the default value of `None`. If
         `None`, `predict` will run until the input dataset is exhausted.
@@ -222,7 +209,7 @@ class Model(object):
       logging.warning("Callbacks are currently not supported.")
 
     if self._model is not None:
-      results = self._model.predict(_dataset_to_input_fn(x, predicting=True),
+      results = self._model.predict(_dataset_to_input_fn(x),
                                     yield_single_examples=False)
       # Convert the generator object returned by Estimator's predict method to a
       # numpy array of all the predictions.

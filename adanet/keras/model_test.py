@@ -28,10 +28,11 @@ from adanet.subnetwork import SimpleGenerator
 from adanet.subnetwork import Subnetwork
 from adanet.subnetwork import TrainOpSpec
 import tensorflow as tf
-
+from tensorflow.python.framework import test_util  # pylint: disable=g-direct-tensorflow-import
 
 XOR_FEATURES = [[1., 0.], [0., 0.], [0., 1.], [1., 1.]]
 XOR_LABELS = [[1.], [0.], [1.], [0.]]
+XOR_CLASS_LABELS = [[1], [0], [1], [0]]
 
 
 # TODO: Refactor this class into testing_utils.py to use within
@@ -138,17 +139,42 @@ class ModelTest(tu.AdanetTestCase):
 
   @parameterized.named_parameters(
       {
-          "testcase_name": "one_step",
+          "testcase_name": "one_step_binary_crossentropy_loss",
+          "loss": "binary_crossentropy",
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": 1,
           "epochs": 1,
-          "steps_per_epoch": 1,
-          "want_loss": 1.2208,
+          "steps_per_epoch": 3,
+          "want_loss": 0.7690,
+      },
+      {
+          "testcase_name": "one_step_mse_loss",
+          "loss": "mse",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 1,
+          "epochs": 1,
+          "steps_per_epoch": 3,
+          "want_loss": 0.6354,
+      },
+      {
+          "testcase_name": "one_step_sparse_categorical_crossentropy_loss",
+          "loss": "sparse_categorical_crossentropy",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 1,
+          "epochs": 1,
+          "steps_per_epoch": 3,
+          "want_loss": 1.2521,
+          "logits_dimension": 3,
+          "dataset": lambda: tf.data.Dataset.from_tensors(({"x": XOR_FEATURES},  # pylint: disable=g-long-lambda
+                                                           XOR_CLASS_LABELS))
       })
+  @test_util.run_in_graph_and_eager_modes
   def test_lifecycle(self,
+                     loss,
                      subnetwork_generator,
                      max_iteration_steps,
                      want_loss,
+                     logits_dimension=1,
                      ensemblers=None,
                      ensemble_strategies=None,
                      evaluator=None,
@@ -160,30 +186,37 @@ class ModelTest(tu.AdanetTestCase):
     keras_model = model.Model(
         subnetwork_generator=subnetwork_generator,
         max_iteration_steps=max_iteration_steps,
+        logits_dimension=logits_dimension,
         ensemblers=ensemblers,
         ensemble_strategies=ensemble_strategies,
         evaluator=evaluator,
         adanet_loss_decay=adanet_loss_decay,
         filepath=self.test_subdirectory)
 
-    keras_model.compile(loss="mse")
+    keras_model.compile(loss=loss)
     # Make sure we have access to metrics_names immediately after compilation.
     self.assertEqual(["loss"], keras_model.metrics_names)
 
     if dataset is None:
-      dataset = tf.data.Dataset.from_tensors(
-          (XOR_FEATURES, XOR_LABELS)).repeat()
+      dataset = lambda: tf.data.Dataset.from_tensors(  # pylint: disable=g-long-lambda
+          ({"x": XOR_FEATURES}, XOR_LABELS)).repeat()
 
     keras_model.fit(dataset, epochs=epochs, steps_per_epoch=steps_per_epoch)
 
     eval_results = keras_model.evaluate(dataset, steps=3)
     self.assertAlmostEqual(want_loss, eval_results["loss"], places=3)
 
-    prediction_data = tf.data.Dataset.from_tensors((XOR_FEATURES))
+    # TODO: Predict not currently working for BinaryClassHead and
+    #                   MultiClassHead.
+    if loss == "mse":
+      prediction_data = lambda: tf.data.Dataset.from_tensors(({  # pylint: disable=g-long-lambda
+          "x": XOR_FEATURES
+      }))
 
-    predictions = keras_model.predict(prediction_data)
-    self.assertLen(predictions, 4)
+      predictions = keras_model.predict(prediction_data)
+      self.assertLen(predictions, 4)
 
+  @test_util.run_in_graph_and_eager_modes
   def test_compile_exceptions(self):
     keras_model = model.Model(
         subnetwork_generator=SimpleGenerator([_DNNBuilder("dnn")]),
@@ -202,4 +235,5 @@ class ModelTest(tu.AdanetTestCase):
 
 
 if __name__ == "__main__":
+  tf.enable_v2_behavior()
   tf.test.main()

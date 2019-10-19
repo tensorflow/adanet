@@ -22,6 +22,8 @@ from __future__ import print_function
 from absl.testing import parameterized
 from adanet.autoensemble.keras import AutoEnsemble
 import tensorflow as tf
+from tensorflow.python.framework import test_util  # pylint: disable=g-direct-tensorflow-import
+from tensorflow_estimator.python.estimator.head import regression_head
 
 
 class KerasTest(parameterized.TestCase, tf.test.TestCase):
@@ -47,6 +49,7 @@ class KerasTest(parameterized.TestCase, tf.test.TestCase):
       })
   # pylint: enable=g-long-lambda
 
+  @test_util.run_in_graph_and_eager_modes
   def test_auto_ensemble_lifecycle(self,
                                    candidate_pool):
 
@@ -54,22 +57,24 @@ class KerasTest(parameterized.TestCase, tf.test.TestCase):
     feature_columns = [tf.feature_column.numeric_column("x", shape=[2])]
 
     keras_model = AutoEnsemble(
-        candidate_pool=candidate_pool(tf.estimator.RegressionHead(),
+        candidate_pool=candidate_pool(regression_head.RegressionHead(),
                                       feature_columns, optimizer),
         max_iteration_steps=10)
     keras_model.compile(loss="mse")
     self.assertEqual(["loss"], keras_model.metrics_names)
 
-    train_data = tf.data.Dataset.from_tensors(([[1., 0.]], [[1.]])).repeat()
+    train_data = lambda: tf.data.Dataset.from_tensors((  # pylint: disable=g-long-lambda
+        {"x": [[1., 0.]]}, [[1.]])).repeat()
     keras_model.fit(train_data, epochs=1, steps_per_epoch=1)
 
     eval_results = keras_model.evaluate(train_data, steps=3)
     # TODO: Rewrite this test to be deterministic.
     self.assertIsNotNone(eval_results["loss"])
 
-    predict_data = tf.data.Dataset.from_tensors(([[1., 0.]]))
+    predict_data = lambda: tf.data.Dataset.from_tensors(({"x": [[1., 0.]]}))
     predictions = keras_model.predict(predict_data)
     self.assertLen(predictions, 1)
 
 if __name__ == "__main__":
+  tf.enable_v2_behavior()
   tf.test.main()
