@@ -208,7 +208,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
   )
   def test_tpu_estimator_simple_lifecycle(self, use_tpu, subnetwork_generator,
                                           want_loss):
-    config = tf_compat.v1.estimator.tpu.RunConfig(master="", tf_random_seed=42)
+    config = tf.compat.v1.estimator.tpu.RunConfig(master="", tf_random_seed=42)
     estimator = TPUEstimator(
         # TODO: Add test with estimator Head v2.
         head=make_regression_head(use_tpu),
@@ -270,7 +270,7 @@ class TPUEstimatorTest(tu.AdanetTestCase):
   def test_tpu_estimator_summaries(self, use_tpu, want_loss, want_adanet_loss,
                                    want_eval_summary_loss, want_predictions):
     max_steps = 10
-    config = tf_compat.v1.estimator.tpu.RunConfig(
+    config = tf.compat.v1.estimator.tpu.RunConfig(
         tf_random_seed=42, save_summary_steps=2, log_step_count_steps=max_steps)
     assert config.log_step_count_steps
 

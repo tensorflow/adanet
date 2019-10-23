@@ -30,6 +30,7 @@ py_test(
     name = "model_test",
     size = "medium",
     srcs = ["model_test.py"],
+    shard_count = 4,
     deps = [
         ":model",
         "//adanet/core",

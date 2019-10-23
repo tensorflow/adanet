@@ -36,10 +36,10 @@ from tensorflow_estimator.python.estimator.canned import dnn
 # pylint: enable=g-direct-tensorflow-import
 
 
-class _DNNTPUEstimator(tf.estimator.tpu.TPUEstimator):
+class _DNNTPUEstimator(tf.compat.v1.estimator.tpu.TPUEstimator):
 
   def __init__(self, head, hidden_units, feature_columns, optimizer, use_tpu):
-    config = tf.estimator.tpu.RunConfig()
+    config = tf.compat.v1.estimator.tpu.RunConfig()
 
     def model_fn(features, labels, mode=None, params=None, config=None):
       del params  # Unused.
@@ -132,7 +132,8 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     features = {"xor": [[0., 0.], [0., 1.], [1., 0.], [1., 1.]]}
     labels = [[0.], [1.], [1.], [0.]]
 
-    run_config = tf.estimator.tpu.RunConfig(master="", tf_random_seed=42)
+    run_config = tf.compat.v1.estimator.tpu.RunConfig(
+        master="", tf_random_seed=42)
     head = tf.contrib.estimator.regression_head(
         loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
@@ -141,6 +142,7 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
       if use_tpu:
         optimizer = tf.tpu.CrossShardOptimizer(optimizer)
       return optimizer
+
     feature_columns = [tf.feature_column.numeric_column("xor", shape=[2])]
 
     def train_input_fn(params):

@@ -36,7 +36,7 @@ from tensorflow.python.util import function_utils
 
 
 # pylint: disable=g-classes-have-attributes
-class TPUEstimator(Estimator, tf_compat.v1.estimator.tpu.TPUEstimator):
+class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
   """An :class:`adanet.Estimator` capable of training and evaluating on TPU.
 
   Unless :code:`use_tpu=False`, training will run on TPU. However, certain parts
