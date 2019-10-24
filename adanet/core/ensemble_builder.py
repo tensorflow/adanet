@@ -120,7 +120,8 @@ class _EnsembleSpec(
 def _verify_metric_fn_args(metric_fn):
   if not metric_fn:
     return
-  args = set(inspect.getargspec(metric_fn).args)
+  # Calling low level getargs for py_2_and_3 compatibility.
+  args = set(inspect.getargs(metric_fn.__code__).args)
   invalid_args = list(args - _VALID_METRIC_FN_ARGS)
   if invalid_args:
     raise ValueError("metric_fn (%s) has following not expected args: %s" %
@@ -680,8 +681,9 @@ class _SubnetworkManager(object):
           previous_ensemble=previous_ensemble)
       # Check which args are in the implemented build_subnetwork method
       # signature for backwards compatibility.
-      defined_args = inspect.getargspec(
-          subnetwork_builder.build_subnetwork).args
+      # Calling low level getargs for py_2_and_3 compatibility.
+      defined_args = inspect.getargs(
+          subnetwork_builder.build_subnetwork.__code__).args
       if "labels" in defined_args:
         build_subnetwork = functools.partial(build_subnetwork, labels=labels)
       if "config" in defined_args:

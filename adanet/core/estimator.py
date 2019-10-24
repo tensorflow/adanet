@@ -1895,8 +1895,9 @@ class Estimator(tf.estimator.Estimator):
 
   def _call_generate_candidates(self, previous_ensemble, iteration_number,
                                 previous_ensemble_reports, all_reports, config):
-    defined_args = inspect.getargspec(
-        self._subnetwork_generator.generate_candidates).args
+    # Calling low level getargs for py_2_and_3 compatibility.
+    defined_args = inspect.getargs(
+        self._subnetwork_generator.generate_candidates.__code__).args
     generate_args = dict(
         previous_ensemble=previous_ensemble,
         iteration_number=iteration_number,

@@ -258,7 +258,8 @@ class _GeneratorFromCandidatePool(Generator):
   def _maybe_call_candidate_pool(self, config, iteration_number):
     if callable(self._candidate_pool):
       # candidate_pool can be a function.
-      if "iteration_number" in inspect.getargspec(self._candidate_pool).args:
+      candidate_pool_args = inspect.getargs(self._candidate_pool.__code__).args
+      if "iteration_number" in candidate_pool_args:
         # TODO: Make the "config" argument optional using introspection.
         return self._candidate_pool(
             config=config, iteration_number=iteration_number)

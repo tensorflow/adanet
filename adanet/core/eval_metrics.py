@@ -129,7 +129,8 @@ class _SubnetworkMetrics(object):
     # want user metrics to override AdaNet's metrics.
     if metric_fn:
       metric_fn_args = {}
-      argspec = inspect.getargspec(metric_fn).args
+      # Calling low level getargs for py_2_and_3 compatibility.
+      argspec = inspect.getargs(metric_fn.__code__).args
       if "features" in argspec:
         metric_fn_args["features"] = features
       if "labels" in argspec:
