@@ -20,7 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 from absl import logging
-from adanet.autoensemble.estimator import _GeneratorFromCandidatePool
+from adanet.autoensemble.common import _GeneratorFromCandidatePool
 from adanet.keras.model import Model
 
 

@@ -19,8 +19,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from adanet.autoensemble.common import AutoEnsembleSubestimator
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
-from adanet.autoensemble.estimator import AutoEnsembleSubestimator
 from adanet.autoensemble.estimator import AutoEnsembleTPUEstimator
 from adanet.autoensemble.keras import AutoEnsemble
 

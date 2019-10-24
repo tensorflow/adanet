@@ -28,9 +28,9 @@ from absl import flags
 from absl import logging
 from absl.testing import parameterized
 from adanet import tf_compat
+from adanet.autoensemble.common import AutoEnsembleSubestimator
 from adanet.autoensemble.estimator import _GeneratorFromCandidatePool
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
-from adanet.autoensemble.estimator import AutoEnsembleSubestimator
 import tensorflow as tf
 
 # pylint: disable=g-direct-tensorflow-import

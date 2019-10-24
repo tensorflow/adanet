@@ -10,8 +10,19 @@ py_library(
     srcs = ["__init__.py"],
     visibility = ["//adanet:__subpackages__"],
     deps = [
+        ":common",
         ":estimator",
         ":keras",
+    ],
+)
+
+py_library(
+    name = "common",
+    srcs = ["common.py"],
+    visibility = ["//adanet:__subpackages__"],
+    deps = [
+        "//adanet/subnetwork",
+        "//adanet/tf_compat",
     ],
 )
 
@@ -19,20 +30,17 @@ py_library(
     name = "keras",
     srcs = ["keras.py"],
     deps = [
-        ":estimator",
+        ":common",
         "//adanet/keras:model",
     ],
 )
 
 py_library(
     name = "estimator",
-    srcs = [
-        "estimator.py",
-    ],
+    srcs = ["estimator.py"],
     deps = [
+        ":common",
         "//adanet/core",
-        "//adanet/subnetwork",
-        "//adanet/tf_compat",
     ],
 )
 
