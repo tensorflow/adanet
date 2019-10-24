@@ -150,11 +150,26 @@ class ModelTest(tu.AdanetTestCase):
       {
           "testcase_name": "one_step_mse_loss",
           "loss": "mse",
+          "metrics": ["mean_absolute_error"],
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": 1,
           "epochs": 1,
           "steps_per_epoch": 3,
+          "want_metrics_names": ["loss", "mean_absolute_error"],
           "want_loss": 0.6354,
+          "want_metrics": [0.6191]
+      },
+      {
+          "testcase_name": "lambda_metric",
+          "loss": "mse",
+          "metrics": [lambda: tf.keras.metrics.MeanAbsoluteError(name="mae")],
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 1,
+          "epochs": 1,
+          "steps_per_epoch": 3,
+          "want_metrics_names": ["loss", "mae"],
+          "want_loss": 0.6354,
+          "want_metrics": [0.6191]
       },
       {
           "testcase_name": "one_step_sparse_categorical_crossentropy_loss",
@@ -174,6 +189,9 @@ class ModelTest(tu.AdanetTestCase):
                      subnetwork_generator,
                      max_iteration_steps,
                      want_loss,
+                     want_metrics=None,
+                     want_metrics_names=None,
+                     metrics=None,
                      logits_dimension=1,
                      ensemblers=None,
                      ensemble_strategies=None,
@@ -193,9 +211,11 @@ class ModelTest(tu.AdanetTestCase):
         adanet_loss_decay=adanet_loss_decay,
         filepath=self.test_subdirectory)
 
-    keras_model.compile(loss=loss)
+    keras_model.compile(loss=loss, metrics=metrics)
+    if want_metrics_names is None:
+      want_metrics_names = ["loss"]
     # Make sure we have access to metrics_names immediately after compilation.
-    self.assertEqual(["loss"], keras_model.metrics_names)
+    self.assertEqual(want_metrics_names, keras_model.metrics_names)
 
     if dataset is None:
       dataset = lambda: tf.data.Dataset.from_tensors(  # pylint: disable=g-long-lambda
@@ -204,7 +224,9 @@ class ModelTest(tu.AdanetTestCase):
     keras_model.fit(dataset, epochs=epochs, steps_per_epoch=steps_per_epoch)
 
     eval_results = keras_model.evaluate(dataset, steps=3)
-    self.assertAlmostEqual(want_loss, eval_results["loss"], places=3)
+    self.assertAlmostEqual(want_loss, eval_results[0], places=3)
+    if metrics:
+      self.assertAllClose(want_metrics, eval_results[1:], 1e-3, 1e-3)
 
     # TODO: Predict not currently working for BinaryClassHead and
     #                   MultiClassHead.

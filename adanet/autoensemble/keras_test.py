@@ -46,12 +46,16 @@ class KerasTest(parameterized.TestCase, tf.test.TestCase):
                           feature_columns=feature_columns,
                           optimizer=optimizer),
               },
+          "metrics": ["mae"],
+          "want_metrics_names": ["loss", "mae"]
       })
   # pylint: enable=g-long-lambda
 
   @test_util.run_in_graph_and_eager_modes
   def test_auto_ensemble_lifecycle(self,
-                                   candidate_pool):
+                                   candidate_pool,
+                                   metrics=None,
+                                   want_metrics_names=None):
 
     optimizer = lambda: tf.keras.optimizers.SGD(lr=.01)
     feature_columns = [tf.feature_column.numeric_column("x", shape=[2])]
@@ -60,16 +64,22 @@ class KerasTest(parameterized.TestCase, tf.test.TestCase):
         candidate_pool=candidate_pool(regression_head.RegressionHead(),
                                       feature_columns, optimizer),
         max_iteration_steps=10)
-    keras_model.compile(loss="mse")
-    self.assertEqual(["loss"], keras_model.metrics_names)
+    keras_model.compile(loss="mse", metrics=metrics)
+    if want_metrics_names is None:
+      want_metrics_names = ["loss"]
+    self.assertEqual(want_metrics_names, keras_model.metrics_names)
 
     train_data = lambda: tf.data.Dataset.from_tensors((  # pylint: disable=g-long-lambda
         {"x": [[1., 0.]]}, [[1.]])).repeat()
     keras_model.fit(train_data, epochs=1, steps_per_epoch=1)
 
     eval_results = keras_model.evaluate(train_data, steps=3)
-    # TODO: Rewrite this test to be deterministic.
-    self.assertIsNotNone(eval_results["loss"])
+    # TODO: Currently model training and evaluation are not
+    #                   producing deterministic results. Look into properly
+    #                   seeding the subnetworks to make this test deterministic.
+    self.assertIsNotNone(eval_results[0])
+    if metrics:
+      self.assertLen(eval_results[1:], len(metrics))
 
     predict_data = lambda: tf.data.Dataset.from_tensors(({"x": [[1., 0.]]}))
     predictions = keras_model.predict(predict_data)

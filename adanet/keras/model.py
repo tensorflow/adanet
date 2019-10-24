@@ -21,6 +21,9 @@ from __future__ import print_function
 
 from absl import logging
 from adanet.core import Estimator
+
+import tensorflow as tf
+
 from tensorflow_estimator.python.estimator.head import binary_class_head
 from tensorflow_estimator.python.estimator.head import multi_class_head
 from tensorflow_estimator.python.estimator.head import regression_head
@@ -38,6 +41,28 @@ def _dataset_to_input_fn(dataset):
 
 class Model(object):
   """A `tf.keras.Model`-like object for training, evaluation, and serving."""
+
+  # Usage of lambdas here to defer the instantiation of these objects. This
+  # behavior is required since Estimator subnetworks expect these objects to
+  # be created within functions.
+
+  # pylint: disable=g-long-lambda
+  _metrics_map = {
+      "auc":
+          lambda: tf.keras.metrics.AUC(name="auc"),
+      "accuracy":
+          lambda: tf.keras.metrics.Accuracy(name="accuracy"),
+      "precision":
+          lambda: tf.keras.metrics.Precision(name="precision"),
+      "mae":
+          lambda: tf.keras.metrics.MeanAbsoluteError(name="mae"),
+      "mean_absolute_error":
+          lambda: tf.keras.metrics.MeanAbsoluteError(
+              name="mean_absolute_error"),
+      "recall":
+          lambda: tf.keras.metrics.Recall(name="recall"),
+  }
+  # pylint: enable=g-long-lambda
 
   def __init__(self,
                subnetwork_generator,
@@ -93,7 +118,7 @@ class Model(object):
     self._adanet_loss_decay = adanet_loss_decay
     self._filepath = filepath
     self._model = None
-    # Use lambdas to defer initialization of Head.
+    self._metrics_names = ["loss"]
     self._loss_head_map = {
         "binary_crossentropy":
             lambda: binary_class_head.BinaryClassHead(),  # pylint: disable=unnecessary-lambda
@@ -107,7 +132,7 @@ class Model(object):
 
   @property
   def metrics_names(self):
-    return ["loss"]
+    return self._metrics_names
 
   def fit(self,
           x,
@@ -160,10 +185,8 @@ class Model(object):
         List of callbacks to apply during evaluation.
 
     Returns:
-      Scalar test loss (if the model has a single output and no metrics) or list
-      of scalars (if the model has multiple outputs and/or metrics). The
-      attribute model.metrics_names will give you the display labels for the
-      scalar outputs.
+      A list of scalars for loss and metrics. The attribute model.metrics_names
+      will give you the display labels for the scalar outputs.
 
     Raises:
       RuntimeError: If the model was never compiled.
@@ -175,7 +198,7 @@ class Model(object):
     if self._model is not None:
       results = self._model.evaluate(
           input_fn=_dataset_to_input_fn(x), steps=steps)
-      return results
+      return [results[result] for result in self._metrics_names]
     else:
       raise RuntimeError(
           "You must compile your model before testing. Use `model.compile(loss)`."
@@ -219,28 +242,56 @@ class Model(object):
           "You must compile your model before prediction. Use `model.compile(loss)`."
       )
 
-  # TODO: Support passed in metrics.
   def compile(self, loss, metrics=None):
     """Configures the model for training.
 
     Args:
       loss: String of a built in `tf.keras.Loss` function.
-      metrics: List of metrics to be evaluated by the model during training
-          and testing. Typically you will use `metrics=['accuracy']`.
-          To specify different metrics for different outputs of a
-          multi-output model, you could also pass a dictionary, such as
-          `metrics={'output_a': 'accuracy', 'output_b': ['accuracy', 'mse']}`.
-          You can also pass a list (len = len(outputs)) of lists of metrics
-          such as `metrics=[['accuracy'], ['accuracy', 'mse']]` or
-          `metrics=['accuracy', ['accuracy', 'mse']]`.
+      metrics: List of metric string names and functions that return metric
+        objects. (e.g. [lambda: tf.keras.metrics.Accuracy(), "mae"]). If passing
+          in a function that returns a metric, it is necessary for it to have a
+          name.
+
+    Raises:
+      ValueError: If the loss is not a supported loss.
+      ValueError: If one of the metrics passed into metrics is not a supported
+        metric.
     """
-    if metrics is not None:
-      logging.warning("Passing in metrics is currently not supported.")
+
+    if metrics is None:
+      metrics = []
+
+    for metric in metrics:
+      if callable(metric):
+        self._metrics_names.append(metric().name)
+      elif metric in Model._metrics_map:
+        self._metrics_names.append(metric)
+      else:
+        raise ValueError(
+            "'{}' is not a currently supported metric. Currently supported metrics are: {}"
+            .format(metric, Model._metrics_map.keys()))
+
+    def _metric_fn(predictions, features, labels):
+      """Internal metric_fn to add passed in metrics to underlying Estimator."""
+      del features  # unused
+
+      eval_results = {}
+      for metric in metrics:
+        if not callable(metric):
+          metric = Model._metrics_map[metric]
+        # We wrap the metric within a function since Estimator subnetworks
+        # need to have this created within their graphs.
+        metric = metric()
+        metric.update_state(y_true=labels, y_pred=predictions["predictions"])
+        eval_results[metric.name] = metric
+
+      return eval_results
 
     head = self._loss_head_map.get(loss, None)
     if head is not None:
       self._model = Estimator(
           head=head(),
+          metric_fn=_metric_fn,
           max_iteration_steps=self._max_iteration_steps,
           ensemblers=self._ensemblers,
           ensemble_strategies=self._ensemble_strategies,
@@ -251,10 +302,7 @@ class Model(object):
     else:
       raise ValueError(
           "'{}' is not a currently supported loss. Currently supported losses are: {}."
-          .format(loss, [
-              "binary_crossentropy", "mean_squared_error",
-              "sparse_categorical_crossentropy"
-          ]))
+          .format(loss, self._loss_head_map.keys()))
 
   def save(self):
     raise NotImplementedError("Saving is currently not supported.")
