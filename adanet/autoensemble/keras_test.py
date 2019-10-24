@@ -35,13 +35,13 @@ class KerasTest(parameterized.TestCase, tf.test.TestCase):
           "candidate_pool":
               lambda head, feature_columns, optimizer: {
                   "dnn":
-                      tf.estimator.DNNEstimator(
+                      tf.compat.v2.estimator.DNNEstimator(
                           head=head,
                           feature_columns=feature_columns,
                           optimizer=optimizer,
                           hidden_units=[3]),
                   "linear":
-                      tf.estimator.LinearEstimator(
+                      tf.compat.v2.estimator.LinearEstimator(
                           head=head,
                           feature_columns=feature_columns,
                           optimizer=optimizer),
