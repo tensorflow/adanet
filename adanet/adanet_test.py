@@ -31,6 +31,7 @@ class AdaNetTest(tf.test.TestCase):
     self.assertIsNotNone(adanet.AutoEnsemble)
     self.assertIsNotNone(adanet.AutoEnsembleEstimator)
     self.assertIsNotNone(adanet.AutoEnsembleSubestimator)
+    self.assertIsNotNone(adanet.AutoEnsembleTPUEstimator)
     self.assertIsNotNone(adanet.distributed.PlacementStrategy)
     self.assertIsNotNone(adanet.distributed.ReplicationStrategy)
     self.assertIsNotNone(adanet.distributed.RoundRobinStrategy)

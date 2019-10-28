@@ -26,6 +26,7 @@ from adanet import subnetwork
 from adanet.autoensemble import AutoEnsemble
 from adanet.autoensemble import AutoEnsembleEstimator
 from adanet.autoensemble import AutoEnsembleSubestimator
+from adanet.autoensemble import AutoEnsembleTPUEstimator
 from adanet.core import Estimator
 from adanet.core import Evaluator
 from adanet.core import ReportMaterializer
@@ -44,6 +45,7 @@ from adanet.version import __version__
 __all__ = [
     "AutoEnsembleEstimator",
     "AutoEnsembleSubestimator",
+    "AutoEnsembleTPUEstimator",
     "distributed",
     "ensemble",
     "Ensemble",
