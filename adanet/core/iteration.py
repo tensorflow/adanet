@@ -402,7 +402,8 @@ class _IterationBuilder(object):
                use_tpu=False,
                debug=False,
                enable_ensemble_summaries=True,
-               enable_subnetwork_summaries=True):
+               enable_subnetwork_summaries=True,
+               enable_subnetwork_reports=True):
     """Creates an `_IterationBuilder` instance.
 
     Args:
@@ -429,6 +430,8 @@ class _IterationBuilder(object):
       enable_subnetwork_summaries: Whether to record summaries to display in
         TensorBoard for each subnetwork. Disable to reduce memory and disk usage
         per run.
+      enable_subnetwork_reports: Whether to enable generating subnetwork
+        reports.
 
     Returns:
       An `_IterationBuilder` object.
@@ -449,6 +452,7 @@ class _IterationBuilder(object):
     self._debug = debug
     self._enable_ensemble_summaries = enable_ensemble_summaries
     self._enable_subnetwork_summaries = enable_subnetwork_summaries
+    self._enable_subnetwork_reports = enable_subnetwork_reports
     super(_IterationBuilder, self).__init__()
 
   @property
@@ -596,7 +600,8 @@ class _IterationBuilder(object):
           summaries.append(previous_ensemble_summary)
 
         # Generate subnetwork reports.
-        if mode == tf.estimator.ModeKeys.EVAL:
+        if (self._enable_subnetwork_reports and
+            mode == tf.estimator.ModeKeys.EVAL):
           metrics = previous_ensemble_spec.eval_metrics.eval_metrics_ops()
           subnetwork_report = subnetwork.Report(
               hparams={},
@@ -655,7 +660,8 @@ class _IterationBuilder(object):
                                              subnetwork_builders,
                                              subnetwork_summary, training))
         # Generate subnetwork reports.
-        if mode != tf.estimator.ModeKeys.PREDICT:
+        if (self._enable_subnetwork_reports and
+            mode != tf.estimator.ModeKeys.PREDICT):
           subnetwork_report = subnetwork_builder.build_subnetwork_report()
           if not subnetwork_report:
             subnetwork_report = subnetwork.Report(
@@ -721,9 +727,10 @@ class _IterationBuilder(object):
           if mode == tf.estimator.ModeKeys.PREDICT:
             continue
           builder_name = ensemble_candidate.subnetwork_builders[0].name
-          subnetwork_reports[builder_name].metrics[
-              "adanet_loss"] = tf_compat.v1.metrics.mean(
-                  ensemble_spec.adanet_loss)
+          if self._enable_subnetwork_reports:
+            subnetwork_reports[builder_name].metrics[
+                "adanet_loss"] = tf_compat.v1.metrics.mean(
+                    ensemble_spec.adanet_loss)
 
       # Dynamically select the outputs of best candidate.
       best_candidate_index = self._best_candidate_index(

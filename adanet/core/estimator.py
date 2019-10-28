@@ -717,7 +717,8 @@ class Estimator(tf.estimator.Estimator):
         use_tpu=self._use_tpu,
         debug=debug,
         enable_ensemble_summaries=enable_ensemble_summaries,
-        enable_subnetwork_summaries=enable_subnetwork_summaries)
+        enable_subnetwork_summaries=enable_subnetwork_summaries,
+        enable_subnetwork_reports=self._report_materializer is not None)
     self._ensemble_strategies = ensemble_strategies or [GrowStrategy()]
 
     report_dir = report_dir or os.path.join(self._model_dir, "report")
