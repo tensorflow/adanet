@@ -20,26 +20,36 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import itertools
 import os
 import shutil
 import sys
 
 from absl import flags
 from absl.testing import parameterized
-from adanet import tf_compat
 from adanet.autoensemble.estimator import AutoEnsembleTPUEstimator
+import numpy as np
 import tensorflow as tf
 
 # pylint: disable=g-direct-tensorflow-import
-from tensorflow.python.estimator.export import export
+from tensorflow_estimator.contrib.estimator.python.estimator import head as head_lib
 from tensorflow_estimator.python.estimator.canned import dnn
 # pylint: enable=g-direct-tensorflow-import
 
 
 class _DNNTPUEstimator(tf.compat.v1.estimator.tpu.TPUEstimator):
 
-  def __init__(self, head, hidden_units, feature_columns, optimizer, use_tpu):
-    config = tf.compat.v1.estimator.tpu.RunConfig()
+  def __init__(self,
+               head,
+               hidden_units,
+               feature_columns,
+               optimizer,
+               use_tpu,
+               embedding_config_spec=None):
+    config = tf.compat.v1.estimator.tpu.RunConfig(
+        tpu_config=tf.compat.v1.estimator.tpu.TPUConfig(
+            per_host_input_for_training=tf.compat.v1.estimator.tpu
+            .InputPipelineConfig.PER_HOST_V2))
 
     def model_fn(features, labels, mode=None, params=None, config=None):
       del params  # Unused.
@@ -56,7 +66,11 @@ class _DNNTPUEstimator(tf.compat.v1.estimator.tpu.TPUEstimator):
           use_tpu=use_tpu)
 
     super(_DNNTPUEstimator, self).__init__(
-        model_fn=model_fn, config=config, train_batch_size=64, use_tpu=use_tpu)
+        model_fn=model_fn,
+        config=config,
+        train_batch_size=64,
+        use_tpu=use_tpu,
+        embedding_config_spec=embedding_config_spec)
 
 
 class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
@@ -74,76 +88,64 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     super(AutoEnsembleTPUEstimatorTest, self).tearDown()
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
 
-  # pylint: disable=g-long-lambda
   @parameterized.named_parameters(
       {
-          "testcase_name":
-              "tpu_estimator_candidate_pool_not_use_tpu",
-          "candidate_pool":
-              lambda head, feature_columns, optimizer: {
-                  "dnn":
-                      _DNNTPUEstimator(
-                          head=head,
-                          feature_columns=feature_columns,
-                          optimizer=optimizer,
-                          hidden_units=[3],
-                          use_tpu=False),
-                  "wider_dnn":
-                      _DNNTPUEstimator(
-                          head=head,
-                          feature_columns=feature_columns,
-                          optimizer=optimizer,
-                          hidden_units=[6],
-                          use_tpu=False),
-              },
-          "use_tpu":
-              False,
-          "want_loss":
-              0.315863,
-      },
-      {
-          "testcase_name":
-              "estimator_candidate_pool_not_use_tpu",
-          "candidate_pool":
-              lambda head, feature_columns, optimizer: {
-                  "dnn":
-                      tf.estimator.DNNEstimator(
-                          head=head,
-                          feature_columns=feature_columns,
-                          optimizer=optimizer,
-                          hidden_units=[3]),
-                  "linear":
-                      tf.estimator.LinearEstimator(
-                          head=head,
-                          feature_columns=feature_columns,
-                          optimizer=optimizer),
-              },
-          "use_tpu":
-              False,
-          "want_loss":
-              0.315863,
+          "testcase_name": "not_use_tpu",
+          "use_tpu": False,
       },
   )
-  # pylint: enable=g-long-lambda
-  # TODO: Ensure AutoEnsembleTPUEstimator tets also work for TF 2.0.
-  @tf_compat.skip_for_tf2
-  def test_auto_ensemble_estimator_lifecycle(self, candidate_pool, use_tpu,
-                                             want_loss):
-    features = {"xor": [[0., 0.], [0., 1.], [1., 0.], [1., 1.]]}
-    labels = [[0.], [1.], [1.], [0.]]
+  def test_auto_ensemble_estimator_lifecycle(self, use_tpu):
+    head = head_lib.regression_head()
+    feature_columns = [tf.feature_column.numeric_column("xor", shape=[2])]
+
+    def optimizer_fn():
+      optimizer = tf.compat.v1.train.GradientDescentOptimizer(learning_rate=.01)
+      if use_tpu:
+        optimizer = tf.compat.v1.tpu.CrossShardOptimizer(optimizer)
+      return optimizer
+
+    candidate_pool = {
+        "tpu_estimator_dnn":
+            _DNNTPUEstimator(
+                head=head,
+                feature_columns=feature_columns,
+                optimizer=optimizer_fn,
+                hidden_units=[3],
+                use_tpu=True),
+        "tpu_estimator_wider_dnn":
+            _DNNTPUEstimator(
+                head=head,
+                feature_columns=feature_columns,
+                optimizer=optimizer_fn,
+                hidden_units=[6],
+                use_tpu=True),
+        "estimator_dnn":
+            tf.compat.v1.estimator.DNNEstimator(
+                head=head,
+                feature_columns=feature_columns,
+                optimizer=optimizer_fn,
+                hidden_units=[3]),
+        "estimator_linear":
+            tf.compat.v1.estimator.LinearEstimator(
+                head=head,
+                feature_columns=feature_columns,
+                optimizer=optimizer_fn),
+    }
 
     run_config = tf.compat.v1.estimator.tpu.RunConfig(
         master="", tf_random_seed=42)
-    head = tf.contrib.estimator.regression_head(
-        loss_reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
+    estimator = AutoEnsembleTPUEstimator(
+        head=head,
+        candidate_pool=candidate_pool,
+        max_iteration_steps=10,
+        model_dir=self.test_subdirectory,
+        config=run_config,
+        use_tpu=use_tpu,
+        train_batch_size=64,
+        force_grow=True)
 
-    def optimizer_fn():
-      optimizer = tf.train.GradientDescentOptimizer(learning_rate=.01)
-      if use_tpu:
-        optimizer = tf.tpu.CrossShardOptimizer(optimizer)
-      return optimizer
-
-    feature_columns = [tf.feature_column.numeric_column("xor", shape=[2])]
+    features = {"xor": [[0., 0.], [0., 1.], [1., 0.], [1., 1.]]}
+    labels = [[0.], [1.], [1.], [0.]]
 
     def train_input_fn(params):
       del params  # Unused.
@@ -157,19 +159,9 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     def test_input_fn(params):
       del params  # Unused.
 
-      input_features = tf.data.Dataset.from_tensors(
+      input_features = tf.compat.v1.data.Dataset.from_tensors(
           tf.constant(features["xor"])).make_one_shot_iterator().get_next()
       return {"xor": input_features}, None
-
-    estimator = AutoEnsembleTPUEstimator(
-        head=head,
-        candidate_pool=candidate_pool(head, feature_columns, optimizer_fn),
-        max_iteration_steps=10,
-        model_dir=self.test_subdirectory,
-        config=run_config,
-        use_tpu=use_tpu,
-        train_batch_size=64,
-        force_grow=True)
 
     # Train for three iterations.
     estimator.train(input_fn=train_input_fn, max_steps=30)
@@ -178,7 +170,7 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=1)
 
     self.assertAllClose(30, eval_results["global_step"])
-    self.assertAllClose(want_loss, eval_results["loss"], atol=.3)
+    self.assertAllClose(0.315863, eval_results["loss"], atol=.3)
 
     # Predict.
     predictions = estimator.predict(input_fn=test_input_fn)
@@ -188,14 +180,12 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     # Export SavedModel.
     def serving_input_fn():
       """Input fn for serving export, starting from serialized example."""
-      serialized_example = tf.placeholder(
+      serialized_example = tf.compat.v1.placeholder(
           dtype=tf.string, shape=(None), name="serialized_example")
       for key, value in features.items():
         features[key] = tf.constant(value)
-      return export.SupervisedInputReceiver(
-          features=features,
-          labels=tf.constant(labels),
-          receiver_tensors=serialized_example)
+      return tf.estimator.export.ServingInputReceiver(
+          features=features, receiver_tensors=serialized_example)
 
     export_dir_base = os.path.join(self.test_subdirectory, "export")
     export_saved_model_fn = getattr(estimator, "export_saved_model", None)
@@ -204,6 +194,7 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
     export_saved_model_fn(
         export_dir_base=export_dir_base,
         serving_input_receiver_fn=serving_input_fn)
+
 
 
 if __name__ == "__main__":
