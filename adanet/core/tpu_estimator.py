@@ -31,7 +31,7 @@ import tensorflow as tf
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.ops import summary_ops_v2
 from tensorflow.python.util import function_utils
-
+from tensorflow_estimator.python.estimator.tpu import tpu_estimator
 # pylint: enable=g-direct-tensorflow-import
 
 
@@ -41,8 +41,8 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
 
   Unless :code:`use_tpu=False`, training will run on TPU. However, certain parts
   of the AdaNet training loop, such as report materialization and best candidate
-  selection, will still occurr on CPU. Furthermore, inference also occurs on
-  CPU.
+  selection, will still occurr on CPU. Furthermore, if using TPUEmbedding (i.e.
+  :code:`embedding_config_spec` is supplied), inference will also occurr on CPU.
 
   TODO: Provide the missing functionality detailed below.
   N.B: Embeddings using the TPUEmbedding (i.e. :code:`embedding_config_spec`
@@ -69,9 +69,15 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
       :class:`adanet.Estimator` instead if you do not plan to run on TPU.
     eval_on_tpu: Boolean to enable evaluating on TPU. Defaults to :code:`True`.
       Ignored if :code:`use_tpu=False`.
+    export_to_tpu: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
     train_batch_size: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
+      Defaults to 0 if `None`.
     eval_batch_size: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
+      Defaults to train_batch_size if `None`.
+    predict_batch_size: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
+      Defaults to eval_batch_size if `None`.
     embedding_config_spec: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
+      If supplied, :code:`predict` will be called on CPU.
     debug: See :class:`adanet.Estimator`.
     enable_ensemble_summaries: See :class:`adanet.Estimator`.
     enable_subnetwork_summaries: See :class:`adanet.Estimator`.
@@ -101,8 +107,10 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
                config=None,
                use_tpu=True,
                eval_on_tpu=True,
+               export_to_tpu=True,
                train_batch_size=None,
                eval_batch_size=None,
+               predict_batch_size=None,
                embedding_config_spec=None,
                debug=False,
                enable_ensemble_summaries=True,
@@ -118,13 +126,15 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
       logging.warning(
           "This adanet.TPUEstimator is meant to be used for running on TPU. "
           "If you want to run on CPU/GPU, use adanet.Estimator instead.")
-
     # TPUEstimator modifies config under the hood. We keep track of it here so
-    # we can use it during the bookkeeping phase and when predict() is called.
-    self._eval_on_tpu = eval_on_tpu if self._use_tpu else False
+    # we can use it from _create_temp_run_config.
     self._original_config = config or tf_compat.v1.estimator.tpu.RunConfig()
+    self._eval_on_tpu = eval_on_tpu if self._use_tpu else False
+    self._export_to_tpu = export_to_tpu
     self._train_batch_size = train_batch_size or 0
     self._eval_batch_size = eval_batch_size or train_batch_size or 0
+    self._predict_batch_size = (
+        predict_batch_size or eval_batch_size or train_batch_size or 0)
     self._embedding_config_spec = embedding_config_spec
 
     super(TPUEstimator, self).__init__(
@@ -144,9 +154,12 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
         config=self._original_config,
         use_tpu=self._use_tpu,
         eval_on_tpu=self._eval_on_tpu,
-        export_to_tpu=False,
+        export_to_tpu=self._export_to_tpu,
+        export_saved_model_api_version=(
+            tpu_estimator.ExportSavedModelApiVersion.V2),
         train_batch_size=self._train_batch_size,
         eval_batch_size=self._eval_batch_size,
+        predict_batch_size=self._predict_batch_size,
         embedding_config_spec=self._embedding_config_spec,
         debug=debug,
         enable_ensemble_summaries=enable_ensemble_summaries,
@@ -158,7 +171,6 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
         replay_config=replay_config,
         **kwargs)
 
-  # Yields predictions on CPU even when use_tpu=True.
   def predict(self,
               input_fn,
               predict_keys=None,
@@ -166,9 +178,13 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
               checkpoint_path=None,
               yield_single_examples=True):
 
-    logging.warning(
-        "The adanet.TPUEstimator does not support predicting on TPU. "
-        "Instead, all predictions are run on CPU.")
+    use_tpu = self._use_tpu
+    eval_on_tpu = self._eval_on_tpu
+    if self._embedding_config_spec:
+      logging.warning("TPU does not support inference with TPUEmbedding. "
+                      "Falling back to CPU.")
+      use_tpu = False
+      eval_on_tpu = False
     if not checkpoint_path:
       checkpoint_path = tf.train.latest_checkpoint(self.model_dir)
     logging.info("Computing predictions for AdaNet model at checkpoint: %s",
@@ -180,15 +196,23 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
         "checkpoint_path":
             checkpoint_path,
     })
-    tpu_estimator = tf_compat.v1.estimator.tpu.TPUEstimator(
+    # TODO: Consider extracting a common function to use here and in
+    # _create_temp_estimator().
+    estimator = tf_compat.v1.estimator.tpu.TPUEstimator(
         model_fn=self._adanet_model_fn,
-        model_dir=self.model_dir,
-        config=self._original_config,
         params=params,
-        use_tpu=False,
-        eval_on_tpu=False,
+        config=self._original_config,
+        model_dir=self.model_dir,
+        use_tpu=use_tpu,
+        eval_on_tpu=eval_on_tpu,
+        export_to_tpu=self._export_to_tpu,
+        export_saved_model_api_version=(
+            tpu_estimator.ExportSavedModelApiVersion.V2),
+        train_batch_size=self._train_batch_size,
+        eval_batch_size=self._eval_batch_size,
+        predict_batch_size=self._predict_batch_size,
         embedding_config_spec=self._embedding_config_spec)
-    return tpu_estimator.predict(
+    return estimator.predict(
         input_fn,
         predict_keys=predict_keys,
         hooks=hooks,
@@ -219,9 +243,12 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
         model_dir=temp_model_dir,
         use_tpu=self._use_tpu,
         eval_on_tpu=self._eval_on_tpu,
-        export_to_tpu=False,
+        export_to_tpu=self._export_to_tpu,
+        export_saved_model_api_version=(
+            tpu_estimator.ExportSavedModelApiVersion.V2),
         train_batch_size=self._train_batch_size,
         eval_batch_size=self._eval_batch_size,
+        predict_batch_size=self._predict_batch_size,
         embedding_config_spec=self._embedding_config_spec)
 
   @contextlib.contextmanager

@@ -15,6 +15,7 @@ limitations under the License.
 
 # Current version (0.9.0.dev)
  * Under development.
+ * Added support for predicting/serving on TPU.
  * Introduce support for `AutoEnsembleTPUEstimator`.
  * Introduce experimental `adanet.keras.Model` API.
  * Introduce experimental `adanet.keras.AutoEnsemble` API.

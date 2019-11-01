@@ -71,7 +71,7 @@ py_test(
     name = "tpu_estimator_test",
     size = "large",
     srcs = ["tpu_estimator_test.py"],
-    shard_count = 4,
+    shard_count = 3,
     deps = [
         ":estimator",
         "//adanet/tf_compat",

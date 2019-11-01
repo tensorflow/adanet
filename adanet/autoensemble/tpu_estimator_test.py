@@ -96,7 +96,7 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
   )
   def test_auto_ensemble_estimator_lifecycle(self, use_tpu):
     head = head_lib.regression_head()
-    feature_columns = [tf.feature_column.numeric_column("xor", shape=[2])]
+    feature_columns = [tf.feature_column.numeric_column("xor", shape=2)]
 
     def optimizer_fn():
       optimizer = tf.compat.v1.train.GradientDescentOptimizer(learning_rate=.01)
@@ -141,7 +141,9 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
         model_dir=self.test_subdirectory,
         config=run_config,
         use_tpu=use_tpu,
-        train_batch_size=64,
+        # TODO: Support export_to_tpu for canned models.
+        export_to_tpu=False,
+        train_batch_size=4,
         force_grow=True)
 
     features = {"xor": [[0., 0.], [0., 1.], [1., 0.], [1., 1.]]}
@@ -158,22 +160,21 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
 
     def test_input_fn(params):
       del params  # Unused.
-
-      input_features = tf.compat.v1.data.Dataset.from_tensors(
-          tf.constant(features["xor"])).make_one_shot_iterator().get_next()
-      return {"xor": input_features}, None
+      return tf.compat.v1.data.Dataset.from_tensor_slices(
+          [features["xor"]]).map(lambda f: {"xor": f})
 
     # Train for three iterations.
     estimator.train(input_fn=train_input_fn, max_steps=30)
 
     # Evaluate.
     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=1)
-
     self.assertAllClose(30, eval_results["global_step"])
     self.assertAllClose(0.315863, eval_results["loss"], atol=.3)
 
     # Predict.
     predictions = estimator.predict(input_fn=test_input_fn)
+    # We need to iterate over all the predictions before moving on, otherwise
+    # the TPU will not be shut down.
     for prediction in predictions:
       self.assertIsNotNone(prediction["predictions"])
 
@@ -182,8 +183,8 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
       """Input fn for serving export, starting from serialized example."""
       serialized_example = tf.compat.v1.placeholder(
           dtype=tf.string, shape=(None), name="serialized_example")
-      for key, value in features.items():
-        features[key] = tf.constant(value)
+      for key in features:
+        features[key] = tf.constant([[0., 0.], [0., 0.]])
       return tf.estimator.export.ServingInputReceiver(
           features=features, receiver_tensors=serialized_example)
 

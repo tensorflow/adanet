@@ -234,7 +234,11 @@ class TPUEstimatorTest(tu.AdanetTestCase):
 
     # Predict.
     predictions = estimator.predict(
-        input_fn=tu.dataset_input_fn(features=[0., 0.], labels=None))
+        input_fn=tu.dataset_input_fn(features=[0., 0.], return_dataset=True))
+    # We need to iterate over all the predictions before moving on, otherwise
+    # the TPU will not be shut down.
+    for prediction in predictions:
+      self.assertIsNotNone(prediction["predictions"])
 
     # Export SavedModel.
     def serving_input_fn():
@@ -252,8 +256,6 @@ class TPUEstimatorTest(tu.AdanetTestCase):
     self.assertAlmostEqual(want_loss, eval_results["loss"], places=2)
     self.assertEqual(max_steps, eval_results["global_step"])
     self.assertEqual(2, eval_results["iteration"])
-    for prediction in predictions:
-      self.assertIsNotNone(prediction["predictions"])
 
 
 

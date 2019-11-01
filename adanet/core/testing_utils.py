@@ -209,22 +209,25 @@ def dummy_input_fn(features, labels):
   return _input_fn
 
 
-def dataset_input_fn(features=8., labels=9.):
+def dataset_input_fn(features=8., labels=9., return_dataset=False):
   """Returns feature and label `Tensors` via a `Dataset`."""
+
+  labels = labels or 0.
 
   def _input_fn(params=None):
     """The `Dataset` input_fn which will be returned."""
 
     del params  # Unused.
 
-    input_features = tf_compat.make_one_shot_iterator(
-        tf.data.Dataset.from_tensors([features])).get_next()
-    if labels is not None:
-      input_labels = tf_compat.make_one_shot_iterator(
-          tf.data.Dataset.from_tensors([labels])).get_next()
-    else:
-      input_labels = None
-    return {"x": input_features}, input_labels
+    def _map(f, l):
+      return {"x": f}, l
+
+    input_features = tf.data.Dataset.from_tensors([features])
+    input_labels = tf.data.Dataset.from_tensors([labels])
+    dataset = tf.data.Dataset.zip((input_features, input_labels)).map(_map)
+    if return_dataset:
+      return dataset
+    return tf.compat.v1.data.make_one_shot_iterator(dataset).get_next()
 
   return _input_fn
 

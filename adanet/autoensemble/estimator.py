@@ -336,6 +336,7 @@ class AutoEnsembleTPUEstimator(TPUEstimator):  # pylint: disable=g-classes-have-
     config: See :class:`adanet.Estimator`.
     use_tpu: See :class:`adanet.Estimator`.
     eval_on_tpu: See :class:`adanet.Estimator`.
+    export_to_tpu: See :class:`adanet.Estimator`.
     train_batch_size: See :class:`adanet.Estimator`.
     eval_batch_size: See :class:`adanet.Estimator`.
     embedding_config_spec: See :class:`adanet.Estimator`.
@@ -372,8 +373,10 @@ class AutoEnsembleTPUEstimator(TPUEstimator):  # pylint: disable=g-classes-have-
                config=None,
                use_tpu=True,
                eval_on_tpu=True,
+               export_to_tpu=True,
                train_batch_size=None,
                eval_batch_size=None,
+               predict_batch_size=None,
                embedding_config_spec=None,
                debug=False,
                enable_ensemble_summaries=True,
@@ -398,8 +401,10 @@ class AutoEnsembleTPUEstimator(TPUEstimator):  # pylint: disable=g-classes-have-
         config=config,
         use_tpu=use_tpu,
         eval_on_tpu=eval_on_tpu,
+        export_to_tpu=export_to_tpu,
         train_batch_size=train_batch_size,
         eval_batch_size=eval_batch_size,
+        predict_batch_size=predict_batch_size,
         embedding_config_spec=embedding_config_spec,
         debug=debug,
         enable_ensemble_summaries=enable_ensemble_summaries,
