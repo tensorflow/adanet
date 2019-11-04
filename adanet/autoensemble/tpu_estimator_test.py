@@ -27,14 +27,20 @@ import sys
 
 from absl import flags
 from absl.testing import parameterized
+from adanet import tf_compat
 from adanet.autoensemble.estimator import AutoEnsembleTPUEstimator
 import numpy as np
 import tensorflow as tf
 
+# pylint: disable=g-import-not-at-top
 # pylint: disable=g-direct-tensorflow-import
-from tensorflow_estimator.contrib.estimator.python.estimator import head as head_lib
+try:
+  from tensorflow_estimator.contrib.estimator.python.estimator import head as head_lib
+except (AttributeError, ImportError):
+  head_lib = None
 from tensorflow_estimator.python.estimator.canned import dnn
 # pylint: enable=g-direct-tensorflow-import
+# pylint: enable=g-import-not-at-top
 
 
 class _DNNTPUEstimator(tf.compat.v1.estimator.tpu.TPUEstimator):
@@ -94,6 +100,8 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
           "use_tpu": False,
       },
   )
+  # TODO: Support V2 head and optimizer in AdaNet TPU.
+  @tf_compat.skip_for_tf2
   def test_auto_ensemble_estimator_lifecycle(self, use_tpu):
     head = head_lib.regression_head()
     feature_columns = [tf.feature_column.numeric_column("xor", shape=2)]
