@@ -70,6 +70,8 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
     eval_on_tpu: Boolean to enable evaluating on TPU. Defaults to :code:`True`.
       Ignored if :code:`use_tpu=False`.
     export_to_tpu: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
+      NOTE: This option is currently ignored and will always be set to
+      :code:`False`.
     train_batch_size: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
       Defaults to 0 if `None`.
     eval_batch_size: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
@@ -130,7 +132,8 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
     # we can use it from _create_temp_run_config.
     self._original_config = config or tf_compat.v1.estimator.tpu.RunConfig()
     self._eval_on_tpu = eval_on_tpu if self._use_tpu else False
-    self._export_to_tpu = export_to_tpu
+    # TODO: Turn back on when AdaNet fully supports export_to_tpu.
+    self._export_to_tpu = False
     self._train_batch_size = train_batch_size or 0
     self._eval_batch_size = eval_batch_size or train_batch_size or 0
     self._predict_batch_size = (
