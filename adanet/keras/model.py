@@ -25,41 +25,73 @@ from adanet import core
 import tensorflow as tf
 
 
-def _dataset_to_input_fn(dataset):
-  """Converts a `tf.data.Dataset` to an input_fn."""
+class _KerasHead(object):
+  """A `tf.estimator.Head`-like alternative for usage within AdaNet."""
 
-  def input_fn(params=None):
-    del params  # unused
-    return dataset()
+  def __init__(self, logits_dimension, loss, metrics):
+    """Initialize a _KerasHead object.
 
-  return input_fn
+    Args:
+      logits_dimension: The dimension of the final layer of any subnetworks.
+      loss: A `tf.keras.losses.Loss`. Note: must set `from_logits` to True if
+        the loss is a non-regression loss.
+      metrics: List of lambdas that return `tf.keras.metric.Metric` objects.
+        Each metric object must have `name` set to some string and `from_logits`
+        set to True if it is a non-regression metric.
+
+    Raises:
+      ValueError: If `from_logits` isn't `True` for a non-regression `loss`.
+    """
+
+    self.logits_dimension = logits_dimension
+    self.metrics = metrics
+
+    if hasattr(loss, "from_logits") and not loss.from_logits:
+      raise ValueError("from_logits must be True for non-regression losses.")
+    self.loss = loss
+
+  def create_estimator_spec(self, features, mode, logits, labels, train_op_fn):
+    """Returns EstimatorSpec that a `model_fn` can return."""
+
+    del features, train_op_fn  # unused
+
+    eval_metric_ops = None
+    export_outputs = None
+    loss = None
+    train_op = None
+    # TODO: Currently the predictions are the raw logits which
+    # means that the predictions will not be correct for anything other than
+    # regression. Should look into how Keras handles this.
+    predictions = {"predictions": logits}
+
+    if mode == tf.estimator.ModeKeys.PREDICT:
+      # TODO: Populate export_outputs for SavedModel.
+      export_outputs = {}
+    elif mode == tf.estimator.ModeKeys.EVAL:
+      eval_results = {}
+      for metric in self.metrics:
+        # We wrap the metric within a function since Estimator subnetworks
+        # need to have this created within their graphs.
+        metric = metric()
+        metric.update_state(y_true=labels, y_pred=logits)
+        eval_results[metric.name] = metric
+      eval_metric_ops = eval_results
+      loss = tf.math.reduce_mean(self.loss(y_true=labels, y_pred=logits))
+    elif mode == tf.estimator.ModeKeys.TRAIN:
+      loss = tf.math.reduce_mean(self.loss(y_true=labels, y_pred=logits))
+      train_op = tf.no_op()
+
+    return tf.estimator.EstimatorSpec(
+        mode=mode,
+        predictions=predictions,
+        loss=loss,
+        eval_metric_ops=eval_metric_ops,
+        export_outputs=export_outputs,
+        train_op=train_op)
 
 
 class Model(object):
   """A `tf.keras.Model`-like object for training, evaluation, and serving."""
-
-  # Usage of lambdas here to defer the instantiation of these objects. This
-  # behavior is required since Estimator subnetworks expect these objects to
-  # be created within functions.
-
-  # pylint: disable=g-long-lambda
-  _metrics_map = {
-      "auc":
-          lambda: tf.keras.metrics.AUC(name="auc"),
-      "accuracy":
-          lambda: tf.keras.metrics.Accuracy(name="accuracy"),
-      "precision":
-          lambda: tf.keras.metrics.Precision(name="precision"),
-      "mae":
-          lambda: tf.keras.metrics.MeanAbsoluteError(name="mae"),
-      "mean_absolute_error":
-          lambda: tf.keras.metrics.MeanAbsoluteError(name="mean_absolute_error"
-                                                    ),
-      "recall":
-          lambda: tf.keras.metrics.Recall(name="recall"),
-  }
-
-  # pylint: enable=g-long-lambda
 
   def __init__(self,
                subnetwork_generator,
@@ -119,24 +151,6 @@ class Model(object):
     self._model = None
     self._metrics_names = ["loss"]
 
-    # Import here to avoid strict BUILD deps check.
-    # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
-    from tensorflow_estimator.python.estimator.head import binary_class_head
-    from tensorflow_estimator.python.estimator.head import multi_class_head
-    from tensorflow_estimator.python.estimator.head import regression_head
-    # pylint: enable=g-direct-tensorflow-import,g-import-not-at-top
-
-    self._loss_head_map = {
-        "binary_crossentropy":
-            lambda: binary_class_head.BinaryClassHead(),  # pylint: disable=unnecessary-lambda
-        "mse":
-            lambda: regression_head.RegressionHead(self._logits_dimension),
-        "mean_squared_error":
-            lambda: regression_head.RegressionHead(self._logits_dimension),
-        "sparse_categorical_crossentropy":
-            lambda: multi_class_head.MultiClassHead(self._logits_dimension),
-    }
-
   @property
   def metrics_names(self):
     return self._metrics_names
@@ -165,8 +179,7 @@ class Model(object):
 
     if self._model is not None:
       for _ in range(epochs):
-        self._model.train(
-            input_fn=_dataset_to_input_fn(x), steps=steps_per_epoch)
+        self._model.train(input_fn=x, steps=steps_per_epoch)
     else:
       raise RuntimeError(
           "You must compile your model before training. Use `model.compile(loss)`."
@@ -196,8 +209,7 @@ class Model(object):
       logging.warning("Callbacks are currently not supported.")
 
     if self._model is not None:
-      results = self._model.evaluate(
-          input_fn=_dataset_to_input_fn(x), steps=steps)
+      results = self._model.evaluate(input_fn=x, steps=steps)
       return [results[result] for result in self._metrics_names]
     else:
       raise RuntimeError(
@@ -233,8 +245,9 @@ class Model(object):
       logging.warning("Callbacks are currently not supported.")
 
     if self._model is not None:
-      results = self._model.predict(
-          _dataset_to_input_fn(x), yield_single_examples=False)
+      results = self._model.predict(x, yield_single_examples=False)
+      # TODO: Make predictions match the format of the task class.
+      logging.warning("Prediction results are in raw logit form.")
       # Convert the generator object returned by Estimator's predict method to a
       # numpy array of all the predictions.
       return next(results)["predictions"]
@@ -247,63 +260,42 @@ class Model(object):
     """Configures the model for training.
 
     Args:
-      loss: String of a built in `tf.keras.Loss` function.
-      metrics: List of metric string names and functions that return metric
-        objects. (e.g. [lambda: tf.keras.metrics.Accuracy(), "mae"]). If passing
-          in a function that returns a metric, it is necessary for it to have a
-          name.
+      loss: A `tf.keras.losses.Loss`. Note: must set `from_logits` to True if
+        the loss is a non-regression loss.
+      metrics: List of lambdas that return `tf.keras.metric.Metric` objects.
+        Each metric object must have `name` set to some string and
+        `from_logits` set to True if it is a non-regression metric.
 
     Raises:
-      ValueError: If the loss is not a supported loss.
-      ValueError: If one of the metrics passed into metrics is not a supported
-        metric.
+      ValueError: If a metric does not have a name.
     """
 
     if metrics is None:
       metrics = []
+    else:
+      # TODO: Assure `from_logits=True` for every metric.
+      logging.warning(
+          "Assure non-regression metrics initialized with `from_logits=True`.")
 
     for metric in metrics:
-      if callable(metric):
-        self._metrics_names.append(metric().name)
-      elif metric in Model._metrics_map:
-        self._metrics_names.append(metric)
-      else:
-        raise ValueError(
-            "'{}' is not a currently supported metric. Currently supported metrics are: {}"
-            .format(metric, Model._metrics_map.keys()))
+      metric = metric()
+      if metric.name is None:
+        raise ValueError("Metrics must have names.")
+      self._metrics_names.append(metric.name)
 
-    def _metric_fn(predictions, features, labels):
-      """Internal metric_fn to add passed in metrics to underlying Estimator."""
-      del features  # unused
+    keras_head = _KerasHead(
+        logits_dimension=self._logits_dimension, loss=loss, metrics=metrics)
 
-      eval_results = {}
-      for metric in metrics:
-        if not callable(metric):
-          metric = Model._metrics_map[metric]
-        # We wrap the metric within a function since Estimator subnetworks
-        # need to have this created within their graphs.
-        metric = metric()
-        metric.update_state(y_true=labels, y_pred=predictions["predictions"])
-        eval_results[metric.name] = metric
+    self._model = core.Estimator(
+        head=keras_head,
+        subnetwork_generator=self._subnetwork_generator,
+        max_iteration_steps=self._max_iteration_steps,
+        ensemblers=self._ensemblers,
+        ensemble_strategies=self._ensemble_strategies,
+        evaluator=self._evaluator,
+        adanet_loss_decay=self._adanet_loss_decay,
+        model_dir=self._filepath)
 
-      return eval_results
-
-    head = self._loss_head_map.get(loss, None)
-    if head is not None:
-      self._model = core.Estimator(
-          head=head(),
-          metric_fn=_metric_fn,
-          max_iteration_steps=self._max_iteration_steps,
-          ensemblers=self._ensemblers,
-          ensemble_strategies=self._ensemble_strategies,
-          evaluator=self._evaluator,
-          adanet_loss_decay=self._adanet_loss_decay,
-          model_dir=self._filepath,
-          subnetwork_generator=self._subnetwork_generator)
-    else:
-      raise ValueError(
-          "'{}' is not a currently supported loss. Currently supported losses are: {}."
-          .format(loss, self._loss_head_map.keys()))
-
+  # TODO: Implement `adanet.Model#save.`
   def save(self):
     raise NotImplementedError("Saving is currently not supported.")

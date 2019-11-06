@@ -137,31 +137,25 @@ class _DNNBuilder(Builder):
 
 class ModelTest(tu.AdanetTestCase):
 
+  # pylint: disable=g-long-lambda
   @parameterized.named_parameters(
       {
           "testcase_name": "one_step_binary_crossentropy_loss",
-          "loss": "binary_crossentropy",
+          "loss": tf.keras.losses.BinaryCrossentropy(from_logits=True),
+          "metrics":
+              [lambda: tf.keras.metrics.BinaryCrossentropy(name="bin_acc",
+                                                           from_logits=True)],
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": 1,
           "epochs": 1,
           "steps_per_epoch": 3,
+          "want_metrics_names": ["loss", "bin_acc"],
           "want_loss": 0.7690,
+          "want_metrics": [0.7690]
       },
       {
           "testcase_name": "one_step_mse_loss",
-          "loss": "mse",
-          "metrics": ["mean_absolute_error"],
-          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
-          "max_iteration_steps": 1,
-          "epochs": 1,
-          "steps_per_epoch": 3,
-          "want_metrics_names": ["loss", "mean_absolute_error"],
-          "want_loss": 0.6354,
-          "want_metrics": [0.6191]
-      },
-      {
-          "testcase_name": "lambda_metric",
-          "loss": "mse",
+          "loss": tf.keras.losses.MeanSquaredError(),
           "metrics": [lambda: tf.keras.metrics.MeanAbsoluteError(name="mae")],
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": 1,
@@ -173,7 +167,8 @@ class ModelTest(tu.AdanetTestCase):
       },
       {
           "testcase_name": "one_step_sparse_categorical_crossentropy_loss",
-          "loss": "sparse_categorical_crossentropy",
+          "loss":
+              tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
           "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
           "max_iteration_steps": 1,
           "epochs": 1,
@@ -183,6 +178,7 @@ class ModelTest(tu.AdanetTestCase):
           "dataset": lambda: tf.data.Dataset.from_tensors(({"x": XOR_FEATURES},  # pylint: disable=g-long-lambda
                                                            XOR_CLASS_LABELS))
       })
+      # pylint: enable=g-long-lambda
   @test_util.run_in_graph_and_eager_modes
   def test_lifecycle(self,
                      loss,
@@ -228,15 +224,14 @@ class ModelTest(tu.AdanetTestCase):
     if metrics:
       self.assertAllClose(want_metrics, eval_results[1:], 1e-3, 1e-3)
 
-    # TODO: Predict not currently working for BinaryClassHead and
-    #                   MultiClassHead.
-    if loss == "mse":
-      prediction_data = lambda: tf.data.Dataset.from_tensors(({  # pylint: disable=g-long-lambda
-          "x": XOR_FEATURES
-      }))
+    prediction_data = lambda: tf.data.Dataset.from_tensors(({  # pylint: disable=g-long-lambda
+        "x": XOR_FEATURES
+    }))
 
-      predictions = keras_model.predict(prediction_data)
-      self.assertLen(predictions, 4)
+    # TODO: Change the assertion to actually check the values rather
+    # than the length of the returned predictions array.
+    predictions = keras_model.predict(prediction_data)
+    self.assertLen(predictions, 4)
 
   @test_util.run_in_graph_and_eager_modes
   def test_compile_exceptions(self):
@@ -254,6 +249,18 @@ class ModelTest(tu.AdanetTestCase):
 
     with self.assertRaises(RuntimeError):
       keras_model.predict(predict_data)
+
+  @test_util.run_in_graph_and_eager_modes
+  def test_loss_exceptions(self):
+    """Check that ValueError is raised when from_logits=False for loss."""
+    keras_model = model.Model(
+        subnetwork_generator=SimpleGenerator([_DNNBuilder("dnn")]),
+        max_iteration_steps=1)
+
+    loss = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+
+    with self.assertRaises(ValueError):
+      keras_model.compile(loss=loss)
 
 
 if __name__ == "__main__":
