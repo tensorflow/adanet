@@ -13,16 +13,17 @@ py_library(
     visibility = whitelist,
     deps = [
         ":model",
-        "//adanet/autoensemble",
+        "//adanet/autoensemble:keras",
     ],
 )
 
 py_library(
     name = "model",
     srcs = ["model.py"],
-    visibility = whitelist,
+    visibility = ["//adanet/autoensemble:__subpackages__"],
     deps = [
         "//adanet/core",
+        "@absl_py//absl/logging",
     ],
 )
 

@@ -18,6 +18,9 @@ py_library(
 py_library(
     name = "devices",
     srcs = ["devices.py"],
+    tags = [
+        "PYDEPS=WARN",
+    ],
     deps = [
     ],
 )
@@ -37,6 +40,7 @@ py_library(
     deps = [
         ":devices",
         "//adanet/tf_compat",
+        "@absl_py//absl/logging",
     ],
 )
 

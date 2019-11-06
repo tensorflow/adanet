@@ -25,11 +25,6 @@ from adanet import tf_compat
 from adanet.distributed.devices import _OpNameHashStrategy
 import numpy as np
 
-# pylint: disable=g-direct-tensorflow-import
-from tensorflow.core.framework import node_def_pb2
-from tensorflow.python.training import device_setter
-# pylint: enable=g-direct-tensorflow-import
-
 
 class PlacementStrategy(object):
   """Abstract placement strategy for distributed training.
@@ -310,7 +305,10 @@ class RoundRobinStrategy(PlacementStrategy):
     def device_fn(op):
       """Assigns variables to a subnetwork's dedicated parameter servers."""
 
+      # Import here to avoid strict BUILD deps check.
+      from tensorflow.core.framework import node_def_pb2  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
       node_def = op if isinstance(op, node_def_pb2.NodeDef) else op.node_def
+      from tensorflow.python.training import device_setter  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
       if num_ps_replicas > 0 and node_def.op in device_setter.STANDARD_PS_OPS:
         # ps_group lists the task ids in the group. Adding the first task id in
         # the group to the task number determined by the PS strategy gives the

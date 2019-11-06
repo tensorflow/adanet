@@ -20,8 +20,6 @@ from __future__ import print_function
 import contextlib
 import hashlib
 
-from tensorflow.python.training import device_setter  # pylint: disable=g-direct-tensorflow-import
-
 
 class _OpNameHashStrategy(object):
   """Returns the ps task index for placement using a hash of the op name."""
@@ -64,6 +62,8 @@ def monkey_patch_default_variable_placement_strategy():
     A context with the monkey-patched default variable placement strategy.
   """
 
+  # Import here to avoid strict BUILD deps check.
+  from tensorflow.python.training import device_setter  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
   old_round_robin_strategy = device_setter._RoundRobinStrategy  # pylint: disable=protected-access
   setattr(device_setter, "_RoundRobinStrategy", _OpNameHashStrategy)
   try:

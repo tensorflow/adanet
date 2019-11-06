@@ -22,8 +22,6 @@ from __future__ import print_function
 import abc
 import collections
 
-from tensorflow.python.util import deprecation
-
 
 def _validate_nested_persisted_tensors(persisted_tensors):
   """Raises a ValueError when a nested dict is empty in persisted_tensors."""
@@ -119,6 +117,9 @@ class Subnetwork(
     ValueError: If persisted_tensors contains an empty nested dictionary.
   """
   # pyformat: enable
+
+  # Import here to avoid strict BUILD deps check.
+  from tensorflow.python.util import deprecation  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
 
   @deprecation.deprecated_args(
       None, "`persisted_tensors` is deprecated, please use `shared` instead.",

@@ -43,6 +43,7 @@ from adanet.subnetwork import Subnetwork
 from adanet.version import __version__
 
 __all__ = [
+    "AutoEnsemble",
     "AutoEnsembleEstimator",
     "AutoEnsembleSubestimator",
     "AutoEnsembleTPUEstimator",

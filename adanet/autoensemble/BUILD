@@ -29,6 +29,7 @@ py_library(
 py_library(
     name = "keras",
     srcs = ["keras.py"],
+    visibility = ["//adanet/keras:__subpackages__"],
     deps = [
         ":common",
         "//adanet/keras:model",

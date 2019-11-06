@@ -20,13 +20,9 @@ from __future__ import division
 from __future__ import print_function
 
 from absl import logging
-from adanet.core import Estimator
+from adanet import core
 
 import tensorflow as tf
-
-from tensorflow_estimator.python.estimator.head import binary_class_head
-from tensorflow_estimator.python.estimator.head import multi_class_head
-from tensorflow_estimator.python.estimator.head import regression_head
 
 
 def _dataset_to_input_fn(dataset):
@@ -57,11 +53,12 @@ class Model(object):
       "mae":
           lambda: tf.keras.metrics.MeanAbsoluteError(name="mae"),
       "mean_absolute_error":
-          lambda: tf.keras.metrics.MeanAbsoluteError(
-              name="mean_absolute_error"),
+          lambda: tf.keras.metrics.MeanAbsoluteError(name="mean_absolute_error"
+                                                    ),
       "recall":
           lambda: tf.keras.metrics.Recall(name="recall"),
   }
+
   # pylint: enable=g-long-lambda
 
   def __init__(self,
@@ -73,6 +70,7 @@ class Model(object):
                evaluator=None,
                adanet_loss_decay=.9,
                filepath=None):
+    # pyformat: disable
     """Initializes an `adanet.keras.Model`.
 
     Args:
@@ -106,6 +104,7 @@ class Model(object):
         be used to load checkpoints from the directory into a estimator to
         continue training a previously saved model.
     """
+    # pyformat: enable
 
     logging.warning("""The AdaNet Keras API is currently experimental.""")
 
@@ -119,6 +118,14 @@ class Model(object):
     self._filepath = filepath
     self._model = None
     self._metrics_names = ["loss"]
+
+    # Import here to avoid strict BUILD deps check.
+    # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+    from tensorflow_estimator.python.estimator.head import binary_class_head
+    from tensorflow_estimator.python.estimator.head import multi_class_head
+    from tensorflow_estimator.python.estimator.head import regression_head
+    # pylint: enable=g-direct-tensorflow-import,g-import-not-at-top
+
     self._loss_head_map = {
         "binary_crossentropy":
             lambda: binary_class_head.BinaryClassHead(),  # pylint: disable=unnecessary-lambda
@@ -134,11 +141,7 @@ class Model(object):
   def metrics_names(self):
     return self._metrics_names
 
-  def fit(self,
-          x,
-          epochs=1,
-          steps_per_epoch=None,
-          callbacks=None):
+  def fit(self, x, epochs=1, steps_per_epoch=None, callbacks=None):
     """Trains the model for a fixed number of epochs.
 
     Args:
@@ -151,8 +154,8 @@ class Model(object):
         divided by the batch size, or 1 if that cannot be determined. If
         'steps_per_epoch' is 'None', the epoch will run until the input dataset
         is exhausted.
-      callbacks: List of `keras.callbacks.Callback` instances.
-        List of callbacks to apply during evaluation.
+      callbacks: List of `keras.callbacks.Callback` instances. List of callbacks
+        to apply during evaluation.
 
     Raises:
       RuntimeError: If the model was never compiled.
@@ -169,20 +172,17 @@ class Model(object):
           "You must compile your model before training. Use `model.compile(loss)`."
       )
 
-  def evaluate(self,
-               x,
-               steps=None,
-               callbacks=None):
+  def evaluate(self, x, steps=None, callbacks=None):
     """Returns the loss value & metrics values for the model in test mode.
 
     Args:
       x: A function that returns a `tf.data` dataset.
-      steps: Integer or `None`.
-        Total number of steps (batches of samples) before declaring the
-        evaluation round finished. Ignored with the default value of `None`.
-        If `steps` is None, 'evaluate' will run until the dataset is exhausted.
-      callbacks: List of `keras.callbacks.Callback` instances.
-        List of callbacks to apply during evaluation.
+      steps: Integer or `None`. Total number of steps (batches of samples)
+        before declaring the evaluation round finished. Ignored with the default
+        value of `None`. If `steps` is None, 'evaluate' will run until the
+        dataset is exhausted.
+      callbacks: List of `keras.callbacks.Callback` instances. List of callbacks
+        to apply during evaluation.
 
     Returns:
       A list of scalars for loss and metrics. The attribute model.metrics_names
@@ -204,11 +204,12 @@ class Model(object):
           "You must compile your model before testing. Use `model.compile(loss)`."
       )
 
-  def predict(self,
-              x,
-              # `steps` unused by Estimators, but usable by Keras models later.
-              steps=None,  # pylint: disable=unused-argument
-              callbacks=None):
+  def predict(
+      self,
+      x,
+      # `steps` unused by Estimators, but usable by Keras models later.
+      steps=None,  # pylint: disable=unused-argument
+      callbacks=None):
     """Generates output predictions for the input samples.
 
     Args:
@@ -216,8 +217,8 @@ class Model(object):
       steps: Total number of steps (batches of samples) before declaring the
         prediction round finished. Ignored with the default value of `None`. If
         `None`, `predict` will run until the input dataset is exhausted.
-      callbacks: List of `keras.callbacks.Callback` instances.
-        List of callbacks to apply during prediction.
+      callbacks: List of `keras.callbacks.Callback` instances. List of callbacks
+        to apply during prediction.
 
     Returns:
       Numpy array(s) of predictions.
@@ -232,8 +233,8 @@ class Model(object):
       logging.warning("Callbacks are currently not supported.")
 
     if self._model is not None:
-      results = self._model.predict(_dataset_to_input_fn(x),
-                                    yield_single_examples=False)
+      results = self._model.predict(
+          _dataset_to_input_fn(x), yield_single_examples=False)
       # Convert the generator object returned by Estimator's predict method to a
       # numpy array of all the predictions.
       return next(results)["predictions"]
@@ -289,7 +290,7 @@ class Model(object):
 
     head = self._loss_head_map.get(loss, None)
     if head is not None:
-      self._model = Estimator(
+      self._model = core.Estimator(
           head=head(),
           metric_fn=_metric_fn,
           max_iteration_steps=self._max_iteration_steps,
