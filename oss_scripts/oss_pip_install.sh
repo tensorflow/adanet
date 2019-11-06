@@ -29,6 +29,3 @@ fi
 
 # Build adanet pip packaging script
 bazel build -c opt //... --local_resources 2048,.5,1.0
-
-# Copy generated proto files.
-cp bazel-genfiles/adanet/core/report_pb2.py adanet/core

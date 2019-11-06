@@ -68,7 +68,7 @@ class ReportAccessorTest(parameterized.TestCase, tf.test.TestCase):
     )
     actual_iteration_reports = list(report_accessor.read_iteration_reports())
 
-    self.assertEqual(1, len(actual_iteration_reports))
+    self.assertLen(actual_iteration_reports, 1)
     self.assertEqual(materialized_reports, actual_iteration_reports[0])
 
   def test_add_to_existing_file(self):
@@ -276,7 +276,7 @@ class ReportAccessorTest(parameterized.TestCase, tf.test.TestCase):
         materialized_reports=materialized_reports,
     )
     actual_iteration_reports = list(report_accessor.read_iteration_reports())
-    self.assertEqual(1, len(actual_iteration_reports))
+    self.assertLen(actual_iteration_reports, 1)
 
   @parameterized.named_parameters({
       "testcase_name": "hparams_invalid_type",

@@ -307,31 +307,11 @@ py_library(
     ],
 )
 
-proto_library(
-    name = "report_proto",
-    srcs = ["report.proto"],
-    visibility = whitelist,
-)
-
-
-
-load("@protobuf_bzl//:protobuf.bzl", "py_proto_library")
-py_proto_library(
-    name = "report_pb2",
-    srcs = ["report.proto"],
-    default_runtime = "@com_google_protobuf//:protobuf_python",
-    protoc = "@com_google_protobuf//:protoc",
-    visibility = whitelist,
-)
-
 py_library(
     name = "report_accessor",
     srcs = ["report_accessor.py"],
     deps = [
-        ":report_pb2",
         "//adanet/subnetwork",
-        "//adanet/tf_compat",
-        "@six_archive//:six",
     ],
 )
 

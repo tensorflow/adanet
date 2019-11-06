@@ -19,7 +19,7 @@ limitations under the License.
  * Introduce support for `AutoEnsembleTPUEstimator`.
  * Introduce experimental `adanet.keras.Model` API.
  * Introduce experimental `adanet.keras.AutoEnsemble` API.
-
+ * Replace reports.proto with simple serialized JSON. No longer have proto dependencies.
 # Release 0.8.0
  * Add support for TensorFlow 2.0.
  * Begin developing experimental Keras API for auto-ensembling.
