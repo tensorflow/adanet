@@ -17,8 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from setuptools import find_packages
-from setuptools import setup
+import setuptools
 
 # Can't import the module during setup.py.
 # Use execfile to find __version__.
@@ -36,7 +35,7 @@ REQUIRED_PACKAGES = [
     'mock>=3.0,<4.0',
 ]
 
-setup(
+setuptools.setup(
     name='adanet',  # Automatic: adanet, etc. Case insensitive.
     version=__version__.replace('-', ''),
     description=(
@@ -48,7 +47,7 @@ setup(
     url='https://github.com/tensorflow/adanet',
     author='Google LLC',
     install_requires=REQUIRED_PACKAGES,
-    packages=find_packages(),
+    packages=setuptools.find_packages(),
     # PyPI package information.
     classifiers=[
         'Development Status :: 4 - Beta',

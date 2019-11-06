@@ -24,6 +24,7 @@ from adanet import tf_compat
 from adanet.ensemble.ensembler import Ensemble
 from adanet.ensemble.ensembler import Ensembler
 import tensorflow as tf
+tf = tf.compat.v2
 
 
 def _stringify(key):
