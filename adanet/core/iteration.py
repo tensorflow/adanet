@@ -786,7 +786,7 @@ class _IterationBuilder(object):
             predictions=best_predictions,
             loss=best_loss,
             # All training happens in hooks so we don't need a train op.
-            train_op=tf.no_op(),
+            train_op=tf.no_op() if training else None,
             eval_metric_ops=iteration_metrics.best_eval_metric_ops(
                 best_candidate_index, mode),
             export_outputs=best_export_outputs,
@@ -881,7 +881,7 @@ class _IterationBuilder(object):
     """
 
     if mode != tf.estimator.ModeKeys.TRAIN:
-      return tf.no_op()
+      return None
     ensemble_specs = [c.ensemble_spec for c in candidates]
     with tf_compat.v1.variable_scope("train_op"):
       train_ops = []

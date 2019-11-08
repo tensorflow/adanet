@@ -774,8 +774,7 @@ class IterationBuilderTest(tu.AdanetTestCase):
             self.evaluate(
                 _export_output_tensors(estimator_spec.export_outputs)),
             atol=1e-3)
-        self.assertEqual(iteration.estimator_spec.train_op.type,
-                         tf.no_op().type)
+        self.assertIsNone(iteration.estimator_spec.train_op)
         self.assertIsNone(iteration.estimator_spec.loss)
         self.assertIsNotNone(want_export_outputs)
         return

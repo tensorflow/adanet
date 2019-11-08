@@ -70,8 +70,6 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
     eval_on_tpu: Boolean to enable evaluating on TPU. Defaults to :code:`True`.
       Ignored if :code:`use_tpu=False`.
     export_to_tpu: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
-      NOTE: This option is currently ignored and will always be set to
-      :code:`False`.
     train_batch_size: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
       Defaults to 0 if `None`.
     eval_batch_size: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
@@ -79,7 +77,8 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
     predict_batch_size: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
       Defaults to eval_batch_size if `None`.
     embedding_config_spec: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
-      If supplied, :code:`predict` will be called on CPU.
+      If supplied, :code:`predict` will be called on CPU and no TPU compatible
+      :code:`SavedModel` will be exported.
     debug: See :class:`adanet.Estimator`.
     enable_ensemble_summaries: See :class:`adanet.Estimator`.
     enable_subnetwork_summaries: See :class:`adanet.Estimator`.
@@ -132,13 +131,17 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
     # we can use it from _create_temp_run_config.
     self._original_config = config or tf_compat.v1.estimator.tpu.RunConfig()
     self._eval_on_tpu = eval_on_tpu if self._use_tpu else False
-    # TODO: Turn back on when AdaNet fully supports export_to_tpu.
-    self._export_to_tpu = False
+    self._export_to_tpu = export_to_tpu
     self._train_batch_size = train_batch_size or 0
     self._eval_batch_size = eval_batch_size or train_batch_size or 0
     self._predict_batch_size = (
         predict_batch_size or eval_batch_size or train_batch_size or 0)
     self._embedding_config_spec = embedding_config_spec
+    if self._embedding_config_spec:
+      logging.warning(
+          "TPU does not support inference with TPUEmbedding. Force setting "
+          "`export_to_tpu=False` so no TPU SavedModel will be exported.")
+      self._export_to_tpu = False
 
     super(TPUEstimator, self).__init__(
         head=head,
@@ -202,7 +205,7 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
     # TODO: Consider extracting a common function to use here and in
     # _create_temp_estimator().
     estimator = tf_compat.v1.estimator.tpu.TPUEstimator(
-        model_fn=self._adanet_model_fn,
+        model_fn=self._create_model_fn(is_export=False),
         params=params,
         config=self._original_config,
         model_dir=self.model_dir,
@@ -235,12 +238,12 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
         session_config=self._original_config.session_config,
         protocol=self._original_config.protocol)
 
-  def _create_temp_estimator(self, config, params):
+  def _create_temp_estimator(self, config, params, is_export=False):
     """See the `Estimator` base class for details."""
 
     temp_model_dir = config.model_dir
     return tf_compat.v1.estimator.tpu.TPUEstimator(
-        model_fn=self._adanet_model_fn,
+        model_fn=self._create_model_fn(is_export),
         params=params,
         config=config,
         model_dir=temp_model_dir,
@@ -377,3 +380,28 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
       return tf.compat.v1.summary.all_v2_summary_ops()
 
     return _host_call_fn, summary_kwargs
+
+  def _create_model_fn(self, is_export):
+
+    def model_fn_for_export(features, labels, mode, params, config):
+      """The model_fn to use during export for TPU."""
+
+      assert mode == tf.estimator.ModeKeys.PREDICT
+      batch_config = tpu_estimator.BatchConfig(
+          # Set num_batch_threads to the number of TPU cores on Servomatic.
+          num_batch_threads=2,
+          max_batch_size=self._predict_batch_size,
+          # TODO: Magic number. Investigate whether there is a better
+          # way to set this, or have the user pass it in.
+          batch_timeout_micros=60 * 1000,
+          allowed_batch_sizes=[self._predict_batch_size])
+      return tpu_estimator.model_fn_inference_on_tpu(
+          self._adanet_model_fn,
+          features=features,
+          labels=labels,
+          config=config,
+          params=params,
+          batch_config=batch_config)
+
+    return (model_fn_for_export
+            if is_export and self._export_to_tpu else self._adanet_model_fn)

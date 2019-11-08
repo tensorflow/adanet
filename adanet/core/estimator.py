@@ -1029,7 +1029,8 @@ class Estimator(tf.estimator.Estimator):
                 self._compute_best_ensemble_index(checkpoint_path),
             "checkpoint_path":
                 checkpoint_path,
-        })
+        },
+        is_export=True)
     with self._force_replication_strategy():
       return temp_estimator.export_savedmodel(
           export_dir_base=export_dir_base,
@@ -1059,7 +1060,8 @@ class Estimator(tf.estimator.Estimator):
                 self._compute_best_ensemble_index(checkpoint_path),
             "checkpoint_path":
                 checkpoint_path,
-        })
+        },
+        is_export=True)
     with self._force_replication_strategy():
       return temp_estimator.export_saved_model(
           export_dir_base=export_dir_base,
@@ -1088,7 +1090,8 @@ class Estimator(tf.estimator.Estimator):
                 self._compute_best_ensemble_index(checkpoint_path),
             "checkpoint_path":
                 checkpoint_path,
-        })
+        },
+        is_export=True)
     with self._force_replication_strategy():
       return temp_estimator.experimental_export_all_saved_models(
           export_dir_base=export_dir_base,
@@ -1181,8 +1184,10 @@ class Estimator(tf.estimator.Estimator):
         session_config=config.session_config,
         protocol=config.protocol)
 
-  def _create_temp_estimator(self, config, params):
+  def _create_temp_estimator(self, config, params, is_export=False):
     """Creates a temp `Estimator` to grow the graph for the next iteration."""
+
+    del is_export  # Unused.
 
     return tf.estimator.Estimator(
         model_fn=self._adanet_model_fn, config=config, params=params)

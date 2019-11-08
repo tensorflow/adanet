@@ -149,8 +149,6 @@ class AutoEnsembleTPUEstimatorTest(parameterized.TestCase, tf.test.TestCase):
         model_dir=self.test_subdirectory,
         config=run_config,
         use_tpu=use_tpu,
-        # TODO: Support export_to_tpu for canned models.
-        export_to_tpu=False,
         train_batch_size=4,
         force_grow=True)
 
