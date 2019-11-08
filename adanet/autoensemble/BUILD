@@ -33,6 +33,7 @@ py_library(
     deps = [
         ":common",
         "//adanet/keras:model",
+        "@absl_py//absl/logging",
     ],
 )
 

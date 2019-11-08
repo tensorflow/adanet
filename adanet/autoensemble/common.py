@@ -22,21 +22,16 @@ from __future__ import print_function
 import collections
 import inspect
 
+from adanet import subnetwork as subnetwork_lib
 from adanet import tf_compat
-from adanet.subnetwork import Builder
-from adanet.subnetwork import Generator
-from adanet.subnetwork import Subnetwork
-from adanet.subnetwork import TrainOpSpec
 
 import tensorflow as tf
-
-# pylint: disable=g-direct-tensorflow-import
-from tensorflow.python.estimator.canned import prediction_keys
-from tensorflow_estimator.python.estimator import estimator as estimator_lib
-# pylint: enable=g-direct-tensorflow-import
+tf = tf.compat.v2
 
 
 def _default_logits(estimator_spec):
+  from tensorflow.python.estimator.canned import prediction_keys  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+
   if isinstance(estimator_spec.predictions, dict):
     pred_keys = prediction_keys.PredictionKeys
     if pred_keys.LOGITS in estimator_spec.predictions:
@@ -62,10 +57,9 @@ class _SecondaryTrainOpRunnerHook(tf_compat.SessionRunHook):
     run_context.session.run(self._train_op)
 
 
-class AutoEnsembleSubestimator(
+class AutoEnsembleSubestimator(  # pylint: disable=g-classes-have-attributes
     collections.namedtuple("AutoEnsembleSubestimator",
                            ["estimator", "train_input_fn"])):
-  # pylint: disable=g-classes-have-attributes
   """A subestimator to train and consider for ensembling.
 
   Args:
@@ -78,8 +72,8 @@ class AutoEnsembleSubestimator(
       of the following:
        * A `tf.data.Dataset` object: Outputs of `Dataset` object must be a tuple
          `(features, labels)` with same constraints as below. NOTE: A Dataset
-         must return *at least* two batches before hitting the end-of-input,
-         otherwise all of training terminates.
+           must return *at least* two batches before hitting the end-of-input,
+           otherwise all of training terminates.
          TODO: Figure out how to handle single-batch datasets.
        * A tuple `(features, labels)`: Where `features` is a `tf.Tensor` or a
          dictionary of string feature name to `Tensor` and `labels` is a
@@ -90,6 +84,7 @@ class AutoEnsembleSubestimator(
   Returns:
     An `AutoEnsembleSubestimator` instance to be auto-ensembled.
   """
+
   # pylint: enable=g-classes-have-attributes
 
   def __new__(cls, estimator, train_input_fn=None):
@@ -97,7 +92,7 @@ class AutoEnsembleSubestimator(
                                                         train_input_fn)
 
 
-class _BuilderFromSubestimator(Builder):
+class _BuilderFromSubestimator(subnetwork_lib.Builder):
   """An `adanet.Builder` from a :class:`tf.estimator.Estimator`."""
 
   def __init__(self, name, subestimator, logits_fn, last_layer_fn, config):
@@ -126,7 +121,7 @@ class _BuilderFromSubestimator(Builder):
       else:
         local_init_op = None
 
-      train_op = TrainOpSpec(
+      train_op = subnetwork_lib.TrainOpSpec(
           estimator_spec.train_op,
           chief_hooks=estimator_spec.training_chief_hooks,
           hooks=estimator_spec.training_hooks)
@@ -178,7 +173,7 @@ class _BuilderFromSubestimator(Builder):
       # AdaNet framework instead of the Estimator's monitored training session.
       hooks = bagging_train_op_spec.hooks + (_SecondaryTrainOpRunnerHook(
           bagging_train_op_spec.train_op),)
-      train_op_spec = TrainOpSpec(
+      train_op_spec = subnetwork_lib.TrainOpSpec(
           train_op=tf.no_op(),
           chief_hooks=bagging_train_op_spec.chief_hooks,
           hooks=hooks)
@@ -190,7 +185,7 @@ class _BuilderFromSubestimator(Builder):
 
     # TODO: Replace with variance complexity measure.
     complexity = tf.constant(0.)
-    return Subnetwork(
+    return subnetwork_lib.Subnetwork(
         logits=logits,
         last_layer=last_layer,
         shared={"train_op": train_op_spec},
@@ -203,10 +198,14 @@ class _BuilderFromSubestimator(Builder):
 
 
 def _convert_to_subestimator(candidate):
+  """Converts a candidate to an AutoEnsembleSubestimator."""
+
   if callable(candidate):
     return candidate
   if isinstance(candidate, AutoEnsembleSubestimator):
     return lambda config: candidate
+
+  from tensorflow_estimator.python.estimator import estimator as estimator_lib  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
   if isinstance(candidate,
                 (estimator_lib.Estimator, estimator_lib.EstimatorV2)):
     return lambda config: AutoEnsembleSubestimator(candidate)
@@ -215,7 +214,7 @@ def _convert_to_subestimator(candidate):
       "adanet.AutoEnsembleSubestimator but got {}".format(candidate.__class__))
 
 
-class _GeneratorFromCandidatePool(Generator):
+class _GeneratorFromCandidatePool(subnetwork_lib.Generator):
   """An `adanet.Generator` from a pool of `Estimator` and `Model` instances."""
 
   def __init__(self, candidate_pool, logits_fn, last_layer_fn):

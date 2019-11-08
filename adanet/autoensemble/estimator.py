@@ -19,14 +19,14 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from adanet import core
 from adanet.autoensemble.common import _GeneratorFromCandidatePool
-from adanet.core import Estimator
-from adanet.core import TPUEstimator
 
 import tensorflow as tf
+tf = tf.compat.v2
 
 
-class AutoEnsembleEstimator(Estimator):  # pylint: disable=g-classes-have-attributes
+class AutoEnsembleEstimator(core.Estimator):  # pylint: disable=g-classes-have-attributes
   # pyformat: disable
   """A :class:`tf.estimator.Estimator` that learns to ensemble models.
 
@@ -221,7 +221,7 @@ class AutoEnsembleEstimator(Estimator):  # pylint: disable=g-classes-have-attrib
         **kwargs)
 
 
-class AutoEnsembleTPUEstimator(TPUEstimator):  # pylint: disable=g-classes-have-attributes
+class AutoEnsembleTPUEstimator(core.TPUEstimator):  # pylint: disable=g-classes-have-attributes
   # pyformat: disable
   """A :class:`tf.estimator.tpu.TPUEstimator` that learns to ensemble models.
 
