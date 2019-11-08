@@ -28,5 +28,8 @@ dist/
 .pytest_cache/
 .coverage
 
+# Pytype
+.pytype
+
 # Other
 *.DS_Store
