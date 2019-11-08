@@ -23,10 +23,8 @@ import tensorflow as tf_v2
 # pylint: disable=unused-import
 # pylint: disable=g-direct-tensorflow-import
 # pylint: disable=g-import-not-at-top
-try:
-  from tensorflow.python.tpu import tpu_function
-except ImportError:
-  from tensorflow.contrib.tpu.python.tpu import tpu_function
+from tensorflow.python.tpu import tpu_function
+
 try:
   from tensorflow.python.keras.metrics import Metric
 except ImportError:
@@ -35,14 +33,8 @@ except ImportError:
   # workflows.
   Metric = object
 
-try:
-  from tensorflow.python.data.ops.dataset_ops import DatasetV1
-except AttributeError:
-  DatasetV1 = tf.data.Dataset
-try:
-  from tensorflow.python.data.ops.dataset_ops import DatasetV2
-except AttributeError:
-  DatasetV2 = tf.data.Dataset
+DatasetV1 = tf.compat.v1.data.Dataset
+DatasetV2 = tf.compat.v2.data.Dataset
 
 from tensorflow.python import tf2
 from tensorflow_estimator.python.estimator.head import regression_head
@@ -50,15 +42,8 @@ from tensorflow_estimator.python.estimator.head import regression_head
 # pylint: enable=g-direct-tensorflow-import
 # pylint: enable=unused-import
 
-try:
-  v1 = tf.compat.v1
-except AttributeError:
-  v1 = tf
-
-try:
-  v2 = tf.compat.v2
-except AttributeError:
-  v2 = tf.contrib
+v1 = tf.compat.v1
+v2 = tf.compat.v2
 
 try:
   SessionRunHook = tf.estimator.SessionRunHook

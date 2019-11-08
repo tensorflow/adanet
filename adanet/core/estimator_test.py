@@ -350,7 +350,7 @@ class _WidthLimitingDNNBuilder(_DNNBuilder):
     self._width_limit = width_limit
 
   def prune_previous_ensemble(self, previous_ensemble):
-    indices = range(len(previous_ensemble.weighted_subnetworks))
+    indices = list(range(len(previous_ensemble.weighted_subnetworks)))
     if self._width_limit is None:
       return indices
     if self._width_limit == 1:

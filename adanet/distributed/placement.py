@@ -24,16 +24,16 @@ from absl import logging
 from adanet import tf_compat
 from adanet.distributed.devices import _OpNameHashStrategy
 import numpy as np
+import six
 
 
+@six.add_metaclass(abc.ABCMeta)
 class PlacementStrategy(object):
   """Abstract placement strategy for distributed training.
 
   Given a cluster of workers, the placement strategy determines which subgraph
   each worker constructs.
   """
-
-  __metaclass__ = abc.ABCMeta
 
   @property
   def config(self):

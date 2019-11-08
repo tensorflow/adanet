@@ -25,6 +25,7 @@ import os
 
 from absl import logging
 from adanet import tf_compat
+import six
 import tensorflow as tf_v1
 
 # pylint: disable=g-direct-tensorflow-import
@@ -37,11 +38,9 @@ tf = tf_v1.compat.v2
 
 _DEFAULT_SCOPE = "default"
 
-
+@six.add_metaclass(abc.ABCMeta)
 class Summary(object):
   """Interface for writing summaries to Tensorboard."""
-
-  __metaclass__ = abc.ABCMeta
 
   @abc.abstractmethod
   def scalar(self, name, tensor, family=None, description=None):

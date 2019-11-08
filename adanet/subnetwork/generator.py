@@ -22,6 +22,8 @@ from __future__ import print_function
 import abc
 import collections
 
+import six
+
 
 def _validate_nested_persisted_tensors(persisted_tensors):
   """Raises a ValueError when a nested dict is empty in persisted_tensors."""
@@ -156,6 +158,7 @@ class Subnetwork(
         local_init_ops=local_init_ops)
 
 
+@six.add_metaclass(abc.ABCMeta)
 class Builder(object):
   """Interface for a subnetwork builder.
 
@@ -165,8 +168,6 @@ class Builder(object):
   another at the end of the iteration, and the best one is selected based on its
   complexity-regularized loss.
   """
-
-  __metaclass__ = abc.ABCMeta
 
   @abc.abstractproperty
   def name(self):
@@ -269,6 +270,7 @@ class Builder(object):
     return None
 
 
+@six.add_metaclass(abc.ABCMeta)
 class Generator(object):
   """Interface for a candidate subnetwork generator.
 
@@ -276,8 +278,6 @@ class Generator(object):
   responsible for generating the set of candidate subnetworks for iteration t
   that minimize the objective as part of an ensemble.
   """
-
-  __metaclass__ = abc.ABCMeta
 
   @abc.abstractmethod
   def generate_candidates(self, previous_ensemble, iteration_number,
