@@ -17,9 +17,9 @@ env:
     # We test against recent versions of TensorFlow and tf-nightly.
 
     # Quick test suite.
-    - TF_VERSION="1.14.*" NODE_INDEX=0
-    - TF_VERSION="1.14.*" NODE_INDEX=1
-    - TF_VERSION="1.14.*" NODE_INDEX=2
+    - TF_VERSION="1.15.*" NODE_INDEX=0
+    - TF_VERSION="1.15.*" NODE_INDEX=1
+    - TF_VERSION="1.15.*" NODE_INDEX=2
     - TF_VERSION="tf-nightly" NODE_INDEX=0
     - TF_VERSION="tf-nightly" NODE_INDEX=1
     - TF_VERSION="tf-nightly" NODE_INDEX=2
