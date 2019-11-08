@@ -26,6 +26,8 @@ import sys
 
 from absl import flags
 from absl.testing import parameterized
+from adanet import ensemble as ensemble_lib
+from adanet import subnetwork as subnetwork_lib
 from adanet import tf_compat
 from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _Candidate
@@ -34,11 +36,9 @@ from adanet.core.ensemble_builder import _SubnetworkSpec
 from adanet.core.eval_metrics import _EnsembleMetrics
 from adanet.core.eval_metrics import _IterationMetrics
 from adanet.core.eval_metrics import _SubnetworkMetrics
-from adanet.ensemble import ComplexityRegularized
-from adanet.ensemble import WeightedSubnetwork
-from adanet.subnetwork import Subnetwork
 import tensorflow as tf
-from tensorflow_estimator.python.estimator.head import regression_head
+
+tf = tf.compat.v2
 
 
 def dummy_tensor(shape=(), random_seed=42):
@@ -109,12 +109,12 @@ def dummy_ensemble_spec(name,
   else:
     predictions = logits
   weighted_subnetworks = [
-      WeightedSubnetwork(
+      ensemble_lib.WeightedSubnetwork(
           name=name,
           iteration_number=1,
           logits=dummy_tensor([2, 1], random_seed * 4),
           weight=dummy_tensor([2, 1], random_seed * 4),
-          subnetwork=Subnetwork(
+          subnetwork=subnetwork_lib.Subnetwork(
               last_layer=dummy_tensor([1, 2], random_seed * 4),
               logits=dummy_tensor([2, 1], random_seed * 4),
               complexity=1.,
@@ -125,7 +125,7 @@ def dummy_ensemble_spec(name,
   bias = tf.constant(bias)
   return _EnsembleSpec(
       name=name,
-      ensemble=ComplexityRegularized(
+      ensemble=ensemble_lib.ComplexityRegularized(
           weighted_subnetworks=weighted_subnetworks * num_subnetworks,
           bias=bias,
           logits=logits,
@@ -233,6 +233,7 @@ def dataset_input_fn(features=8., labels=9., return_dataset=False):
 
 
 def head():
+  from tensorflow_estimator.python.estimator.head import regression_head  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
   return regression_head.RegressionHead(
       loss_reduction=tf_compat.SUM_OVER_BATCH_SIZE)
 

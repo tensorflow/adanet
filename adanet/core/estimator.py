@@ -26,37 +26,34 @@ import os
 import time
 
 from absl import logging
+from adanet import distributed as distributed_lib
+from adanet import ensemble as ensemble_lib
 from adanet import tf_compat
 from adanet.core.architecture import _Architecture
 from adanet.core.candidate import _CandidateBuilder
 from adanet.core.ensemble_builder import _EnsembleBuilder
 from adanet.core.ensemble_builder import _SubnetworkManager
+from adanet.core.iteration import _Iteration
 from adanet.core.iteration import _IterationBuilder
 from adanet.core.report_accessor import _ReportAccessor
 from adanet.core.summary import _ScopedSummary
 from adanet.core.summary import _ScopedSummaryV2
 from adanet.core.summary import _TPUScopedSummary
 from adanet.core.timer import _CountDownTimer
-from adanet.distributed import ReplicationStrategy
 from adanet.distributed.devices import monkey_patch_default_variable_placement_strategy
-from adanet.ensemble import ComplexityRegularizedEnsembler
-from adanet.ensemble import GrowStrategy
 import numpy as np
 import six
 import tensorflow as tf
+from typing import Any, Callable, Dict, Optional, Sequence, Text  # (b/144172555) pylint:disable=unused-import
 
-# pylint: disable=g-direct-tensorflow-import
-from tensorflow.python.ops import check_ops
-from tensorflow.python.ops import metrics_impl
-from tensorflow.python.util import deprecation
-from tensorflow_estimator.python.estimator import util
-# pylint: enable=g-direct-tensorflow-import
+tf = tf.compat.v2
 
 
 class _StopAfterTrainingHook(tf_compat.SessionRunHook):
   """Hook that requests stop once iteration is over."""
 
   def __init__(self, iteration, after_fn):
+    # type: (_Iteration, Callable[[], None]) -> None
     """Initializes a `_StopAfterTrainingHook`.
 
     Args:
@@ -156,6 +153,7 @@ class _EvalMetricSaverHook(tf_compat.SessionRunHook):
   """A hook for writing candidate evaluation metrics as summaries to disk."""
 
   def __init__(self, name, kind, eval_metrics, output_dir):
+    # type: (Text, Text, Any, Text) -> None
     """Initializes a `_EvalMetricSaverHook` instance.
 
     Args:
@@ -333,6 +331,7 @@ class _GraphGrowingHookDecorator(tf_compat.SessionRunHook):
   """Decorates a SessionRunHook to only run begin() and end() methods."""
 
   def __init__(self, hook):
+    # type: (tf_compat.SessionRunHook) -> None
     """Initializes a _GraphGrowingHookDecorator instance.
 
     Args:
@@ -348,6 +347,7 @@ class _GraphGrowingHookDecorator(tf_compat.SessionRunHook):
 
 
 def _delete_directory(directory):
+  # type: (Text) -> None
   """Removes directory and handles any folder or file exceptions."""
   if not tf.io.gfile.exists(directory):
     return
@@ -377,6 +377,8 @@ def _disable_asserts_for_confusion_matrix_at_thresholds():
     Nothing. Simply returns control back to the caller.
   """
 
+  from tensorflow.python.ops import metrics_impl  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+
   def _no_op_assert(x, y, data=None, summarize=None, message=None, name=None):
     """Dummy assert that never fails."""
 
@@ -393,6 +395,7 @@ def _disable_asserts_for_confusion_matrix_at_thresholds():
                                                       includes=None):
     """Calls _confusion_matrix_at_thresholds without asserts; returns output."""
 
+    from tensorflow.python.ops import check_ops  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
     old_assert_greater_equal = check_ops.assert_greater_equal
     old_assert_less_equal = check_ops.assert_less_equal
     setattr(check_ops, "assert_greater_equal", _no_op_assert)
@@ -685,7 +688,10 @@ class Estimator(tf.estimator.Estimator):
                            default_ensembler_kwargs.keys()))
     if not ensemblers:
       default_ensembler_kwargs["model_dir"] = self.model_dir
-      ensemblers = [ComplexityRegularizedEnsembler(**default_ensembler_kwargs)]
+      ensemblers = [
+          ensemble_lib.ComplexityRegularizedEnsembler(
+              **default_ensembler_kwargs)
+      ]
 
     # These are defined after base Estimator's init so that they can
     # use the same temporary model_dir as the underlying Estimator even if
@@ -703,7 +709,7 @@ class Estimator(tf.estimator.Estimator):
     subnetwork_manager = _SubnetworkManager(
         head=head, metric_fn=metric_fn, use_tpu=self._use_tpu)
     if not placement_strategy:
-      placement_strategy = ReplicationStrategy()
+      placement_strategy = distributed_lib.ReplicationStrategy()
     self._iteration_builder = _IterationBuilder(
         candidate_builder,
         subnetwork_manager,
@@ -719,7 +725,9 @@ class Estimator(tf.estimator.Estimator):
         enable_ensemble_summaries=enable_ensemble_summaries,
         enable_subnetwork_summaries=enable_subnetwork_summaries,
         enable_subnetwork_reports=self._report_materializer is not None)
-    self._ensemble_strategies = ensemble_strategies or [GrowStrategy()]
+    self._ensemble_strategies = ensemble_strategies or [
+        ensemble_lib.GrowStrategy()
+    ]
 
     report_dir = report_dir or os.path.join(self._model_dir, "report")
     self._report_accessor = _ReportAccessor(report_dir)
@@ -744,19 +752,22 @@ class Estimator(tf.estimator.Estimator):
           scope=scope, skip_summary=skip_summary, namespace=namespace)
 
   def _checkpoint_iteration_number(self, checkpoint_path):
+    # type: (Text) -> int
     """Returns the iteration number from the latest checkpoint."""
 
     if checkpoint_path is None:
       return 0
-    return tf.train.load_variable(checkpoint_path, self._Keys.CURRENT_ITERATION)
+    return tf.train.load_variable(checkpoint_path,
+                                  self._Keys.CURRENT_ITERATION).item()
 
   def _checkpoint_global_step(self, checkpoint_path):
+    # type: (Text) -> int
     """Returns the global step from the given checkpoint."""
 
     if checkpoint_path is None:
       return 0
     return tf.train.load_variable(checkpoint_path,
-                                  tf_compat.v1.GraphKeys.GLOBAL_STEP)
+                                  tf_compat.v1.GraphKeys.GLOBAL_STEP).item()
 
   def train(self,
             input_fn,
@@ -1007,6 +1018,8 @@ class Estimator(tf.estimator.Estimator):
     return temp_estimator.predict(input_fn, predict_keys, hooks,
                                   checkpoint_path, yield_single_examples)
 
+  from tensorflow.python.util import deprecation  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+
   @deprecation.deprecated(
       None, "This function has been renamed, use `export_saved_model` instead.")
   def export_savedmodel(self,
@@ -1101,6 +1114,7 @@ class Estimator(tf.estimator.Estimator):
           checkpoint_path=checkpoint_path)
 
   def _compute_best_ensemble_index(self, checkpoint_path):
+    # type: (Text) -> Optional[int]
     """Runs the Evaluator to obtain the best ensemble index among candidates."""
 
     # AdaNet Replay.
@@ -1133,7 +1147,8 @@ class Estimator(tf.estimator.Estimator):
 
     temp_placement_strategy = self._iteration_builder.placement_strategy
     try:
-      self._iteration_builder.placement_strategy = ReplicationStrategy()
+      placement_strategy = distributed_lib.ReplicationStrategy()
+      self._iteration_builder.placement_strategy = placement_strategy
       yield
     finally:
       self._iteration_builder.placement_strategy = temp_placement_strategy
@@ -1166,6 +1181,8 @@ class Estimator(tf.estimator.Estimator):
       ValueError: if the result is a list or tuple of length != 2.
     """
 
+    from tensorflow_estimator.python.estimator import util  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+
     with tf.Graph().as_default() as g:
       tf_compat.v1.set_random_seed(config.tf_random_seed)
       # Create global step before calling model_fn as does superclass.
@@ -1175,6 +1192,7 @@ class Estimator(tf.estimator.Estimator):
       yield util.parse_input_fn_result(input_fn_outs)
 
   def _create_temp_run_config(self, temp_model_dir):
+    # type: (Text) -> tf.estimator.RunConfig
     """Creates a temp `RunConfig` for the bookkeeping phase."""
 
     config = self.config
@@ -1185,6 +1203,7 @@ class Estimator(tf.estimator.Estimator):
         protocol=config.protocol)
 
   def _create_temp_estimator(self, config, params, is_export=False):
+    # type: (tf.estimator.RunConfig, Dict[str, Any], bool) -> tf.estimator.Estimator  # pylint:disable=line-too-long
     """Creates a temp `Estimator` to grow the graph for the next iteration."""
 
     del is_export  # Unused.
@@ -1351,6 +1370,7 @@ class Estimator(tf.estimator.Estimator):
     logging.info("Done adapting graph and incrementing iteration number.")
 
   def _architecture_filename(self, iteration_number):
+    # type: (int) -> Text
     """Returns the filename of the given iteration's frozen graph."""
 
     frozen_checkpoint = os.path.join(self.model_dir, "architecture")
@@ -1360,6 +1380,7 @@ class Estimator(tf.estimator.Estimator):
                                current_iteration,
                                input_hooks,
                                checkpoint_path=None):
+    # type: (_Iteration, Sequence[tf_compat.SessionRunHook], Text) -> int
     """Returns the best candidate ensemble's index in this iteration.
 
     Evaluates the ensembles using an `Evaluator` when provided. Otherwise,
@@ -1648,6 +1669,7 @@ class Estimator(tf.estimator.Estimator):
         output_dir=os.path.join(self.model_dir, kind, name, eval_subdir))
 
   def _save_architecture(self, filename, architecture, checkpoint_path):
+    # type: (Text, _Architecture, Text) -> None
     """Persists the ensemble's architecture in a serialized format.
 
     Writes to a text file with one subnetwork's iteration number and name
@@ -1661,8 +1683,8 @@ class Estimator(tf.estimator.Estimator):
 
     # Make directories since model_dir may not have been created yet.
     tf.io.gfile.makedirs(os.path.dirname(filename))
-    iteration_number = self._checkpoint_iteration_number(checkpoint_path).item()
-    global_step = self._checkpoint_global_step(checkpoint_path).item()
+    iteration_number = self._checkpoint_iteration_number(checkpoint_path)
+    global_step = self._checkpoint_global_step(checkpoint_path)
     serialized_architecture = architecture.serialize(iteration_number,
                                                      global_step)
     logging.info("Saving architecture to %s:\n%s", filename,
@@ -1671,6 +1693,7 @@ class Estimator(tf.estimator.Estimator):
       record_file.write(serialized_architecture)
 
   def _read_architecture(self, filename):
+    # type: (Text) -> _Architecture
     """Reads an ensemble architecture from disk.
 
     Assumes the file was written with `_save_architecture`.
@@ -1693,6 +1716,7 @@ class Estimator(tf.estimator.Estimator):
 
   def _find_ensemble_candidate(self, ensemble_candidate_name,
                                ensemble_candidates):
+    # type: (Text, Sequence[ensemble_lib.Candidate]) -> ensemble_lib.Candidate
     """Returns the ensemble candidate with the given name."""
 
     for ensemble_candidate in ensemble_candidates:

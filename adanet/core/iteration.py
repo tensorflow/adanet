@@ -34,6 +34,9 @@ from adanet.core.eval_metrics import _IterationMetrics
 
 import numpy as np
 import tensorflow as tf
+from typing import Any
+
+tf = tf.compat.v2
 
 
 class _TrainManager(object):
@@ -230,8 +233,7 @@ class _GlobalStepSetterHook(tf_compat.SessionRunHook):
     self._global_step_combiner_fn = global_step_combiner_fn
 
   def begin(self):
-    logging.info("Starting iteration at global step %s",
-                 self._base_global_step)
+    logging.info("Starting iteration at global step %s", self._base_global_step)
     steps = [
         self._base_global_step + s.step.read_value()
         for s in self._subnetwork_specs
@@ -1049,21 +1051,20 @@ class _IterationBuilder(object):
       return candidates[0].ensemble_spec.predictions
 
     with tf_compat.v1.variable_scope("best_predictions"):
-      predictions = None
-      for candidate in candidates:
-        ensemble_spec = candidate.ensemble_spec
-        if isinstance(ensemble_spec.predictions, dict):
-          if not predictions:
-            predictions = {}
+      if isinstance(candidates[0].ensemble_spec.predictions, dict):
+        predictions = {}
+        for candidate in candidates:
+          ensemble_spec = candidate.ensemble_spec
           for key in sorted(ensemble_spec.predictions):
             tensor = ensemble_spec.predictions[key]
             if key in predictions:
               predictions[key].append(tensor)
             else:
               predictions[key] = [tensor]
-        else:
-          if not predictions:
-            predictions = []
+      else:
+        predictions = []
+        for candidate in candidates:
+          ensemble_spec = candidate.ensemble_spec
           predictions.append(ensemble_spec.predictions)
 
       if isinstance(predictions, dict):
@@ -1125,7 +1126,7 @@ class _IterationBuilder(object):
       return candidates[0].ensemble_spec.export_outputs
     with tf_compat.v1.variable_scope("best_export_outputs"):
       # Group tensors by export output key and ExportOutput type.
-      export_outputs = {}
+      export_outputs = {}  # type: Any
       for candidate in candidates:
         ensemble_spec = candidate.ensemble_spec
         for key in sorted(ensemble_spec.export_outputs):

@@ -37,7 +37,10 @@ py_library(
         ":summary",
         ":timer",
         "//adanet/distributed",
+        "//adanet/distributed:devices",
         "//adanet/ensemble",
+        "//adanet/tf_compat",
+        "@absl_py//absl/logging",
         "@six_archive//:six",
     ],
 )
@@ -115,9 +118,9 @@ py_library(
     name = "tpu_estimator",
     srcs = ["tpu_estimator.py"],
     deps = [
-        ":ensemble_builder",
         ":estimator",
-        "@six_archive//:six",
+        "//adanet/tf_compat",
+        "@absl_py//absl/logging",
     ],
 )
 
@@ -137,6 +140,7 @@ py_library(
     name = "candidate",
     srcs = ["candidate.py"],
     deps = [
+        "//adanet/tf_compat",
     ],
 )
 
@@ -158,7 +162,8 @@ py_library(
         ":eval_metrics",
         "//adanet/distributed",
         "//adanet/subnetwork",
-        "@six_archive//:six",
+        "//adanet/tf_compat",
+        "@absl_py//absl/logging",
     ],
 )
 
@@ -182,6 +187,7 @@ py_library(
     srcs = ["evaluator.py"],
     deps = [
         "//adanet/tf_compat",
+        "@absl_py//absl/logging",
     ],
 )
 
@@ -204,7 +210,10 @@ py_library(
         ":architecture",
         ":eval_metrics",
         ":summary",
+        "//adanet/ensemble",
         "//adanet/subnetwork",
+        "//adanet/tf_compat",
+        "@absl_py//absl/logging",
     ],
 )
 
@@ -251,6 +260,8 @@ py_library(
     name = "summary",
     srcs = ["summary.py"],
     deps = [
+        "//adanet/tf_compat",
+        "@absl_py//absl/logging",
     ],
 )
 
@@ -312,6 +323,8 @@ py_library(
     srcs = ["report_accessor.py"],
     deps = [
         "//adanet/subnetwork",
+        "@absl_py//absl/logging",
+        "@six_archive//:six",
     ],
 )
 
@@ -330,6 +343,8 @@ py_library(
     srcs = ["report_materializer.py"],
     deps = [
         "//adanet/subnetwork",
+        "//adanet/tf_compat",
+        "@absl_py//absl/logging",
     ],
 )
 

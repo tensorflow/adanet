@@ -27,19 +27,16 @@ import inspect
 import os
 
 from absl import logging
+from adanet import ensemble as ensemble_lib
+from adanet import subnetwork as subnetwork_lib
 from adanet import tf_compat
 from adanet.core.architecture import _Architecture
 from adanet.core.eval_metrics import _EnsembleMetrics
 from adanet.core.eval_metrics import _SubnetworkMetrics
 from adanet.core.summary import monkey_patched_summaries
-from adanet.ensemble import ComplexityRegularized
-from adanet.subnetwork import TrainOpSpec
 import tensorflow as tf_v1
-import tensorflow as tf
-# pylint: disable=g-direct-tensorflow-import
-from tensorflow.python.training import training as train
-from tensorflow.python.training import training_util
-# pylint: enable=g-direct-tensorflow-import
+
+tf = tf_v1.compat.v2
 
 _VALID_METRIC_FN_ARGS = {"features", "labels", "predictions"}
 
@@ -135,14 +132,19 @@ def _get_value(target, key):
 
 
 def _to_train_op_spec(train_op):
-  if isinstance(train_op, TrainOpSpec):
+  if isinstance(train_op, subnetwork_lib.TrainOpSpec):
     return train_op
-  return TrainOpSpec(train_op)
+  return subnetwork_lib.TrainOpSpec(train_op)
 
 
 @contextlib.contextmanager
 def _monkey_patch_context(iteration_step_scope, scoped_summary, trainable_vars):
   """Monkey-patches global attributes with subnetwork-specifics ones."""
+
+  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+  from tensorflow.python.training import training as train
+  from tensorflow.python.training import training_util
+  # pylint: enable=g-direct-tensorflow-import,g-import-not-at-top
 
   old_get_global_step_fn = tf_compat.v1.train.get_global_step
   old_get_or_create_global_step_fn = tf_compat.v1.train.get_or_create_global_step
@@ -317,8 +319,8 @@ class _EnsembleBuilder(object):
       if my_ensemble_index is not None:
         replay_indices.append(my_ensemble_index)
 
-      architecture = _Architecture(candidate.name, ensembler.name,
-                                   replay_indices=replay_indices)
+      architecture = _Architecture(
+          candidate.name, ensembler.name, replay_indices=replay_indices)
       previous_subnetworks = []
       previous_subnetwork_specs = []
       subnetwork_builders = []
@@ -384,7 +386,7 @@ class _EnsembleBuilder(object):
       if mode != tf.estimator.ModeKeys.PREDICT:
         adanet_loss = estimator_spec.loss
         # Add ensembler specific loss
-        if isinstance(ensemble, ComplexityRegularized):
+        if isinstance(ensemble, ensemble_lib.ComplexityRegularized):
           adanet_loss += ensemble.complexity_regularization
 
       predictions = estimator_spec.predictions

@@ -26,6 +26,8 @@ from adanet import tf_compat
 import numpy as np
 import tensorflow as tf
 
+tf = tf.compat.v2
+
 
 # TODO: Remove uses of Evaluator once AdaNet Ranker is implemented.
 class Evaluator(object):

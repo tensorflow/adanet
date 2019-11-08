@@ -26,7 +26,7 @@ from absl import logging
 from adanet import tf_compat
 import six
 import tensorflow as tf
-from tensorflow.python.util import nest  # pylint: disable=g-direct-tensorflow-import
+tf = tf.compat.v2
 
 
 def _call_eval_metrics(eval_metrics):
@@ -59,11 +59,13 @@ class _EvalMetricsStore(object):
   def flatten_args(self):
     """Flattens the eval_metrics arguments to a list."""
 
+    from tensorflow.python.util import nest  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
     return nest.flatten(self._args)
 
   def pack_args(self, args):
     """Packs the given list of arguments into the internal args structure."""
 
+    from tensorflow.python.util import nest  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
     return nest.pack_sequence_as(self._args, args)
 
 
@@ -157,6 +159,7 @@ class _SubnetworkMetrics(object):
     Returns:
       The original metric_fn wrapped with a template function.
     """
+
     def _metric_fn(*args, **kwargs):
       """The wrapping function to be returned."""
 

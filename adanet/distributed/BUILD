@@ -18,9 +18,7 @@ py_library(
 py_library(
     name = "devices",
     srcs = ["devices.py"],
-    tags = [
-        "PYDEPS=WARN",
-    ],
+    visibility = ["//adanet/core:__subpackages__"],
     deps = [
     ],
 )

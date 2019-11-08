@@ -24,6 +24,7 @@ import functools
 import adanet
 from six.moves import range
 import tensorflow as tf
+tf = tf.compat.v2
 
 _NUM_LAYERS_KEY = "num_layers"
 

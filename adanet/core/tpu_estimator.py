@@ -28,11 +28,7 @@ from adanet import tf_compat
 from adanet.core.estimator import Estimator
 import tensorflow as tf
 
-# pylint: disable=g-direct-tensorflow-import
-from tensorflow.python.ops import summary_ops_v2
-from tensorflow.python.util import function_utils
-from tensorflow_estimator.python.estimator.tpu import tpu_estimator
-# pylint: enable=g-direct-tensorflow-import
+tf = tf.compat.v2
 
 
 # pylint: disable=g-classes-have-attributes
@@ -78,7 +74,7 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
       Defaults to eval_batch_size if `None`.
     embedding_config_spec: See :class:`tf.compat.v1.estimator.tpu.TPUEstimator`.
       If supplied, :code:`predict` will be called on CPU and no TPU compatible
-      :code:`SavedModel` will be exported.
+        :code:`SavedModel` will be exported.
     debug: See :class:`adanet.Estimator`.
     enable_ensemble_summaries: See :class:`adanet.Estimator`.
     enable_subnetwork_summaries: See :class:`adanet.Estimator`.
@@ -143,6 +139,7 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
           "`export_to_tpu=False` so no TPU SavedModel will be exported.")
       self._export_to_tpu = False
 
+    from tensorflow_estimator.python.estimator.tpu import tpu_estimator  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
     super(TPUEstimator, self).__init__(
         head=head,
         subnetwork_generator=subnetwork_generator,
@@ -202,6 +199,7 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
         "checkpoint_path":
             checkpoint_path,
     })
+    from tensorflow_estimator.python.estimator.tpu import tpu_estimator  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
     # TODO: Consider extracting a common function to use here and in
     # _create_temp_estimator().
     estimator = tf_compat.v1.estimator.tpu.TPUEstimator(
@@ -241,6 +239,8 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
   def _create_temp_estimator(self, config, params, is_export=False):
     """See the `Estimator` base class for details."""
 
+    from tensorflow_estimator.python.estimator.tpu import tpu_estimator  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+
     temp_model_dir = config.model_dir
     return tf_compat.v1.estimator.tpu.TPUEstimator(
         model_fn=self._create_model_fn(is_export),
@@ -263,6 +263,7 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
 
     # Bind parameters to input_fn since the parent's input_fn is not expected to
     # have any arguments.
+    from tensorflow.python.util import function_utils  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
     input_fn_args = function_utils.fn_args(input_fn)
     kwargs = {}
     if "mode" in input_fn_args:
@@ -368,6 +369,8 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
         List of summary ops to run on the CPU host.
       """
 
+      from tensorflow.python.ops import summary_ops_v2  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+
       gs = tf.cast(kwargs.pop("global_step")[0], dtype=tf.int64)
       for i, summary in enumerate(current_iteration.summaries):
         with summary_ops_v2.create_file_writer(summary.logdir).as_default():
@@ -382,6 +385,8 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
     return _host_call_fn, summary_kwargs
 
   def _create_model_fn(self, is_export):
+
+    from tensorflow_estimator.python.estimator.tpu import tpu_estimator  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
 
     def model_fn_for_export(features, labels, mode, params, config):
       """The model_fn to use during export for TPU."""

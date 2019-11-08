@@ -23,8 +23,7 @@ import collections
 
 from adanet import tf_compat
 import tensorflow as tf
-
-from tensorflow.python.training import moving_averages
+tf = tf.compat.v2
 
 
 class _Candidate(
@@ -93,6 +92,8 @@ class _CandidateBuilder(object):
     Returns:
       A _Candidate instance.
     """
+
+    from tensorflow.python.training import moving_averages  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
 
     candidate_scope = "candidate_{}".format(ensemble_spec.name)
 

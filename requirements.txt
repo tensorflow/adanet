@@ -7,3 +7,5 @@ nose-parallel==0.3.1
 coverage>=4.5,<5.0
 protobuf>=3.6,<4.0
 mock>=3.0,<4.0
+pytype==2019.10.17
+typing==3.7.4.1

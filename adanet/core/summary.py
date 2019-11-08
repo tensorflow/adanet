@@ -26,18 +26,14 @@ import os
 from absl import logging
 from adanet import tf_compat
 import tensorflow as tf_v1
-import tensorflow as tf
+
 # pylint: disable=g-direct-tensorflow-import
-from tensorboard.compat import tf2
-from tensorboard.plugins.audio import summary_v2 as audio_v2_lib
-from tensorboard.plugins.histogram import summary_v2 as histogram_v2_lib
-from tensorboard.plugins.image import summary_v2 as image_v2_lib
-from tensorboard.plugins.scalar import summary_v2 as scalar_v2_lib
+from tensorboard import compat
 from tensorflow.python.ops import summary_op_util
-from tensorflow.python.ops import summary_ops_v2 as summary_v2_lib
-from tensorflow.python.ops.summary_ops_v2 import _INVALID_SCOPE_CHARACTERS
 from tensorflow.python.summary import summary as summary_lib
 # pylint: enable=g-direct-tensorflow-import
+
+tf = tf_v1.compat.v2
 
 _DEFAULT_SCOPE = "default"
 
@@ -402,6 +398,13 @@ class _ScopedSummaryV2(Summary):
       A `_ScopedSummary` instance.
     """
 
+    # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+    from tensorboard.plugins.audio import summary_v2 as audio_v2_lib
+    from tensorboard.plugins.histogram import summary_v2 as histogram_v2_lib
+    from tensorboard.plugins.image import summary_v2 as image_v2_lib
+    from tensorboard.plugins.scalar import summary_v2 as scalar_v2_lib
+    # pylint: enable=g-direct-tensorflow-import,g-import-not-at-top
+
     assert logdir
 
     if scope == _DEFAULT_SCOPE:
@@ -460,6 +463,11 @@ class _ScopedSummaryV2(Summary):
   def _strip_tag_scope(self, additional_scope):
     """Monkey patches `summary_op_util.summary_scope` to strip tag scopes."""
 
+    # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+    from tensorflow.python.ops import summary_ops_v2 as summary_v2_lib
+    from tensorflow.python.ops.summary_ops_v2 import _INVALID_SCOPE_CHARACTERS
+    # pylint: enable=g-direct-tensorflow-import,g-import-not-at-top
+
     original_summary_scope = summary_op_util.summary_scope
     original_summary_scope_v2 = getattr(summary_v2_lib, "summary_scope")
 
@@ -491,17 +499,18 @@ class _ScopedSummaryV2(Summary):
 
     setattr(summary_op_util, "summary_scope", strip_tag_scope_fn)
     setattr(summary_v2_lib, "summary_scope", monkey_patched_summary_scope_fn)
-    setattr(tf2.summary.experimental, "summary_scope",
+    setattr(compat.tf2.summary.experimental, "summary_scope",
             monkey_patched_summary_scope_fn)
-    setattr(tf2.summary, "summary_scope", monkey_patched_summary_scope_fn)
+    setattr(compat.tf2.summary, "summary_scope",
+            monkey_patched_summary_scope_fn)
     try:
       yield
     finally:
       setattr(summary_op_util, "summary_scope", original_summary_scope)
       setattr(summary_v2_lib, "summary_scope", original_summary_scope_v2)
-      setattr(tf2.summary.experimental, "summary_scope",
+      setattr(compat.tf2.summary.experimental, "summary_scope",
               original_summary_scope_v2)
-      setattr(tf2.summary, "summary_scope", original_summary_scope_v2)
+      setattr(compat.tf2.summary, "summary_scope", original_summary_scope_v2)
 
   def _prefix_scope(self, name):
     scope = self._scope
@@ -642,6 +651,8 @@ class _TPUScopedSummary(_ScopedSummaryV2):
   def __init__(self, logdir, namespace=None, scope=None, skip_summary=False):
     super(_TPUScopedSummary, self).__init__(logdir, namespace, scope,
                                             skip_summary)
+    from tensorflow.python.ops import summary_ops_v2 as summary_v2_lib  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+
     self._actual_summary_scalar_fn = summary_v2_lib.scalar
     self._actual_summary_image_fn = summary_v2_lib.image
     self._actual_summary_histogram_fn = summary_v2_lib.histogram
@@ -872,6 +883,8 @@ def monkey_patched_summaries(summary):
   Yields:
     A context where summary functions are routed to the given `adanet.Summary`.
   """
+
+  from tensorflow.python.ops import summary_ops_v2 as summary_v2_lib  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
 
   old_summary_scalar = summary_lib.scalar
   old_summary_image = summary_lib.image
