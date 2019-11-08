@@ -87,6 +87,10 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
         optimizer=self._optimizer)
 
     mock.patch.object(tf.train, 'load_variable', autospec=False).start()
+    mock.patch.object(
+        tf.compat.v1.train, 'load_variable', autospec=False).start()
+    mock.patch.object(
+        tf.compat.v2.train, 'load_variable', autospec=False).start()
 
     def load_variable(checkpoint_dir, name):
       self.assertEqual(checkpoint_dir, 'fake_checkpoint_dir')
