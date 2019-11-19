@@ -38,7 +38,7 @@ tf = tf_v1.compat.v2
 _DEFAULT_SCOPE = "default"
 
 
-class Summary(object):
+class Summary(object):  # pytype: disable=ignored-metaclass
   """Interface for writing summaries to Tensorboard."""
 
   __metaclass__ = abc.ABCMeta

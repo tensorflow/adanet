@@ -44,7 +44,7 @@ class TrainOpSpec(
     return super(TrainOpSpec, cls).__new__(cls, train_op, chief_hooks, hooks)
 
 
-class Ensemble(object):
+class Ensemble(object):  # pytype: disable=ignored-metaclass
   """An abstract ensemble of subnetworks."""
 
   __metaclass__ = abc.ABCMeta
@@ -68,7 +68,7 @@ class Ensemble(object):
     return None
 
 
-class Ensembler(object):
+class Ensembler(object):  # pytype: disable=ignored-metaclass
   """An abstract ensembler."""
 
   __metaclass__ = abc.ABCMeta

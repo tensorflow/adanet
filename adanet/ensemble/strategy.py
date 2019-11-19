@@ -45,7 +45,7 @@ class Candidate(
             previous_ensemble_subnetwork_builders or []))
 
 
-class Strategy(object):
+class Strategy(object):  # pytype: disable=ignored-metaclass
   """An abstract ensemble strategy."""
 
   __metaclass__ = abc.ABCMeta

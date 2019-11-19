@@ -156,7 +156,7 @@ class Subnetwork(
         local_init_ops=local_init_ops)
 
 
-class Builder(object):
+class Builder(object):  # pytype: disable=ignored-metaclass
   """Interface for a subnetwork builder.
 
   Given features, labels, and the best ensemble of subnetworks at iteration
@@ -269,7 +269,7 @@ class Builder(object):
     return None
 
 
-class Generator(object):
+class Generator(object):  # pytype: disable=ignored-metaclass
   """Interface for a candidate subnetwork generator.
 
   Given the ensemble of subnetworks at iteration t-1, this object is

@@ -26,7 +26,7 @@ from adanet.distributed.devices import _OpNameHashStrategy
 import numpy as np
 
 
-class PlacementStrategy(object):
+class PlacementStrategy(object):  # pytype: disable=ignored-metaclass
   """Abstract placement strategy for distributed training.
 
   Given a cluster of workers, the placement strategy determines which subgraph
