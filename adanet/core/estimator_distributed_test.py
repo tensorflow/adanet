@@ -244,19 +244,20 @@ class EstimatorDistributedTrainingTest(parameterized.TestCase,
                   "num_ps":
                       3,
               },
-              {
-                  "testcase_name":
-                      "autoensemble_trees_multiclass_{}_five_workers_three_ps"
-                      .format(placement),
-                  "estimator":
-                      "autoensemble_trees_multiclass",
-                  "placement_strategy":
-                      placement,
-                  "num_workers":
-                      5,
-                  "num_ps":
-                      3,
-              },
+              # TODO: Need to restore boosted trees support.
+              # {
+              #     "testcase_name":
+              #         "autoensemble_trees_multiclass_{}_five_workers_three_ps"
+              #         .format(placement),
+              #     "estimator":
+              #         "autoensemble_trees_multiclass",
+              #     "placement_strategy":
+              #         placement,
+              #     "num_workers":
+              #         5,
+              #     "num_ps":
+              #         3,
+              # },
               {
                   "testcase_name":
                       "estimator_with_experimental_multiworker_{}_five_workers"

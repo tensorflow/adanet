@@ -251,9 +251,17 @@ class ComplexityRegularizedEnsembler(Ensembler):
       return self._name
     return "complexity_regularized"
 
-  def build_ensemble(self, subnetworks, previous_ensemble_subnetworks, features,
-                     labels, logits_dimension, training, iteration_step,
-                     summary, previous_ensemble):
+  def build_ensemble(self,
+                     subnetworks,
+                     previous_ensemble_subnetworks,
+                     features,
+                     labels,
+                     logits_dimension,
+                     training,
+                     iteration_step,
+                     summary,
+                     previous_ensemble,
+                     previous_iteration_checkpoint=None):
     del features, labels, logits_dimension, training, iteration_step  # unused
     weighted_subnetworks = []
     subnetwork_index = 0
@@ -269,13 +277,13 @@ class ComplexityRegularizedEnsembler(Ensembler):
         if self._warm_start_mixture_weights:
           if isinstance(weighted_subnetwork.subnetwork.last_layer, dict):
             weight_initializer = {
-                key: self._load_variable_from_model_dir(
-                    weighted_subnetwork.weight[key])
+                key: self._load_variable(weighted_subnetwork.weight[key],
+                                         previous_iteration_checkpoint)
                 for key in sorted(weighted_subnetwork.subnetwork.last_layer)
             }
           else:
-            weight_initializer = self._load_variable_from_model_dir(
-                weighted_subnetwork.weight)
+            weight_initializer = self._load_variable(
+                weighted_subnetwork.weight, previous_iteration_checkpoint)
         with tf_compat.v1.variable_scope(
             "weighted_subnetwork_{}".format(subnetwork_index)):
           weighted_subnetworks.append(
@@ -296,9 +304,14 @@ class ComplexityRegularizedEnsembler(Ensembler):
       if len(
           previous_ensemble.subnetworks) == len(previous_ensemble_subnetworks):
         bias = self._create_bias_term(
-            weighted_subnetworks, prior=previous_ensemble.bias)
+            weighted_subnetworks,
+            prior=previous_ensemble.bias,
+            previous_iteration_checkpoint=previous_iteration_checkpoint)
       else:
-        bias = self._create_bias_term(weighted_subnetworks)
+        bias = self._create_bias_term(
+            weighted_subnetworks,
+            prior=None,
+            previous_iteration_checkpoint=previous_iteration_checkpoint)
         logging.info("Builders using a pruned set of the subnetworks "
                      "from the previous ensemble, so its ensemble's bias "
                      "term will not be warm started with the previous "
@@ -323,8 +336,18 @@ class ComplexityRegularizedEnsembler(Ensembler):
         logits=logits,
         complexity_regularization=complexity_regularization)
 
-  def _load_variable_from_model_dir(self, var):
-    return tf.train.load_variable(self._model_dir, tf_compat.tensor_name(var))
+  def _load_variable(self, var, previous_iteration_checkpoint):
+    latest_checkpoint = tf.train.latest_checkpoint(self._model_dir)
+    status = previous_iteration_checkpoint.restore(latest_checkpoint)
+    try:
+      status.expect_partial().assert_nontrivial_match()
+    except AssertionError:
+      # Fall back to v1 checkpoint when not using v2 checkpoint.
+      return tf.train.load_variable(self._model_dir, tf_compat.tensor_name(var))
+    else:
+      with tf_compat.v1.Session() as sess:
+        status.initialize_or_restore(sess)
+        return sess.run(var)
 
   def _compute_adanet_gamma(self, complexity):
     """For a subnetwork, computes: lambda * r(h) + beta."""
@@ -431,7 +454,10 @@ class ComplexityRegularizedEnsembler(Ensembler):
         logits = tf.multiply(logits, weight)
     return logits, weight
 
-  def _create_bias_term(self, weighted_subnetworks, prior=None):
+  def _create_bias_term(self,
+                        weighted_subnetworks,
+                        prior=None,
+                        previous_iteration_checkpoint=None):
     """Returns a bias term vector.
 
     If `use_bias` is set, then it returns a trainable bias variable initialized
@@ -443,6 +469,7 @@ class ComplexityRegularizedEnsembler(Ensembler):
         this ensemble. Ordered from first to most recent.
       prior: Prior bias term `Tensor` of dict of string to `Tensor` (for multi-
         head) for warm-starting the bias term variable.
+      previous_iteration_checkpoint: `tf.train.Checkpoint` for iteration t-1.
 
     Returns:
       A bias term `Tensor` or dict of string to bias term `Tensor` (for multi-
@@ -450,16 +477,18 @@ class ComplexityRegularizedEnsembler(Ensembler):
     """
 
     if not isinstance(weighted_subnetworks[0].subnetwork.logits, dict):
-      return self._create_bias_term_helper(weighted_subnetworks, prior)
+      return self._create_bias_term_helper(weighted_subnetworks, prior,
+                                           previous_iteration_checkpoint)
     bias_terms = {}
     for i, key in enumerate(sorted(weighted_subnetworks[0].subnetwork.logits)):
-      bias_terms[key] = self._create_bias_term_helper(weighted_subnetworks,
-                                                      prior, key, i)
+      bias_terms[key] = self._create_bias_term_helper(
+          weighted_subnetworks, prior, previous_iteration_checkpoint, key, i)
     return bias_terms
 
   def _create_bias_term_helper(self,
                                weighted_subnetworks,
                                prior,
+                               previous_iteration_checkpoint,
                                key=None,
                                index=None):
     """Returns a bias term for weights with the given key."""
@@ -479,7 +508,8 @@ class ComplexityRegularizedEnsembler(Ensembler):
       shape = num_dims
 
     else:
-      prior = self._load_variable_from_model_dir(_lookup_if_dict(prior, key))
+      prior = self._load_variable(
+          _lookup_if_dict(prior, key), previous_iteration_checkpoint)
     return tf_compat.v1.get_variable(
         name="bias_{}".format(index) if index else "bias",
         shape=shape,

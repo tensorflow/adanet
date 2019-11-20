@@ -80,7 +80,7 @@ class Ensembler(object):  # pytype: disable=ignored-metaclass
   @abc.abstractmethod
   def build_ensemble(self, subnetworks, previous_ensemble_subnetworks, features,
                      labels, logits_dimension, training, iteration_step,
-                     summary, previous_ensemble):
+                     summary, previous_ensemble, previous_iteration_checkpoint):
     # pyformat: disable
     """Builds an ensemble of subnetworks.
 
@@ -111,6 +111,8 @@ class Ensembler(object):  # pytype: disable=ignored-metaclass
       previous_ensemble: The best :class:`adanet.Ensemble` from iteration *t-1*.
         The created subnetwork will extend the previous ensemble to form the
         :class:`adanet.Ensemble` at iteration *t*.
+      previous_iteration_checkpoint: The `tf.train.Checkpoint` object associated
+        with the previous iteration.
 
     Returns:
       An :class:`adanet.ensemble.Ensemble` subclass instance.

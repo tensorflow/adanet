@@ -136,8 +136,8 @@ class _Architecture(object):
     assert global_step is not None
     ensemble_arch = {
         "ensemble_candidate_name": self.ensemble_candidate_name,
-        "iteration_number": iteration_number,
-        "global_step": global_step,
+        "iteration_number": int(iteration_number),
+        "global_step": int(global_step),
         "ensembler_name": self.ensembler_name,
         "subnetworks": [],
         "replay_indices": self._replay_indices

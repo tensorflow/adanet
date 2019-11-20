@@ -50,6 +50,7 @@ class _EnsembleSpec(
         "subnetwork_specs",
         "predictions",
         "step",
+        "variables",
         "loss",
         "adanet_loss",
         "train_op",
@@ -67,6 +68,7 @@ class _EnsembleSpec(
     predictions: Predictions `Tensor` or dict of `Tensor`.
     step: `tf.Variable` step counter representing the number of steps this
       ensemble trained for. Resets at every AdaNet iteration.
+    variables: List of `tf.Variable` instances associated with the ensemble.
     loss: Loss `Tensor` as defined by the surrogate loss function Phi in
       Equations (4), (5), and (6). Must be either scalar, or with shape `[1]`.
     adanet_loss: Loss `Tensor` as defined by F(w) in Equation (4). Must be
@@ -90,6 +92,7 @@ class _EnsembleSpec(
               subnetwork_builders,
               predictions,
               step,
+              variables,
               loss=None,
               adanet_loss=None,
               train_op=None,
@@ -107,6 +110,7 @@ class _EnsembleSpec(
         subnetwork_specs=subnetwork_specs,
         predictions=predictions,
         step=step,
+        variables=variables,
         loss=loss,
         adanet_loss=adanet_loss,
         train_op=train_op,
@@ -185,7 +189,8 @@ def _monkey_patch_context(iteration_step_scope, scoped_summary, trainable_vars):
       yield
   finally:
     # Revert monkey-patches.
-    new_trainable_vars = _new_trainable_variables(trainable_vars)
+    new_trainable_vars = _get_current_vars(
+        diffbase={"trainable": trainable_vars})["trainable"]
     _set_trainable_variables(old_trainable_vars + new_trainable_vars)
     setattr(training_util, "get_or_create_global_step",
             old_get_or_create_global_step_fn)
@@ -217,9 +222,38 @@ def _set_trainable_variables(var_list):
                                     var)
 
 
-def _new_trainable_variables(old_vars):
-  # Assumes that new trainable variables are always appended to the collection.
-  return tf_compat.v1.trainable_variables()[len(old_vars):]
+def _get_current_vars(diffbase=None):
+  """Returns all current trainable, global, and savable variables.
+
+  Args:
+    diffbase: A dictionary of lists variables to diffbase. The allowed keys are:
+    "trainable", "global" and "savable".
+
+  Returns:
+    A dictionary containing the current trainable, global and savable variables.
+    The expected keys are: "trainable", "global" and "savable".
+  """
+
+  trainable_vars = tf_compat.v1.trainable_variables()
+  global_vars = tf_compat.v1.global_variables()
+  savable_vars = tf_compat.v1.get_collection(
+      tf_compat.v1.GraphKeys.SAVEABLE_OBJECTS)
+
+  # Since newly created variables are appended to the global collections, we can
+  # obtain the newer variables by taking slices of the ends of the collections.
+  if diffbase:
+    if "trainable" in diffbase:
+      trainable_vars = trainable_vars[len(diffbase["trainable"]):]
+    if "global" in diffbase:
+      global_vars = global_vars[len(diffbase["global"]):]
+    if "savable" in diffbase:
+      savable_vars = savable_vars[len(diffbase["savable"]):]
+
+  return {
+      "trainable": trainable_vars,
+      "global": global_vars,
+      "savable": savable_vars,
+  }
 
 
 class _EnsembleBuilder(object):
@@ -274,9 +308,10 @@ class _EnsembleBuilder(object):
                           features,
                           mode,
                           iteration_number,
-                          labels=None,
-                          my_ensemble_index=None,
-                          previous_ensemble_spec=None):
+                          labels,
+                          my_ensemble_index,
+                          previous_ensemble_spec,
+                          previous_iteration_checkpoint):
     """Builds an `_EnsembleSpec` with the given `adanet.ensemble.Candidate`.
 
     Args:
@@ -296,6 +331,7 @@ class _EnsembleBuilder(object):
         candidates list of AdaNet.
       previous_ensemble_spec: Link the rest of the `_EnsembleSpec` from
         iteration t-1. Used for creating the subnetwork train_op.
+      previous_iteration_checkpoint: `tf.train.Checkpoint` for iteration t-1.
 
     Returns:
       An `_EnsembleSpec` instance.
@@ -354,19 +390,20 @@ class _EnsembleBuilder(object):
       for builder in candidate.subnetwork_builders:
         architecture.add_subnetwork(iteration_number, builder.name)
         subnetwork_builders.append(builder)
-      subnetwork_map = {s.builder.name: s for s in subnetwork_specs}
-      used_subnetwork_specs = [
-          subnetwork_map[s.name] for s in candidate.subnetwork_builders
+      subnetwork_spec_map = {s.builder.name: s for s in subnetwork_specs}
+      relevant_subnetwork_specs = [
+          subnetwork_spec_map[s.name] for s in candidate.subnetwork_builders
       ]
-      subnetworks = [s.subnetwork for s in used_subnetwork_specs]
       ensemble_scope = tf_compat.v1.get_variable_scope()
-      before_var_list = tf_compat.v1.trainable_variables()
+
+      old_vars = _get_current_vars()
+
       with summary.current_scope(), _monkey_patch_context(
           iteration_step_scope=ensemble_scope,
           scoped_summary=summary,
           trainable_vars=[]):
         ensemble = ensembler.build_ensemble(
-            subnetworks,
+            subnetworks=[s.subnetwork for s in relevant_subnetwork_specs],
             previous_ensemble_subnetworks=previous_subnetworks,
             features=features,
             labels=labels,
@@ -374,8 +411,8 @@ class _EnsembleBuilder(object):
             training=mode == tf.estimator.ModeKeys.TRAIN,
             iteration_step=step_tensor,
             summary=summary,
-            previous_ensemble=previous_ensemble)
-      ensemble_var_list = _new_trainable_variables(before_var_list)
+            previous_ensemble=previous_ensemble,
+            previous_iteration_checkpoint=previous_iteration_checkpoint)
 
       estimator_spec = _create_estimator_spec(self._head, features, labels,
                                               mode, ensemble.logits,
@@ -392,14 +429,16 @@ class _EnsembleBuilder(object):
       predictions = estimator_spec.predictions
       export_outputs = estimator_spec.export_outputs
 
-      if self._export_subnetwork_logits and export_outputs and subnetwork_map:
+      if (self._export_subnetwork_logits and
+          export_outputs and subnetwork_spec_map):
         first_subnetwork_logits = list(
-            subnetwork_map.values())[0].subnetwork.logits
+            subnetwork_spec_map.values())[0].subnetwork.logits
         if isinstance(first_subnetwork_logits, dict):
           for head_name in first_subnetwork_logits.keys():
             subnetwork_logits = {
                 subnetwork_name: subnetwork_spec.subnetwork.logits[head_name]
-                for subnetwork_name, subnetwork_spec in subnetwork_map.items()
+                for subnetwork_name, subnetwork_spec in
+                subnetwork_spec_map.items()
             }
             export_outputs.update({
                 "{}_{}".format(
@@ -409,8 +448,8 @@ class _EnsembleBuilder(object):
             })
         else:
           subnetwork_logits = {
-              subnetwork_name: subnetwork_spec.subnetwork.logits
-              for subnetwork_name, subnetwork_spec in subnetwork_map.items()
+              subnetwork_name: subnetwork_spec.subnetwork.logits for
+              subnetwork_name, subnetwork_spec in subnetwork_spec_map.items()
           }
           export_outputs.update({
               _EnsembleBuilder._SUBNETWORK_LOGITS_EXPORT_SIGNATURE:
@@ -418,16 +457,17 @@ class _EnsembleBuilder(object):
           })
 
       if (self._export_subnetwork_last_layer and export_outputs and
-          subnetwork_map and
-          list(subnetwork_map.values())[0].subnetwork.last_layer is not None):
+          subnetwork_spec_map and
+          list(subnetwork_spec_map.values())[0].subnetwork.last_layer is
+          not None):
         first_subnetwork_last_layer = list(
-            subnetwork_map.values())[0].subnetwork.last_layer
+            subnetwork_spec_map.values())[0].subnetwork.last_layer
         if isinstance(first_subnetwork_last_layer, dict):
           for head_name in first_subnetwork_last_layer.keys():
             subnetwork_last_layer = {
                 subnetwork_name:
-                subnetwork_spec.subnetwork.last_layer[head_name]
-                for subnetwork_name, subnetwork_spec in subnetwork_map.items()
+                subnetwork_spec.subnetwork.last_layer[head_name] for
+                subnetwork_name, subnetwork_spec in subnetwork_spec_map.items()
             }
             export_outputs.update({
                 "{}_{}".format(
@@ -437,8 +477,8 @@ class _EnsembleBuilder(object):
             })
         else:
           subnetwork_last_layer = {
-              subnetwork_name: subnetwork_spec.subnetwork.last_layer
-              for subnetwork_name, subnetwork_spec in subnetwork_map.items()
+              subnetwork_name: subnetwork_spec.subnetwork.last_layer for
+              subnetwork_name, subnetwork_spec in subnetwork_spec_map.items()
           }
           export_outputs.update({
               _EnsembleBuilder._SUBNETWORK_LAST_LAYER_EXPORT_SIGNATURE:
@@ -466,6 +506,8 @@ class _EnsembleBuilder(object):
         with summary.current_scope():
           summary.scalar("loss", estimator_spec.loss)
 
+      ensemble_trainable_vars = _get_current_vars(
+          diffbase=old_vars)["trainable"]
       # Create train ops for training subnetworks and ensembles.
       train_op = None
       if mode == tf.estimator.ModeKeys.TRAIN:
@@ -477,7 +519,7 @@ class _EnsembleBuilder(object):
           with summary.current_scope(), _monkey_patch_context(
               iteration_step_scope=ensemble_scope,
               scoped_summary=summary,
-              trainable_vars=ensemble_var_list):
+              trainable_vars=ensemble_trainable_vars):
             # For backwards compatibility.
             subnetwork_builder = candidate.subnetwork_builders[0]
             old_train_op_fn = getattr(subnetwork_builder,
@@ -489,7 +531,7 @@ class _EnsembleBuilder(object):
               train_op = _to_train_op_spec(
                   subnetwork_builder.build_mixture_weights_train_op(
                       loss=adanet_loss,
-                      var_list=ensemble_var_list,
+                      var_list=ensemble_trainable_vars,
                       logits=ensemble.logits,
                       labels=labels,
                       iteration_step=step_tensor,
@@ -499,19 +541,27 @@ class _EnsembleBuilder(object):
                   ensembler.build_train_op(
                       ensemble=ensemble,
                       loss=adanet_loss,
-                      var_list=ensemble_var_list,
+                      var_list=ensemble_trainable_vars,
                       labels=labels,
                       iteration_step=step_tensor,
                       summary=summary,
                       previous_ensemble=previous_ensemble))
+
+      new_vars = _get_current_vars(diffbase=old_vars)
+      # Sort our dictionary by key to remove non-determinism of variable order.
+      new_vars = collections.OrderedDict(sorted(new_vars.items()))
+      # Combine all trainable, global and savable variables into a single list.
+      ensemble_variables = sum(new_vars.values(), []) + [step]
+
     return _EnsembleSpec(
         name=name,
         architecture=architecture,
         subnetwork_builders=subnetwork_builders,
-        subnetwork_specs=previous_subnetwork_specs + used_subnetwork_specs,
+        subnetwork_specs=previous_subnetwork_specs + relevant_subnetwork_specs,
         ensemble=ensemble,
         predictions=predictions,
         step=step,
+        variables=ensemble_variables,
         loss=ensemble_loss,
         adanet_loss=adanet_loss,
         train_op=train_op,
@@ -541,6 +591,7 @@ class _SubnetworkSpec(
         "builder",
         "predictions",
         "step",
+        "variables",
         "loss",
         "train_op",
         "eval_metrics",
@@ -571,6 +622,7 @@ class _SubnetworkSpec(
               builder,
               predictions,
               step,
+              variables,
               loss=None,
               train_op=None,
               eval_metrics=None,
@@ -582,6 +634,7 @@ class _SubnetworkSpec(
         builder=builder,
         predictions=predictions,
         step=step,
+        variables=variables,
         loss=loss,
         train_op=train_op,
         eval_metrics=eval_metrics,
@@ -652,7 +705,8 @@ class _SubnetworkManager(object):
       An new `EnsembleSpec` instance with the `Subnetwork` appended.
     """
 
-    before_var_list = tf_compat.v1.trainable_variables()
+    old_vars = _get_current_vars()
+
     with tf_compat.v1.variable_scope("subnetwork_{}".format(name)):
       step = tf_compat.v1.get_variable(
           "step",
@@ -697,7 +751,8 @@ class _SubnetworkManager(object):
           scoped_summary=summary,
           trainable_vars=[]):
         subnetwork = build_subnetwork()
-      subnetwork_var_list = _new_trainable_variables(before_var_list)
+
+      subnetwork_var_list = _get_current_vars(diffbase=old_vars)["trainable"]
 
       estimator_spec = _create_estimator_spec(self._head, features, labels,
                                               mode, subnetwork.logits,
@@ -731,11 +786,19 @@ class _SubnetworkManager(object):
                   iteration_step=step_tensor,
                   summary=summary,
                   previous_ensemble=previous_ensemble))
+
+      new_vars = _get_current_vars(diffbase=old_vars)
+      # Sort our dictionary by key to remove non-determinism of variable order.
+      new_vars = collections.OrderedDict(sorted(new_vars.items()))
+      # Combine all trainable, global and savable variables into a single list.
+      subnetwork_variables = sum(new_vars.values(), []) + [step]
+
     return _SubnetworkSpec(
         name=name,
         subnetwork=subnetwork,
         builder=subnetwork_builder,
         predictions=estimator_spec.predictions,
+        variables=subnetwork_variables,
         loss=estimator_spec.loss,
         step=step,
         train_op=train_op,

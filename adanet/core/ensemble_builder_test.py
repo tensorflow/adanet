@@ -345,7 +345,9 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
       my_ensemble_index=None,
       want_replay_indices=None,
       want_predictions=None,
-      export_subnetworks=False):
+      export_subnetworks=False,
+      previous_ensemble_spec=None,
+      previous_iteration_checkpoint=None):
     seed = 64
 
     if multi_head:
@@ -467,7 +469,8 @@ class EnsembleBuilderTest(tu.AdanetTestCase):
           iteration_number=1,
           labels=labels,
           my_ensemble_index=my_ensemble_index,
-          mode=mode)
+          mode=mode,
+          previous_iteration_checkpoint=previous_iteration_checkpoint)
 
       if want_replay_indices:
         self.assertAllEqual(want_replay_indices,
@@ -624,7 +627,10 @@ class EnsembleBuilderMetricFnTest(parameterized.TestCase, tf.test.TestCase):
           features=features,
           iteration_number=0,
           labels=labels,
-          mode=mode)
+          mode=mode,
+          my_ensemble_index=0,
+          previous_ensemble_spec=None,
+          previous_iteration_checkpoint=None)
       subnetwork_metric_ops = subnetwork_spec.eval_metrics.eval_metrics_ops()
       ensemble_metric_ops = ensemble_spec.eval_metrics.eval_metrics_ops()
       evaluate = self.evaluate

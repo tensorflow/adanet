@@ -27,20 +27,22 @@ tf = tf.compat.v2
 
 
 class _Candidate(
-    collections.namedtuple("_Candidate", ["ensemble_spec", "adanet_loss"])):
+    collections.namedtuple("_Candidate",
+                           ["ensemble_spec", "adanet_loss", "variables"])):
   """An AdaNet candidate.
 
   A `_Candidate` tracks the progress of a candidate subnetwork's training
   within an ensemble, as well as their AdaNet loss over time.
   """
 
-  def __new__(cls, ensemble_spec, adanet_loss):
+  def __new__(cls, ensemble_spec, adanet_loss, variables):
     """Creates a validated `_Candidate` instance.
 
     Args:
       ensemble_spec: The `_EnsembleSpec` instance to track.
       adanet_loss: float `Tensor` representing the ensemble's AdaNet loss on the
         training set as defined in Equation (4) of the paper.
+      variables: List of `tf.Variable` instances associated with the ensemble.
 
     Returns:
       A validated `_Candidate` object.
@@ -54,7 +56,10 @@ class _Candidate(
     if adanet_loss is None:
       raise ValueError("adanet_loss is required")
     return super(_Candidate, cls).__new__(
-        cls, ensemble_spec=ensemble_spec, adanet_loss=adanet_loss)
+        cls,
+        ensemble_spec=ensemble_spec,
+        adanet_loss=adanet_loss,
+        variables=variables)
 
 
 class _CandidateBuilder(object):
@@ -78,6 +83,7 @@ class _CandidateBuilder(object):
                       ensemble_spec,
                       training,
                       summary,
+                      rebuilding=False,
                       track_moving_average=True):
     """Builds and returns an AdaNet candidate.
 
@@ -86,6 +92,8 @@ class _CandidateBuilder(object):
       training: A python boolean indicating whether the graph is in training
         mode or prediction mode.
       summary: A `Summary` for recording summaries for TensorBoard.
+      rebuilding: Boolean whether the iteration is being rebuilt only to restore
+        the previous best subnetworks and ensembles.
       track_moving_average: Bool whether to track the moving average of the
         ensemble's adanet loss.
 
@@ -99,19 +107,33 @@ class _CandidateBuilder(object):
 
     with tf_compat.v1.variable_scope(candidate_scope):
       adanet_loss = ensemble_spec.adanet_loss
+      variables = []
       if track_moving_average:
-        adanet_loss = tf_compat.v1.get_variable(
+        loss_to_track = ensemble_spec.adanet_loss
+        if loss_to_track is None:
+          # Dummy loss so that we always create moving averages variables.
+          # If we pass a None loss assign_moving_average raises an exception.
+          loss_to_track = tf.constant(99999., name="dummy_adanet_loss")
+
+        adanet_loss_var = tf_compat.v1.get_variable(
             "adanet_loss", initializer=0., trainable=False)
-
-      if training and track_moving_average:
         update_adanet_loss_op = moving_averages.assign_moving_average(
-            adanet_loss,
-            ensemble_spec.adanet_loss,
-            decay=self._adanet_loss_decay)
-        with tf.control_dependencies([update_adanet_loss_op]):
-          adanet_loss = adanet_loss.read_value()
+            adanet_loss_var, loss_to_track, decay=self._adanet_loss_decay)
+        # Get the two moving average variables created by assign_moving_average.
+        # Since these two variables are the most recently created ones, we can
+        # slice them both from the end of the global variables collection.
+        variables = [adanet_loss_var] + tf_compat.v1.global_variables()[-2:]
+        if training and not rebuilding:
+          with tf.control_dependencies([update_adanet_loss_op]):
+            adanet_loss = adanet_loss_var.read_value()
+        else:
+          adanet_loss = adanet_loss_var.read_value()
 
-        with summary.current_scope():
-          summary.scalar("adanet_loss/adanet/adanet_weighted_ensemble",
-                         adanet_loss)
-      return _Candidate(ensemble_spec=ensemble_spec, adanet_loss=adanet_loss)
+      with summary.current_scope():
+        summary.scalar("adanet_loss/adanet/adanet_weighted_ensemble",
+                       adanet_loss)
+
+      return _Candidate(
+          ensemble_spec=ensemble_spec,
+          adanet_loss=adanet_loss,
+          variables=variables)

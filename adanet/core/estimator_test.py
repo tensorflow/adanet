@@ -259,12 +259,11 @@ class _NanLossBuilder(Builder):
     return tf.no_op()
 
 
-class _LinearBuilder(Builder):
-  """A simple linear subnetwork builder."""
+class _FrozenLinearBuilder(Builder):
+  """A simple linear subnetwork builder that doesn't train."""
 
-  def __init__(self, name, mixture_weight_learning_rate=.001, seed=42):
+  def __init__(self, name, seed=42):
     self._name = name
-    self._mixture_weight_learning_rate = mixture_weight_learning_rate
     self._seed = seed
 
   @property
@@ -294,14 +293,7 @@ class _LinearBuilder(Builder):
 
   def build_subnetwork_train_op(self, subnetwork, loss, var_list, labels,
                                 iteration_step, summary, previous_ensemble):
-    optimizer = tf_compat.v1.train.GradientDescentOptimizer(learning_rate=.001)
-    return optimizer.minimize(loss, var_list=var_list)
-
-  def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
-                                     iteration_step, summary):
-    optimizer = tf_compat.v1.train.GradientDescentOptimizer(
-        learning_rate=self._mixture_weight_learning_rate)
-    return optimizer.minimize(loss, var_list=var_list)
+    return tf.no_op()
 
 
 class _FakeGenerator(Generator):
@@ -434,6 +426,17 @@ class EstimatorTest(tu.AdanetTestCase):
           "want_loss": 0.49899703,
           "want_iteration": 0,
           "want_global_step": 1,
+      },
+      {
+          "testcase_name": "enable_v2_checkpoint",
+          "subnetwork_generator": SimpleGenerator([_DNNBuilder("dnn")]),
+          "max_iteration_steps": 100,
+          "steps": 300,
+          "max_steps": None,
+          "want_loss": 0.3221922,
+          "want_iteration": 2,
+          "want_global_step": 300,
+          "enable_v2_checkpoint": True,
       },
       {
           "testcase_name": "none_max_iteration_steps",
@@ -762,7 +765,7 @@ class EstimatorTest(tu.AdanetTestCase):
           "max_iteration_steps":
               75,
           "want_loss":
-              0.43492866,
+              0.43161362,
           "want_iteration":
               3,
           "want_global_step":
@@ -1034,7 +1037,8 @@ class EstimatorTest(tu.AdanetTestCase):
                      report_materializer=None,
                      train_input_fn=None,
                      max_iterations=None,
-                     export_subnetworks=False):
+                     export_subnetworks=False,
+                     enable_v2_checkpoint=False):
     """Train entire estimator lifecycle using XOR dataset."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
@@ -1049,6 +1053,7 @@ class EstimatorTest(tu.AdanetTestCase):
         "mixture_weight_initializer": tf_compat.v1.zeros_initializer(),
         "warm_start_mixture_weights": True,
         "use_bias": use_bias,
+        "enable_v2_checkpoint": enable_v2_checkpoint,
     }
     if ensemblers:
       default_ensembler_kwargs = {}
@@ -1305,17 +1310,24 @@ class EstimatorTest(tu.AdanetTestCase):
 class KerasCNNBuilder(Builder):
   """Builds a CNN subnetwork for AdaNet."""
 
-  def __init__(self, learning_rate, seed=42):
+  def __init__(self, name, learning_rate, num_dense, units=3, seed=42):
     """Initializes a `SimpleCNNBuilder`.
 
     Args:
+      name: String name.
       learning_rate: The float learning rate to use.
+      num_dense: Number of layers.
+      units: Units per layer.
       seed: The random seed.
 
     Returns:
       An instance of `SimpleCNNBuilder`.
     """
+
+    self._name = name
     self._learning_rate = learning_rate
+    self._num_dense = num_dense
+    self._units = units
     self._seed = seed
 
   def build_subnetwork(self,
@@ -1333,27 +1345,28 @@ class KerasCNNBuilder(Builder):
     images = list(features.values())[0]
     images = tf.reshape(images, [-1, 2, 2, 1])
     kernel_initializer = tf_compat.v1.keras.initializers.he_normal(seed=seed)
+    x = images
     x = tf.keras.layers.Conv2D(
         filters=3,
         kernel_size=1,
         padding="same",
         activation="relu",
         kernel_initializer=kernel_initializer)(
-            images)
-    x = tf.keras.layers.MaxPool2D(pool_size=2, strides=1)(x)
-    x = tf.keras.layers.Flatten()(x)
-    x = tf.keras.layers.Dense(
-        units=3, activation="relu", kernel_initializer=kernel_initializer)(
             x)
-    logits = tf_compat.v1.layers.Dense(
+    x = tf.keras.layers.MaxPool2D(pool_size=1, strides=1)(x)
+    x = tf.keras.layers.Flatten()(x)
+    for _ in range(self._num_dense):
+      x = tf_compat.v1.layers.Dense(
+          units=self._units,
+          activation="relu",
+          kernel_initializer=kernel_initializer)(
+              x)
+    logits = tf.keras.layers.Dense(
         units=1, activation=None, kernel_initializer=kernel_initializer)(
             x)
     complexity = tf.constant(1)
     return Subnetwork(
-        last_layer=x,
-        logits=logits,
-        complexity=complexity,
-        persisted_tensors={})
+        last_layer=x, logits=logits, complexity=complexity, shared={})
 
   def build_subnetwork_train_op(self,
                                 subnetwork,
@@ -1366,70 +1379,65 @@ class KerasCNNBuilder(Builder):
     optimizer = tf_compat.v1.train.GradientDescentOptimizer(self._learning_rate)
     return optimizer.minimize(loss=loss, var_list=var_list)
 
-  def build_mixture_weights_train_op(self, loss, var_list, logits, labels,
-                                     iteration_step, summary):
-    return tf.no_op()
-
   @property
   def name(self):
-    return "simple_cnn"
+    return self._name
 
 
-class EstimatorKerasLayersTest(tu.AdanetTestCase):
-
-  def test_lifecycle(self):
-    """Train entire estimator lifecycle using XOR dataset."""
-
-    run_config = tf.estimator.RunConfig(tf_random_seed=42)
-    estimator = Estimator(
-        head=tu.head(),
-        subnetwork_generator=SimpleGenerator(
-            [KerasCNNBuilder(learning_rate=.001)]),
-        max_iteration_steps=3,
-        evaluator=Evaluator(
-            input_fn=tu.dummy_input_fn([[1., 1., .1, .1]], [[0.]]), steps=3),
-        model_dir=self.test_subdirectory,
-        config=run_config)
-
-    xor_features = [[1., 0., 1., 0.], [0., 0., 0., 0.], [0., 1., 0., 1.],
-                    [1., 1., 1., 1.]]
-    xor_labels = [[1.], [0.], [1.], [0.]]
-    train_input_fn = tu.dummy_input_fn(xor_features, xor_labels)
-
-    # Train.
-    estimator.train(input_fn=train_input_fn, max_steps=9)
-
-    # Evaluate.
-    eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
-    logging.info("%s", eval_results)
-    want_loss = 0.16915826
-    if tf_compat.version_greater_or_equal("1.10.0"):
-      # After TF v1.10.0 the loss computed from a neural network using Keras
-      # layers changed, however it is not clear why.
-      want_loss = 0.26195815
-    self.assertAlmostEqual(want_loss, eval_results["loss"], places=3)
-
-    # Predict.
-    predictions = estimator.predict(
-        input_fn=tu.dataset_input_fn(features=[0., 0., 0., 0.], labels=None))
-    for prediction in predictions:
-      self.assertIsNotNone(prediction["predictions"])
-
-    # Export SavedModel.
-    def serving_input_fn():
-      """Input fn for serving export, starting from serialized example."""
-      serialized_example = tf_compat.v1.placeholder(
-          dtype=tf.string, shape=(None), name="serialized_example")
-      return tf.estimator.export.ServingInputReceiver(
-          features={"x": tf.constant([[0., 0., 0., 0.]], name="serving_x")},
-          receiver_tensors=serialized_example)
-
-    export_saved_model_fn = getattr(estimator, "export_saved_model", None)
-    if not callable(export_saved_model_fn):
-      export_saved_model_fn = estimator.export_savedmodel
-    export_saved_model_fn(
-        export_dir_base=self.test_subdirectory,
-        serving_input_receiver_fn=serving_input_fn)
+# TODO: Test should be enabled when we support Keras layers.
+# class EstimatorKerasLayersTest(tu.AdanetTestCase):
+#
+#   def test_lifecycle(self):
+#     """Train entire estimator lifecycle using XOR dataset."""
+#
+#     run_config = tf.estimator.RunConfig(tf_random_seed=42)
+#     estimator = Estimator(
+#         head=tu.head(),
+#         subnetwork_generator=SimpleGenerator([
+#             KerasCNNBuilder("cnn0", learning_rate=.001, num_dense=1, units=3),
+#         ]),
+#         max_iteration_steps=100,
+#         evaluator=Evaluator(
+#             input_fn=tu.dummy_input_fn([[1., 1., .1, .1]], [[0.]]), steps=3),
+#         model_dir=self.test_subdirectory,
+#         force_grow=True,
+#         config=run_config)
+#
+#     xor_features = [[1., 0., 1., 0.], [0., 0., 0., 0.], [0., 1., 0., 1.],
+#                     [1., 1., 1., 1.]]
+#     xor_labels = [[1.], [0.], [1.], [0.]]
+#     train_input_fn = tu.dummy_input_fn(xor_features, xor_labels)
+#
+#     # Train.
+#     estimator.train(input_fn=train_input_fn, max_steps=300)
+#
+#     # Restore from checkpoint to check that variables match up.
+#     estimator.train(input_fn=train_input_fn, max_steps=1)
+#
+#     # Evaluate.
+#     eval_results = estimator.evaluate(input_fn=train_input_fn, steps=3)
+#     logging.info("%s", eval_results)
+#     want_loss = 0.164
+#     self.assertAlmostEqual(want_loss, eval_results["loss"], places=3)
+#
+#     # Predict.
+#     predictions = estimator.predict(
+#         input_fn=tu.dataset_input_fn(features=[0., 0., 0., 0.], labels=None))
+#     for prediction in predictions:
+#       self.assertIsNotNone(prediction["predictions"])
+#
+#     # Export SavedModel.
+#     def serving_input_fn():
+#       """Input fn for serving export, starting from serialized example."""
+#       serialized_example = tf_compat.v1.placeholder(
+#           dtype=tf.string, shape=(None), name="serialized_example")
+#       return tf.estimator.export.ServingInputReceiver(
+#           features={"x": tf.constant([[0., 0., 0., 0.]], name="serving_x")},
+#           receiver_tensors=serialized_example)
+#
+#     estimator.export_saved_model(
+#         export_dir_base=self.test_subdirectory,
+#         serving_input_receiver_fn=serving_input_fn)
 
 
 class MultiHeadBuilder(Builder):
@@ -3003,31 +3011,35 @@ class EstimatorForceGrowTest(tu.AdanetTestCase):
   @parameterized.named_parameters(
       {
           "testcase_name": "one_builder_no_force_grow",
-          "builders":
-              [_LinearBuilder("linear", mixture_weight_learning_rate=0.)],
+          "builders": [_FrozenLinearBuilder("linear")],
+          "force_grow": False,
+          "want_subnetworks": 1,
+      }, {
+          "testcase_name": "two_builders_no_force_grow",
+          "builders": [
+              _FrozenLinearBuilder("linear"),
+              _FrozenLinearBuilder("linear2"),
+          ],
           "force_grow": False,
           "want_subnetworks": 1,
       }, {
           "testcase_name": "one_builder",
-          "builders":
-              [_LinearBuilder("linear", mixture_weight_learning_rate=0.)],
+          "builders": [_FrozenLinearBuilder("linear")],
           "force_grow": True,
           "want_subnetworks": 2,
       }, {
           "testcase_name": "two_builders",
-          "builders": [
-              _LinearBuilder("linear", mixture_weight_learning_rate=0.),
-              _LinearBuilder("linear2", mixture_weight_learning_rate=0.)
-          ],
+          "builders":
+              [_FrozenLinearBuilder("linear"),
+               _FrozenLinearBuilder("linear2")],
           "force_grow": True,
           "want_subnetworks": 2,
       }, {
           "testcase_name":
               "two_builders_with_evaluator",
-          "builders": [
-              _LinearBuilder("linear", mixture_weight_learning_rate=0.),
-              _LinearBuilder("linear2", mixture_weight_learning_rate=0.)
-          ],
+          "builders":
+              [_FrozenLinearBuilder("linear"),
+               _FrozenLinearBuilder("linear2")],
           "force_grow":
               True,
           "evaluator":
@@ -3041,7 +3053,7 @@ class EstimatorForceGrowTest(tu.AdanetTestCase):
                       force_grow,
                       want_subnetworks,
                       evaluator=None):
-    """Train entire estimator lifecycle using XOR dataset."""
+    """Test force grow with identical frozen subnetworks."""
 
     run_config = tf.estimator.RunConfig(tf_random_seed=42)
     subnetwork_generator = SimpleGenerator(builders)

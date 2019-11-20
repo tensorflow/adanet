@@ -66,6 +66,7 @@ def dummy_ensemble_spec(name,
                         loss=None,
                         adanet_loss=None,
                         eval_metrics=None,
+                        variables=None,
                         dict_predictions=False,
                         export_output_key=None,
                         subnetwork_builders=None,
@@ -82,6 +83,7 @@ def dummy_ensemble_spec(name,
     adanet_loss: Float AdaNet loss to return. When None, it's picked from a
       random distribution.
     eval_metrics: Optional eval metrics tuple of (metric_fn, tensor args).
+    variables: List of `tf.Variable` instances associated with the ensemble.
     dict_predictions: Boolean whether to return predictions as a dictionary of
       `Tensor` or just a single float `Tensor`.
     export_output_key: An `ExportOutputKeys` for faking export outputs.
@@ -134,6 +136,7 @@ def dummy_ensemble_spec(name,
       subnetwork_builders=subnetwork_builders,
       predictions=predictions,
       step=tf.Variable(0),
+      variables=variables,
       loss=loss,
       adanet_loss=adanet_loss,
       train_op=train_op,
@@ -459,9 +462,11 @@ def create_iteration_metrics(subnetwork_metrics=None,
         subnetwork_builders=None,
         predictions=None,
         step=None,
+        variables=None,
         eval_metrics=metric)
 
-    candidate = _Candidate(ensemble_spec=spec, adanet_loss=tf.constant(i))
+    candidate = _Candidate(
+        ensemble_spec=spec, adanet_loss=tf.constant(i), variables=None)
     candidates.append(candidate)
 
   subnetwork_specs = []
@@ -475,7 +480,8 @@ def create_iteration_metrics(subnetwork_metrics=None,
         loss=None,
         train_op=None,
         asset_dir=None,
-        eval_metrics=metric)
+        eval_metrics=metric,
+        variables=None)
     subnetwork_specs.append(spec)
 
   return _IterationMetrics(

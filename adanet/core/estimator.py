@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import contextlib
 import errno
+import functools
 import inspect
 import os
 import time
@@ -239,7 +240,7 @@ class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
   """Hook to overwrite the latest checkpoint with next iteration variables."""
 
   def __init__(self, current_iteration, iteration_number_tensor,
-               previous_iteration_vars, config):
+               previous_iteration_vars, config, enable_v2_checkpoint):
     """Initializes an _OverwriteCheckpointHook instance.
 
     Args:
@@ -249,14 +250,18 @@ class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
       previous_iteration_vars: Variables to restore from the previous iteration
         before overwriting the checkpoint.
       config: The Estimator's RunConfig object.
+      enable_v2_checkpoint: Whether `tf.train.Checkpoint` is used for
+        checkpointing.
     """
 
+    self._current_iteration = current_iteration
     self._iteration_number = current_iteration.number
     self._iteration_number_tensor = iteration_number_tensor
     self._previous_iteration_vars = previous_iteration_vars
     self._model_dir = config.model_dir
     self._checkpoint_state = tf.train.get_checkpoint_state(self._model_dir)
     self._keep_checkpoint_max = config.keep_checkpoint_max
+    self._enable_v2_checkpoint = enable_v2_checkpoint
 
     self._update_op = None
     self._overwrite_saver = None
@@ -270,15 +275,32 @@ class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
     actually overwrite the checkpoint.
     """
 
-    self._restore_saver = tf_compat.v1.train.Saver(
-        sharded=True, var_list=self._previous_iteration_vars)
-    # Note: self._iteration_number already contains the value of the next
-    # iteration since _OverwriteCheckpointHook should only execute during the
-    # graph growing phase.
-    self._update_op = self._iteration_number_tensor.assign(
-        self._iteration_number)
-    self._overwrite_saver = tf_compat.v1.train.Saver(
-        sharded=True, max_to_keep=self._keep_checkpoint_max)
+    from tensorflow.python.training.tracking import graph_view  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+
+    if self._enable_v2_checkpoint:
+      prev_checkpoint = self._current_iteration.previous_iteration.checkpoint
+      self._status = prev_checkpoint.restore(
+          self._checkpoint_state.model_checkpoint_path)
+      # Because we prune the previous iteration's candidates, only a subset of
+      # the variables present in the checkpoint will be used. Assert they are
+      # restored.
+      self._status.expect_partial().assert_existing_objects_matched()
+
+      self._overwrite_saver = tf_compat.v1.train.Saver(
+          var_list=graph_view.ObjectGraphView(
+              self._current_iteration.checkpoint).frozen_saveable_objects(),
+          sharded=True,
+          max_to_keep=self._keep_checkpoint_max)
+    else:
+      self._restore_saver = tf_compat.v1.train.Saver(
+          sharded=True, var_list=self._previous_iteration_vars)
+      # Note: self._iteration_number already contains the value of the next
+      # iteration since _OverwriteCheckpointHook should only execute during the
+      # graph growing phase.
+      self._update_op = self._iteration_number_tensor.assign(
+          self._iteration_number)
+      self._overwrite_saver = tf_compat.v1.train.Saver(
+          sharded=True, max_to_keep=self._keep_checkpoint_max)
     self._overwrite_saver.recover_last_checkpoints(
         self._checkpoint_state.all_model_checkpoint_paths)
 
@@ -294,17 +316,21 @@ class _OverwriteCheckpointHook(tf_compat.SessionRunHook):
 
     if not self._checkpoint_overwritten:
       session = run_context.session
-      self._restore_saver.restore(session,
-                                  self._checkpoint_state.model_checkpoint_path)
-      session.run(self._update_op)
+      if self._enable_v2_checkpoint:
+        self._status.initialize_or_restore(session)
+      else:
+        self._restore_saver.restore(
+            session, self._checkpoint_state.model_checkpoint_path)
+        session.run(self._update_op)
       checkpoint_path = os.path.join(self._model_dir, "increment.ckpt")
       logging.info(
           "Overwriting checkpoint with new graph for iteration %d to %s-%d",
-          self._iteration_number, checkpoint_path, self._iteration_number)
+          self._current_iteration.number, checkpoint_path,
+          self._current_iteration.number)
       # Specify global_step=self._iteration_number to append the iteration
       # number to the checkpoint name, e.g. <model_dir>/increment.ckpt-1.
       self._overwrite_saver.save(
-          session, checkpoint_path, global_step=self._iteration_number)
+          session, checkpoint_path, global_step=self._current_iteration.number)
       self._checkpoint_overwritten = True
 
 
@@ -628,6 +654,7 @@ class Estimator(tf.estimator.Estimator):
     tf.estimator.Estimator._assert_members_are_not_overridden = staticmethod(  # pylint: disable=protected-access
         lambda _: None)
 
+    self._enable_v2_checkpoint = kwargs.pop("enable_v2_checkpoint", False)
     self._evaluator = evaluator
     self._report_materializer = report_materializer
 
@@ -676,7 +703,7 @@ class Estimator(tf.estimator.Estimator):
       # added to `tf.estimator.Estimator` that are expected to be callable by
       # external functions, such as in b/110435640.
       super(Estimator, self).__init__(
-          model_fn=self._adanet_model_fn,
+          model_fn=functools.partial(self._adanet_model_fn, hooks=None),
           params={},
           config=config,
           model_dir=model_dir,
@@ -757,6 +784,10 @@ class Estimator(tf.estimator.Estimator):
 
     if checkpoint_path is None:
       return 0
+
+    if self._enable_v2_checkpoint:
+      return tf_compat.load_variable(
+          checkpoint_path, "iteration_number", shape=[], dtype=tf.int64)
     return tf.train.load_variable(checkpoint_path,
                                   self._Keys.CURRENT_ITERATION).item()
 
@@ -766,6 +797,13 @@ class Estimator(tf.estimator.Estimator):
 
     if checkpoint_path is None:
       return 0
+
+    if self._enable_v2_checkpoint:
+      return tf_compat.load_variable(
+          checkpoint_path,
+          tf_compat.v1.GraphKeys.GLOBAL_STEP,
+          shape=[],
+          dtype=tf.int64)
     return tf.train.load_variable(checkpoint_path,
                                   tf_compat.v1.GraphKeys.GLOBAL_STEP).item()
 
@@ -853,6 +891,7 @@ class Estimator(tf.estimator.Estimator):
         # passing arguments more functional (via params).
         temp_estimator = self._create_temp_estimator(
             self.config,
+            hooks=hooks,
             params={
                 "is_inside_training_loop": True,
                 "checkpoint_path": latest_checkpoint,
@@ -980,12 +1019,14 @@ class Estimator(tf.estimator.Estimator):
         "evaluation_name":
             name,
         "best_ensemble_index":
-            self._compute_best_ensemble_index(checkpoint_path),
+            self._compute_best_ensemble_index(
+                checkpoint_path, hooks=hooks),
     }
 
     # Delegate evaluation to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
-    temp_estimator = self._create_temp_estimator(self.config, params=params)
+    temp_estimator = self._create_temp_estimator(
+        self.config, params=params, hooks=hooks)
     with _disable_asserts_for_confusion_matrix_at_thresholds():
       result = temp_estimator.evaluate(
           input_fn,
@@ -1011,12 +1052,17 @@ class Estimator(tf.estimator.Estimator):
         self.config,
         params={
             "best_ensemble_index":
-                self._compute_best_ensemble_index(checkpoint_path),
+                self._compute_best_ensemble_index(checkpoint_path, hooks=hooks),
             "checkpoint_path":
                 checkpoint_path,
-        })
-    return temp_estimator.predict(input_fn, predict_keys, hooks,
-                                  checkpoint_path, yield_single_examples)
+        },
+        hooks=hooks)
+    return temp_estimator.predict(
+        input_fn=input_fn,
+        predict_keys=predict_keys,
+        checkpoint_path=checkpoint_path,
+        yield_single_examples=yield_single_examples,
+        hooks=hooks)
 
   from tensorflow.python.util import deprecation  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
 
@@ -1025,6 +1071,7 @@ class Estimator(tf.estimator.Estimator):
   def export_savedmodel(self,
                         export_dir_base,
                         serving_input_receiver_fn,
+                        hooks=None,
                         assets_extra=None,
                         as_text=False,
                         checkpoint_path=None,
@@ -1037,9 +1084,10 @@ class Estimator(tf.estimator.Estimator):
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(
         self.config,
+        hooks=hooks,
         params={
             "best_ensemble_index":
-                self._compute_best_ensemble_index(checkpoint_path),
+                self._compute_best_ensemble_index(checkpoint_path, hooks=hooks),
             "checkpoint_path":
                 checkpoint_path,
         },
@@ -1056,6 +1104,7 @@ class Estimator(tf.estimator.Estimator):
   def export_saved_model(self,
                          export_dir_base,
                          serving_input_receiver_fn,
+                         hooks=None,
                          assets_extra=None,
                          as_text=False,
                          checkpoint_path=None,
@@ -1068,9 +1117,11 @@ class Estimator(tf.estimator.Estimator):
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(
         self.config,
+        hooks=hooks,
         params={
             "best_ensemble_index":
-                self._compute_best_ensemble_index(checkpoint_path),
+                self._compute_best_ensemble_index(
+                    checkpoint_path, hooks=hooks),
             "checkpoint_path":
                 checkpoint_path,
         },
@@ -1087,6 +1138,7 @@ class Estimator(tf.estimator.Estimator):
   def experimental_export_all_saved_models(self,
                                            export_dir_base,
                                            input_receiver_fn_map,
+                                           hooks=None,
                                            assets_extra=None,
                                            as_text=False,
                                            checkpoint_path=None):
@@ -1098,9 +1150,10 @@ class Estimator(tf.estimator.Estimator):
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(
         self.config,
+        hooks=hooks,
         params={
             "best_ensemble_index":
-                self._compute_best_ensemble_index(checkpoint_path),
+                self._compute_best_ensemble_index(checkpoint_path, hooks=hooks),
             "checkpoint_path":
                 checkpoint_path,
         },
@@ -1113,8 +1166,8 @@ class Estimator(tf.estimator.Estimator):
           as_text=as_text,
           checkpoint_path=checkpoint_path)
 
-  def _compute_best_ensemble_index(self, checkpoint_path):
-    # type: (Text) -> Optional[int]
+  def _compute_best_ensemble_index(self, checkpoint_path, hooks):
+    # type: (Text, Sequence[tf_compat.SessionRunHook]) -> Optional[int]
     """Runs the Evaluator to obtain the best ensemble index among candidates."""
 
     # AdaNet Replay.
@@ -1128,7 +1181,8 @@ class Estimator(tf.estimator.Estimator):
       return self._execute_candidate_evaluation_phase(
           self._evaluator.input_fn,
           export_best_architecture=False,
-          checkpoint_path=checkpoint_path)
+          checkpoint_path=checkpoint_path,
+          hooks=hooks)
     return None
 
   @contextlib.contextmanager
@@ -1202,14 +1256,16 @@ class Estimator(tf.estimator.Estimator):
         session_config=config.session_config,
         protocol=config.protocol)
 
-  def _create_temp_estimator(self, config, params, is_export=False):
-    # type: (tf.estimator.RunConfig, Dict[str, Any], bool) -> tf.estimator.Estimator  # pylint:disable=line-too-long
+  def _create_temp_estimator(self, config, params, hooks, is_export=False):
+    # type: (tf.estimator.RunConfig, Dict[str, Any], Sequence[tf_compat.SessionRunHook], bool) -> tf.estimator.Estimator  # pylint:disable=line-too-long
     """Creates a temp `Estimator` to grow the graph for the next iteration."""
 
     del is_export  # Unused.
 
     return tf.estimator.Estimator(
-        model_fn=self._adanet_model_fn, config=config, params=params)
+        model_fn=functools.partial(self._adanet_model_fn, hooks=hooks),
+        config=config,
+        params=params)
 
   def _execute_bookkeeping_phase(self, train_input_fn, iteration_number,
                                  train_hooks, checkpoint_path):
@@ -1240,9 +1296,10 @@ class Estimator(tf.estimator.Estimator):
     best_ensemble_index = self._execute_candidate_evaluation_phase(
         evaluator_input_fn,
         export_best_architecture=True,
-        checkpoint_path=checkpoint_path)
+        checkpoint_path=checkpoint_path,
+        hooks=train_hooks)
     self._execute_report_materialization_phase(
-        best_ensemble_index, checkpoint_path=checkpoint_path)
+        best_ensemble_index, checkpoint_path=checkpoint_path, hooks=train_hooks)
     self._execute_graph_growing_phase(train_input_fn, train_hooks,
                                       checkpoint_path)
 
@@ -1250,7 +1307,7 @@ class Estimator(tf.estimator.Estimator):
 
   def _execute_candidate_evaluation_phase(self, evaluator_input_fn,
                                           export_best_architecture,
-                                          checkpoint_path):
+                                          checkpoint_path, hooks):
     """Evaluates and chooses the best ensemble for this iteration.
 
     Args:
@@ -1258,6 +1315,7 @@ class Estimator(tf.estimator.Estimator):
       export_best_architecture: Boolean whether to persist the best ensemble's
         architecture to the model_dir.
       checkpoint_path: Path to the checkpoint to restore from.
+      hooks: A list of `tf.estimator.SessionRunHook`s.
 
     Returns:
       Integer index of the best ensemble withing the list of candidate ensembles
@@ -1276,7 +1334,8 @@ class Estimator(tf.estimator.Estimator):
           mode,
           config,
           is_growing_phase=False,
-          checkpoint_path=checkpoint_path)
+          checkpoint_path=checkpoint_path,
+          hooks=hooks)
       best_ensemble_index = self._get_best_ensemble_index(
           current_iteration, input_hooks, checkpoint_path)
       architecture = current_iteration.candidates[
@@ -1293,7 +1352,7 @@ class Estimator(tf.estimator.Estimator):
     return best_ensemble_index
 
   def _execute_report_materialization_phase(self, best_ensemble_index,
-                                            checkpoint_path):
+                                            checkpoint_path, hooks):
     """Materializes and store subnetwork reports."""
 
     if not self._report_materializer:
@@ -1312,7 +1371,8 @@ class Estimator(tf.estimator.Estimator):
           mode,
           config,
           is_growing_phase=False,
-          checkpoint_path=checkpoint_path)
+          checkpoint_path=checkpoint_path,
+          hooks=hooks)
       self._materialize_report(current_iteration, input_hooks,
                                best_ensemble_index, checkpoint_path)
     logging.info("Done materializing reports.")
@@ -1344,6 +1404,7 @@ class Estimator(tf.estimator.Estimator):
     temp_run_config = config.replace(model_dir=temp_model_sub_dir)
     temp_estimator = self._create_temp_estimator(
         config=temp_run_config,
+        hooks=train_hooks,
         params={
             "is_growing_phase": True,
             "is_inside_training_loop": True,
@@ -1428,11 +1489,18 @@ class Estimator(tf.estimator.Estimator):
               current_iteration.estimator_spec,
               tf.estimator.EstimatorSpec) else tf.no_op())
       sess.run(init)
+
+      if self._enable_v2_checkpoint:
+        status = current_iteration.checkpoint.restore(checkpoint_path)
+        status.expect_partial()  # Optional sanity checks.
+        status.initialize_or_restore(sess)
+      else:
+        saver = tf_compat.v1.train.Saver(sharded=True)
+        saver.restore(sess, checkpoint_path)
+
       coord = tf.train.Coordinator()
       for hook in input_hooks:
         hook.after_create_session(sess, coord)
-      saver = tf_compat.v1.train.Saver(sharded=True)
-      saver.restore(sess, checkpoint_path)
 
       tf_compat.v1.train.start_queue_runners(sess=sess, coord=coord)
       ensemble_metrics = []
@@ -1499,6 +1567,10 @@ class Estimator(tf.estimator.Estimator):
     ]
     for hook in input_hooks:
       hook.begin()
+    if self._enable_v2_checkpoint:
+      status = current_iteration.checkpoint.restore(checkpoint_path)
+      # Verify that restoring subset of ops from previous iteration works.
+      status.expect_partial()  # Optional sanity checks.
     with tf_compat.v1.Session(config=self.config.session_config) as sess:
       init = tf.group(
           tf_compat.v1.global_variables_initializer(),
@@ -1508,11 +1580,17 @@ class Estimator(tf.estimator.Estimator):
               current_iteration.estimator_spec,
               tf.estimator.EstimatorSpec) else tf.no_op())
       sess.run(init)
+
+      if self._enable_v2_checkpoint:
+        status.initialize_or_restore(sess)
+      else:
+        saver = tf_compat.v1.train.Saver(sharded=True)
+        saver.restore(sess, checkpoint_path)
+
       coord = tf.train.Coordinator()
       for hook in input_hooks:
         hook.after_create_session(sess, coord)
-      saver = tf_compat.v1.train.Saver(sharded=True)
-      saver.restore(sess, checkpoint_path)
+
       tf_compat.v1.train.start_queue_runners(sess=sess, coord=coord)
       materialized_reports = (
           self._report_materializer.materialize_subnetwork_reports(
@@ -1623,7 +1701,8 @@ class Estimator(tf.estimator.Estimator):
     if is_growing_phase:
       training_hooks.append(
           _OverwriteCheckpointHook(current_iteration, iteration_number_tensor,
-                                   previous_iteration_vars, self.config))
+                                   previous_iteration_vars, self.config,
+                                   self._enable_v2_checkpoint))
     return training_hooks
 
   def _evaluation_hooks(self, current_iteration, training, evaluation_name):
@@ -1730,7 +1809,8 @@ class Estimator(tf.estimator.Estimator):
   # TODO: Refactor architecture building logic to its own module.
   def _architecture_ensemble_spec(self, architecture, iteration_number,
                                   features, mode, labels,
-                                  previous_ensemble_spec, config):
+                                  previous_ensemble_spec, config,
+                                  previous_iteration, hooks):
     """Returns an `_EnsembleSpec` with the given architecture.
 
     Creates the ensemble architecture by calling `generate_subnetworks` on
@@ -1749,6 +1829,8 @@ class Estimator(tf.estimator.Estimator):
       previous_ensemble_spec: The `_EnsembleSpec` for the previous iteration.
         Will be `None` for the first iteration.
       config: The current `tf.estimator.RunConfig`.
+      previous_iteration: The previous `_Iteration`.
+      hooks: A list of `tf.estimator.SessionRunHook`s.
 
     Returns:
       An `EnsembleSpec` instance for the given architecture.
@@ -1761,7 +1843,7 @@ class Estimator(tf.estimator.Estimator):
     previous_ensemble = None
     if previous_ensemble_spec:
       previous_ensemble = previous_ensemble_spec.ensemble
-    current_iteration = None
+    current_iteration = previous_iteration
     for t, names in architecture.subnetworks_grouped_by_iteration:
       if t != iteration_number:
         continue
@@ -1813,16 +1895,16 @@ class Estimator(tf.estimator.Estimator):
           mode=mode,
           config=config,
           previous_ensemble_summary=previous_ensemble_summary,
-          previous_ensemble_spec=previous_ensemble_spec,
           rebuilding=True,
-          rebuilding_ensembler_name=architecture.ensembler_name)
+          rebuilding_ensembler_name=architecture.ensembler_name,
+          previous_iteration=current_iteration)
       max_candidates = 2 if previous_ensemble_spec else 1
       assert len(current_iteration.candidates) == max_candidates
       previous_ensemble_spec = current_iteration.candidates[-1].ensemble_spec
       previous_ensemble = previous_ensemble_spec.ensemble
     previous_ensemble_spec.architecture.set_replay_indices(
         architecture.replay_indices)
-    return previous_ensemble_spec
+    return current_iteration
 
   def _collate_subnetwork_reports(self, iteration_number):
     """Prepares subnetwork.Reports to be passed to Generator.
@@ -1894,6 +1976,8 @@ class Estimator(tf.estimator.Estimator):
                              is_growing_phase, evaluation_name):
     """Creates the EstimatorSpec which will be returned by _adanet_model_fn."""
 
+    from tensorflow.python.training.tracking import graph_view  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
+
     training = mode == tf.estimator.ModeKeys.TRAIN
     iteration_estimator_spec = current_iteration.estimator_spec
     training_chief_hooks = self._training_chief_hooks(current_iteration,
@@ -1906,6 +1990,14 @@ class Estimator(tf.estimator.Estimator):
       training_chief_hooks = self._process_hooks_for_growing_phase(
           training_chief_hooks)
       training_hooks = self._process_hooks_for_growing_phase(training_hooks)
+
+    saver = None
+    if self._enable_v2_checkpoint:
+      saver = tf_compat.v1.train.Saver(
+          var_list=graph_view.ObjectGraphView(
+              current_iteration.checkpoint).frozen_saveable_objects(),
+          sharded=True,
+          max_to_keep=self.config.keep_checkpoint_max)
     return tf.estimator.EstimatorSpec(
         mode=mode,
         predictions=iteration_estimator_spec.predictions,
@@ -1918,6 +2010,7 @@ class Estimator(tf.estimator.Estimator):
                                                 evaluation_name),
         scaffold=tf_compat.v1.train.Scaffold(
             summary_op=tf.constant(""),
+            saver=saver,
             local_init_op=current_iteration.estimator_spec.scaffold
             .local_init_op if isinstance(current_iteration.estimator_spec,
                                          tf.estimator.EstimatorSpec) else None),
@@ -1944,6 +2037,7 @@ class Estimator(tf.estimator.Estimator):
                         config,
                         is_growing_phase,
                         checkpoint_path,
+                        hooks,
                         best_ensemble_index_override=None):
     """Constructs the TF ops and variables for the current iteration.
 
@@ -1957,6 +2051,7 @@ class Estimator(tf.estimator.Estimator):
       is_growing_phase: Whether we are in the AdaNet graph growing phase.
       checkpoint_path: Path of the checkpoint to use. When `None`, this method
         uses the latest checkpoint instead.
+      hooks: A list of `tf.estimator.SessionRunHooks`.
       best_ensemble_index_override: Integer index to identify the latest
         iteration's best ensemble candidate instead of computing the best
         ensemble index dynamically conditional on the ensemble AdaNet losses.
@@ -1986,6 +2081,7 @@ class Estimator(tf.estimator.Estimator):
     skip_summaries = (mode != tf.estimator.ModeKeys.TRAIN or is_growing_phase)
     base_global_step = 0
     with tf_compat.v1.variable_scope("adanet"):
+      previous_iteration = None
       previous_ensemble_spec = None
       previous_ensemble = None
       previous_ensemble_summary = None
@@ -2004,9 +2100,10 @@ class Estimator(tf.estimator.Estimator):
                     for t, n in architecture.subnetworks_grouped_by_iteration
                 ])))
         base_global_step = architecture.global_step
-        previous_ensemble_spec = self._architecture_ensemble_spec(
+        previous_iteration = self._architecture_ensemble_spec(
             architecture, i, features, mode, labels, previous_ensemble_spec,
-            config)
+            config, previous_iteration, hooks)
+        previous_ensemble_spec = previous_iteration.candidates[-1].ensemble_spec
         previous_ensemble = previous_ensemble_spec.ensemble
         previous_ensemble_summary = self._summary_maker(
             namespace="ensemble",
@@ -2052,12 +2149,17 @@ class Estimator(tf.estimator.Estimator):
           mode=mode,
           config=config,
           previous_ensemble_summary=previous_ensemble_summary,
-          previous_ensemble_spec=previous_ensemble_spec,
-          best_ensemble_index_override=best_ensemble_index_override)
-
+          best_ensemble_index_override=best_ensemble_index_override,
+          previous_iteration=previous_iteration)
     return current_iteration, previous_iteration_vars
 
-  def _adanet_model_fn(self, features, labels, mode, params, config):
+  def _adanet_model_fn(self,
+                       features,
+                       labels,
+                       mode,
+                       params,
+                       config,
+                       hooks):
     """AdaNet model_fn.
 
     Args:
@@ -2068,6 +2170,7 @@ class Estimator(tf.estimator.Estimator):
         `ModeKeys`.
       params: A dict of parameters.
       config: The current `tf.estimator.RunConfig`.
+      hooks: A list of `tf.estimator.SessionRunHook`s.
 
     Returns:
       A `EstimatorSpec` instance.
@@ -2100,17 +2203,20 @@ class Estimator(tf.estimator.Estimator):
         config,
         is_growing_phase,
         checkpoint_path=checkpoint_path,
+        hooks=hooks,
         best_ensemble_index_override=best_ensemble_index)
 
     # Variable which allows us to read the current iteration from a checkpoint.
     # This must be created here so it is available when calling
     # _execute_bookkeeping_phase after the first iteration.
-    iteration_number_tensor = tf_compat.v1.get_variable(
-        self._Keys.CURRENT_ITERATION,
-        shape=[],
-        dtype=tf.int64,
-        initializer=tf_compat.v1.zeros_initializer(),
-        trainable=False)
+    iteration_number_tensor = None
+    if not self._enable_v2_checkpoint:
+      iteration_number_tensor = tf_compat.v1.get_variable(
+          self._Keys.CURRENT_ITERATION,
+          shape=[],
+          dtype=tf.int64,
+          initializer=tf_compat.v1.zeros_initializer(),
+          trainable=False)
 
     return self._create_estimator_spec(
         current_iteration,

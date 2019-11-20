@@ -112,7 +112,8 @@ class MeanTest(parameterized.TestCase, tf.test.TestCase):
               training=None,
               iteration_step=None,
               summary=None,
-              previous_ensemble=None)
+              previous_ensemble=None,
+              previous_iteration_checkpoint=None)
         return
       built_ensemble = ensembler.build_ensemble(
           subnetworks=subnetworks,
@@ -123,7 +124,8 @@ class MeanTest(parameterized.TestCase, tf.test.TestCase):
           training=None,
           iteration_step=None,
           summary=None,
-          previous_ensemble=None)
+          previous_ensemble=None,
+          previous_iteration_checkpoint=None)
 
       with self.test_session() as sess:
         sess.run(tf_compat.v1.global_variables_initializer())

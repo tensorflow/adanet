@@ -319,7 +319,7 @@ class _Iteration(
     collections.namedtuple("_Iteration", [
         "number", "candidates", "subnetwork_specs", "estimator_spec",
         "best_candidate_index", "summaries", "train_manager",
-        "subnetwork_reports"
+        "subnetwork_reports", "checkpoint", "previous_iteration"
     ])):
   """An AdaNet iteration.
 
@@ -332,13 +332,8 @@ class _Iteration(
 
   def __new__(cls, number, candidates, subnetwork_specs, estimator_spec,
               best_candidate_index, summaries, train_manager,
-              subnetwork_reports):
+              subnetwork_reports, checkpoint, previous_iteration):
     """Creates a validated `_Iteration` instance.
-
-    Args:
-
-    Returns:
-      A validated `_Iteration` object.
 
     Args:
       number: The iteration number.
@@ -351,6 +346,13 @@ class _Iteration(
         training.
       subnetwork_reports: Dict mapping string names to `subnetwork.Report`s, one
         per candidate.
+      checkpoint: The `tf.train.Checkpoint` object associated with this
+        iteration.
+      previous_iteration: The iteration occuring before this one or None if this
+        is the first iteration.
+
+    Returns:
+      A validated `_Iteration` object.
 
     Raises:
       ValueError: If validation fails.
@@ -377,7 +379,9 @@ class _Iteration(
         best_candidate_index=best_candidate_index,
         summaries=summaries,
         train_manager=train_manager,
-        subnetwork_reports=subnetwork_reports)
+        subnetwork_reports=subnetwork_reports,
+        checkpoint=checkpoint,
+        previous_iteration=previous_iteration)
 
 
 def _is_numeric(tensor):
@@ -511,10 +515,10 @@ class _IterationBuilder(object):
                       config,
                       labels=None,
                       previous_ensemble_summary=None,
-                      previous_ensemble_spec=None,
                       rebuilding=False,
                       rebuilding_ensembler_name=None,
-                      best_ensemble_index_override=None):
+                      best_ensemble_index_override=None,
+                      previous_iteration=None):
     """Builds and returns AdaNet iteration t.
 
     This method uses the generated the candidate subnetworks given the ensemble
@@ -535,7 +539,6 @@ class _IterationBuilder(object):
       config: The `tf.estimator.RunConfig` to use this iteration.
       labels: `Tensor` of labels. Can be `None`.
       previous_ensemble_summary: The `adanet.Summary` for the previous ensemble.
-      previous_ensemble_spec: Optional `_EnsembleSpec` for iteration t-1.
       rebuilding: Boolean whether the iteration is being rebuilt only to restore
         the previous best subnetworks and ensembles.
       rebuilding_ensembler_name: Optional ensembler to restrict to, only
@@ -543,6 +546,8 @@ class _IterationBuilder(object):
       best_ensemble_index_override: Integer index to identify the best ensemble
         candidate instead of computing the best ensemble index dynamically
         conditional on the ensemble AdaNet losses.
+      previous_iteration: The iteration occuring before this one or None if this
+        is the first iteration.
 
     Returns:
       An _Iteration instance.
@@ -585,18 +590,18 @@ class _IterationBuilder(object):
       summaries = []
       subnetwork_reports = {}
       previous_ensemble = None
-
-      if previous_ensemble_spec:
+      previous_ensemble_spec = None
+      previous_iteration_checkpoint = None
+      if previous_iteration:
+        previous_iteration_checkpoint = previous_iteration.checkpoint
+        previous_best_candidate = previous_iteration.candidates[-1]
+        previous_ensemble_spec = previous_best_candidate.ensemble_spec
         previous_ensemble = previous_ensemble_spec.ensemble
         replay_indices_for_all[len(candidates)] = copy.copy(
             previous_ensemble_spec.architecture.replay_indices)
         # Include previous best subnetwork as a candidate so that its
         # predictions are returned until a new candidate outperforms.
         seen_builder_names = {previous_ensemble_spec.name: True}
-        previous_best_candidate = self._candidate_builder.build_candidate(
-            ensemble_spec=previous_ensemble_spec,
-            training=training,
-            summary=previous_ensemble_summary)
         candidates.append(previous_best_candidate)
         if self._enable_ensemble_summaries:
           summaries.append(previous_ensemble_summary)
@@ -709,12 +714,14 @@ class _IterationBuilder(object):
               iteration_number=iteration_number,
               labels=labels,
               my_ensemble_index=len(candidates),
-              previous_ensemble_spec=previous_ensemble_spec)
+              previous_ensemble_spec=previous_ensemble_spec,
+              previous_iteration_checkpoint=previous_iteration_checkpoint)
           # TODO: Eliminate need for candidates.
-          # TODO: Don't track moving average of loss when rebuilding
-          # previous ensemble.
           candidate = self._candidate_builder.build_candidate(
-              ensemble_spec=ensemble_spec, training=training, summary=summary)
+              ensemble_spec=ensemble_spec,
+              training=training,
+              summary=summary,
+              rebuilding=rebuilding)
           replay_indices_for_all[len(candidates)] = copy.copy(
               ensemble_spec.architecture.replay_indices)
           candidates.append(candidate)
@@ -769,6 +776,8 @@ class _IterationBuilder(object):
       iteration_metrics = _IterationMetrics(iteration_number, candidates,
                                             subnetwork_specs, self._use_tpu,
                                             replay_indices_for_all)
+      checkpoint = self._make_checkpoint(candidates, subnetwork_specs,
+                                         iteration_number, previous_iteration)
       if self._use_tpu:
         estimator_spec = tf_compat.v1.estimator.tpu.TPUEstimatorSpec(
             mode=mode,
@@ -804,7 +813,9 @@ class _IterationBuilder(object):
           best_candidate_index=best_candidate_index,
           summaries=summaries,
           train_manager=train_manager,
-          subnetwork_reports=subnetwork_reports)
+          subnetwork_reports=subnetwork_reports,
+          checkpoint=checkpoint,
+          previous_iteration=previous_iteration)
 
   def _get_scaffold_fn(self, local_init_ops):
     """Creates a method generating a scaffold.
@@ -852,7 +863,8 @@ class _IterationBuilder(object):
         predictions=subnetwork_spec.predictions,
         loss=subnetwork_spec.loss,
         step=None,
-        adanet_loss=0.)
+        adanet_loss=0.,
+        variables=[])
     return self._candidate_builder.build_candidate(
         ensemble_spec=dummy_ensemble_spec,
         training=training,
@@ -1172,3 +1184,47 @@ class _IterationBuilder(object):
           output = tf.estimator.export.PredictOutput(best_predictions)
         best_export_outputs[key] = output
       return best_export_outputs
+
+  def _make_checkpoint(self, candidates, subnetwork_specs, iteration_number,
+                       previous_iteration):
+    """Returns a `tf.train.Checkpoint` for the iteration."""
+
+    # TODO: Handle hook created variables.
+    # TODO: Handle TPU embedding variables.
+    trackable = {}
+
+    for candidate in candidates:
+      for ensemble_var in candidate.ensemble_spec.variables:
+        trackable["{}_{}".format(candidate.ensemble_spec.name,
+                                 ensemble_var.name)] = ensemble_var
+      for candidate_var in candidate.variables:
+        trackable["candidate_{}_{}".format(candidate.ensemble_spec.name,
+                                           candidate_var.name)] = candidate_var
+
+    for subnetwork_spec in subnetwork_specs:
+      for subnetwork_var in subnetwork_spec.variables:
+        trackable["{}_{}".format(subnetwork_spec.name,
+                                 subnetwork_var.name)] = subnetwork_var
+
+    global_step = tf_compat.v1.train.get_global_step()
+    # TODO: Currently, TPUEstimator has no global_step set when
+    # exporting the saved model.
+    if global_step is not None:
+      trackable[tf_compat.v1.GraphKeys.GLOBAL_STEP] = global_step
+
+    trackable["iteration_number"] = tf_compat.v1.get_variable(
+        "iteration_number",
+        dtype=tf.int64,
+        # Lambda initializer required for TPU.
+        initializer=lambda: tf.constant(iteration_number, dtype=tf.int64),
+        trainable=False)
+    if previous_iteration:
+      trackable["previous_iteration"] = previous_iteration.checkpoint
+
+    logging.info("TRACKABLE: %s", trackable)
+
+    checkpoint = tf_compat.v2.train.Checkpoint(**trackable)
+    # Make the save counter to satisfy the assert_consumed() assertion later.
+    # This property creates variables the first time it is called.
+    checkpoint.save_counter  # pylint: disable=pointless-statement
+    return checkpoint

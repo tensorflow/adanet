@@ -35,6 +35,13 @@ from tensorflow.python.framework import test_util
 # pylint: enable=g-direct-tensorflow-import
 
 
+class _FakeCheckpoint(object):
+  """A fake `tf.train.Checkpoint`."""
+
+  def restore(self, save_path):
+    del save_path  # unused
+
+
 class _FakeSummary(Summary):
   """A fake adanet.Summary."""
   scalars = collections.defaultdict(list)
@@ -91,16 +98,17 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
         tf.compat.v1.train, 'load_variable', autospec=False).start()
     mock.patch.object(
         tf.compat.v2.train, 'load_variable', autospec=False).start()
+    mock.patch.object(
+        ensemble.ComplexityRegularizedEnsembler, '_load_variable',
+        autospec=False).start()
 
-    def load_variable(checkpoint_dir, name):
-      self.assertEqual(checkpoint_dir, 'fake_checkpoint_dir')
-      var = tf_compat.v1.get_variable(
-          name='fake_loaded_variable_' + name, initializer=1.)
-      with self.test_session() as sess:
-        sess.run(var.initializer)
-        return var
+    def _load_variable(var, previous_iteration_checkpoint):
+      del var  # unused
+      assert previous_iteration_checkpoint is not None
+      return 1.0
 
-    tf.train.load_variable.side_effect = load_variable
+    complexity_regularized_ensembler = ensemble.ComplexityRegularizedEnsembler
+    complexity_regularized_ensembler._load_variable.side_effect = _load_variable
 
     self.summary = _FakeSummary()
 
@@ -114,7 +122,8 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
         training=None,
         iteration_step=None,
         summary=self.summary,
-        previous_ensemble=None)
+        previous_ensemble=None,
+        previous_iteration_checkpoint=None)
 
   def _build_subnetwork(self, multi_head=False):
 
@@ -535,27 +544,28 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
             training=None,
             iteration_step=None,
             summary=self.summary,
-            previous_ensemble=previous_ensemble)
+            previous_ensemble=previous_ensemble,
+            previous_iteration_checkpoint=_FakeCheckpoint())
 
         with self.test_session() as sess:
           sess.run(tf_compat.v1.global_variables_initializer())
 
-        summary_scalars, complexity_regularization = sess.run(
-            (self.summary.scalars, built_ensemble.complexity_regularization))
+          summary_scalars, complexity_regularization = sess.run(
+              (self.summary.scalars, built_ensemble.complexity_regularization))
 
-        if expected_summary_scalars:
-          for key in expected_summary_scalars.keys():
-            print(summary_scalars)
-            self.assertAllClose(expected_summary_scalars[key],
-                                summary_scalars[key])
+          if expected_summary_scalars:
+            for key in expected_summary_scalars.keys():
+              print(summary_scalars)
+              self.assertAllClose(expected_summary_scalars[key],
+                                  summary_scalars[key])
 
-        self.assertEqual(
-            [l.subnetwork for l in built_ensemble.weighted_subnetworks],
-            previous_ensemble_subnetworks + subnetworks)
+          self.assertEqual(
+              [l.subnetwork for l in built_ensemble.weighted_subnetworks],
+              previous_ensemble_subnetworks + subnetworks)
 
-        self.assertAllClose(expected_complexity_regularization,
-                            complexity_regularization)
-        self.assertIsNotNone(sess.run(built_ensemble.logits))
+          self.assertAllClose(expected_complexity_regularization,
+                              complexity_regularization)
+          self.assertIsNotNone(sess.run(built_ensemble.logits))
 
   @test_util.run_in_graph_and_eager_modes
   def test_build_ensemble_subnetwork_has_scalar_logits(self):

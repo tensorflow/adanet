@@ -41,9 +41,9 @@ class CandidateTest(parameterized.TestCase, tf.test.TestCase):
       "adanet_loss": [.1],
   })
   @test_util.run_in_graph_and_eager_modes
-  def test_new(self, ensemble_spec, adanet_loss):
+  def test_new(self, ensemble_spec, adanet_loss, variables=None):
     with self.test_session():
-      got = _Candidate(ensemble_spec, adanet_loss)
+      got = _Candidate(ensemble_spec, adanet_loss, variables)
       self.assertEqual(got.ensemble_spec, ensemble_spec)
       self.assertEqual(got.adanet_loss, adanet_loss)
 
@@ -58,10 +58,10 @@ class CandidateTest(parameterized.TestCase, tf.test.TestCase):
           "adanet_loss": None,
       })
   @test_util.run_in_graph_and_eager_modes
-  def test_new_errors(self, ensemble_spec, adanet_loss):
+  def test_new_errors(self, ensemble_spec, adanet_loss, variables=None):
     with self.test_session():
       with self.assertRaises(ValueError):
-        _Candidate(ensemble_spec, adanet_loss)
+        _Candidate(ensemble_spec, adanet_loss, variables)
 
 
 class _FakeSummary(object):

@@ -233,3 +233,21 @@ def is_v2_behavior_enabled():
   # Since there is no actual tf.is_v2_behavior enabled, check that the
   # settings were enabled.
   return tf2.enabled()
+
+
+def load_variable(checkpoint_path, var_name, shape, dtype):
+  """Loads a variable from a given checkpoint."""
+  with tf.Graph().as_default():
+    variable = v1.get_variable(
+        var_name,
+        shape=shape,
+        dtype=dtype,
+        initializer=v1.zeros_initializer(),
+        trainable=False)
+    trackable_vars = {var_name: variable}
+    checkpoint = v2.train.Checkpoint(**trackable_vars)
+    status = checkpoint.restore(checkpoint_path)
+    status.expect_partial()
+    with v1.Session() as session:
+      status.initialize_or_restore(session)
+      return session.run(variable)

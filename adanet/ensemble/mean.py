@@ -92,9 +92,9 @@ class MeanEnsembler(Ensembler):
 
   def build_ensemble(self, subnetworks, previous_ensemble_subnetworks, features,
                      labels, logits_dimension, training, iteration_step,
-                     summary, previous_ensemble):
+                     summary, previous_ensemble, previous_iteration_checkpoint):
     del features, labels, logits_dimension, training, iteration_step  # unused
-    del previous_ensemble_subnetworks  # unused
+    del previous_ensemble_subnetworks, previous_iteration_checkpoint  # unused
 
     if isinstance(subnetworks[0].logits, dict):
       mean_logits = {

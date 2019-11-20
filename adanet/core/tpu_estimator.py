@@ -195,7 +195,7 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
     params = self.params
     params.update({
         "best_ensemble_index":
-            self._compute_best_ensemble_index(checkpoint_path),
+            self._compute_best_ensemble_index(checkpoint_path, hooks),
         "checkpoint_path":
             checkpoint_path,
     })
@@ -203,7 +203,7 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
     # TODO: Consider extracting a common function to use here and in
     # _create_temp_estimator().
     estimator = tf_compat.v1.estimator.tpu.TPUEstimator(
-        model_fn=self._create_model_fn(is_export=False),
+        model_fn=self._create_model_fn(hooks=hooks, is_export=False),
         params=params,
         config=self._original_config,
         model_dir=self.model_dir,
@@ -236,14 +236,14 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
         session_config=self._original_config.session_config,
         protocol=self._original_config.protocol)
 
-  def _create_temp_estimator(self, config, params, is_export=False):
+  def _create_temp_estimator(self, config, params, hooks, is_export=False):
     """See the `Estimator` base class for details."""
 
     from tensorflow_estimator.python.estimator.tpu import tpu_estimator  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
 
     temp_model_dir = config.model_dir
     return tf_compat.v1.estimator.tpu.TPUEstimator(
-        model_fn=self._create_model_fn(is_export),
+        model_fn=self._create_model_fn(hooks=hooks, is_export=is_export),
         params=params,
         config=config,
         model_dir=temp_model_dir,
@@ -384,7 +384,7 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
 
     return _host_call_fn, summary_kwargs
 
-  def _create_model_fn(self, is_export):
+  def _create_model_fn(self, hooks, is_export):
 
     from tensorflow_estimator.python.estimator.tpu import tpu_estimator  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
 
@@ -401,12 +401,12 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
           batch_timeout_micros=60 * 1000,
           allowed_batch_sizes=[self._predict_batch_size])
       return tpu_estimator.model_fn_inference_on_tpu(
-          self._adanet_model_fn,
+          functools.partial(self._adanet_model_fn, hooks=hooks),
           features=features,
           labels=labels,
           config=config,
           params=params,
           batch_config=batch_config)
 
-    return (model_fn_for_export
-            if is_export and self._export_to_tpu else self._adanet_model_fn)
+    return (model_fn_for_export if is_export and self._export_to_tpu else
+            functools.partial(self._adanet_model_fn, hooks=hooks))

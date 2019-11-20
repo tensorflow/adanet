@@ -50,7 +50,10 @@ from tensorflow_estimator.python.estimator.head import regression_head
 def _dummy_candidate():
   """Returns a dummy `_Candidate` instance."""
 
-  return _Candidate(ensemble_spec=tu.dummy_ensemble_spec("foo"), adanet_loss=1.)
+  return _Candidate(
+      ensemble_spec=tu.dummy_ensemble_spec("foo"),
+      adanet_loss=1.,
+      variables=[tf.Variable(1.)])
 
 
 class IterationTest(tu.AdanetTestCase):
@@ -130,7 +133,9 @@ class IterationTest(tu.AdanetTestCase):
         subnetwork_reports=subnetwork_reports,
         train_manager=_TrainManager([], [],
                                     self.test_subdirectory,
-                                    is_chief=True))
+                                    is_chief=True),
+        previous_iteration=None,
+        checkpoint=None)
     self.assertEqual(iteration.number, number)
     self.assertEqual(iteration.candidates, candidates)
     self.assertEqual(iteration.estimator_spec, estimator_spec)
@@ -186,7 +191,9 @@ class IterationTest(tu.AdanetTestCase):
           subnetwork_reports=subnetwork_reports(),
           train_manager=_TrainManager([], [],
                                       self.test_subdirectory,
-                                      is_chief=True))
+                                      is_chief=True),
+          previous_iteration=None,
+          checkpoint=None)
 
 
 class _FakeBuilder(SubnetworkBuilder):
@@ -253,7 +260,8 @@ class _FakeEnsembleBuilder(object):
                           labels=None,
                           previous_ensemble_spec=None,
                           my_ensemble_index=None,
-                          params=None):
+                          params=None,
+                          previous_iteration_checkpoint=None):
     del ensembler
     del subnetwork_specs
     del summary
@@ -263,6 +271,7 @@ class _FakeEnsembleBuilder(object):
     del iteration_number
     del params
     del my_ensemble_index
+    del previous_iteration_checkpoint
 
     num_subnetworks = 0
     if previous_ensemble_spec:
@@ -276,7 +285,8 @@ class _FakeEnsembleBuilder(object):
         dict_predictions=self._dict_predictions,
         eval_metrics=tu.create_ensemble_metrics(
             metric_fn=self._eval_metric_ops_fn),
-        export_output_key=self._export_output_key)
+        export_output_key=self._export_output_key,
+        variables=[tf.Variable(1.)])
 
 
 class _FakeSubnetworkManager(object):
@@ -303,7 +313,8 @@ class _FakeSubnetworkManager(object):
         name=name,
         subnetwork=None,
         builder=subnetwork_builder,
-        step=tf.Variable(0.),
+        step=tf.Variable(0, dtype=tf.int64),
+        variables=[tf.Variable(1.)],
         predictions=None,
         loss=None,
         train_op=subnetwork_builder.build_subnetwork_train_op(
@@ -318,13 +329,15 @@ class _FakeCandidateBuilder(object):
                       ensemble_spec,
                       training,
                       summary,
-                      previous_ensemble_spec=None):
+                      rebuilding):
     del training  # Unused
     del summary  # Unused
-    del previous_ensemble_spec  # Unused
+    del rebuilding  # Unused
 
     return _Candidate(
-        ensemble_spec=ensemble_spec, adanet_loss=ensemble_spec.adanet_loss)
+        ensemble_spec=ensemble_spec,
+        adanet_loss=ensemble_spec.adanet_loss,
+        variables=[tf.Variable(1.)])
 
 
 def _export_output_tensors(export_outputs):
@@ -351,6 +364,17 @@ class _FakeEnsembler(object):
   @property
   def name(self):
     return "fake_ensembler"
+
+
+class _FakeIteration(object):
+
+  def __init__(self, fake_ensemble_spec):
+    self.number = 0
+    self.checkpoint = tf.train.Checkpoint()
+    self.candidates = [
+        _FakeCandidateBuilder().build_candidate(fake_ensemble_spec, None, None,
+                                                None)
+    ]
 
 
 class IterationBuilderTest(tu.AdanetTestCase):
@@ -385,7 +409,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "want_loss": 1.403943,
           "want_predictions": 2.129,
           "want_best_candidate_index": 0,
-      }, {
+      },
+      {
           "testcase_name":
               "single_subnetwork_fn_mock_summary",
           "ensemble_builder":
@@ -403,7 +428,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
               2.129,
           "want_best_candidate_index":
               0,
-      }, {
+      },
+      {
           "testcase_name":
               "single_subnetwork_with_eval_metrics",
           "ensemble_builder":
@@ -423,7 +449,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "want_eval_metric_ops": ["a", "iteration"],
           "want_best_candidate_index":
               0,
-      }, {
+      },
+      {
           "testcase_name":
               "single_subnetwork_with_non_tensor_eval_metric_op",
           "ensemble_builder":
@@ -443,7 +470,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "want_eval_metric_ops": ["a", "iteration"],
           "want_best_candidate_index":
               0,
-      }, {
+      },
+      {
           "testcase_name": "single_subnetwork_done_training_fn",
           "ensemble_builder": _FakeEnsembleBuilder(),
           "subnetwork_builders": [_FakeBuilder("done")],
@@ -452,7 +480,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "want_loss": 1.403943,
           "want_predictions": 2.129,
           "want_best_candidate_index": 0,
-      }, {
+      },
+      {
           "testcase_name": "single_dict_predictions_subnetwork_fn",
           "ensemble_builder": _FakeEnsembleBuilder(dict_predictions=True),
           "subnetwork_builders": [_FakeBuilder("training")],
@@ -464,17 +493,21 @@ class IterationBuilderTest(tu.AdanetTestCase):
               "logits": 2.129
           },
           "want_best_candidate_index": 0,
-      }, {
+      },
+      {
           "testcase_name": "previous_ensemble",
           "ensemble_builder": _FakeEnsembleBuilder(),
           "subnetwork_builders": [_FakeBuilder("training")],
           "features": lambda: [[1., -1., 0.]],
           "labels": lambda: [1],
-          "previous_ensemble_spec": lambda: tu.dummy_ensemble_spec("old"),
+          "previous_iteration":
+              lambda: _FakeIteration(
+                  tu.dummy_ensemble_spec("old", variables=[tf.Variable(1.)])),
           "want_loss": 1.403943,
           "want_predictions": 2.129,
           "want_best_candidate_index": 1,
-      }, {
+      },
+      {
           "testcase_name":
               "previous_ensemble_is_best",
           "ensemble_builder":
@@ -484,15 +517,18 @@ class IterationBuilderTest(tu.AdanetTestCase):
               lambda: [[1., -1., 0.]],
           "labels":
               lambda: [1],
-          "previous_ensemble_spec":
-              lambda: tu.dummy_ensemble_spec("old", random_seed=12),
+          "previous_iteration":
+              lambda: _FakeIteration(
+                  tu.dummy_ensemble_spec(
+                      "old", random_seed=12, variables=[tf.Variable(1.)])),
           "want_loss":
               -.437,
           "want_predictions":
               .688,
           "want_best_candidate_index":
               0,
-      }, {
+      },
+      {
           "testcase_name":
               "previous_ensemble_spec_and_eval_metrics",
           "ensemble_builder":
@@ -505,12 +541,14 @@ class IterationBuilderTest(tu.AdanetTestCase):
               lambda: [[1., -1., 0.]],
           "labels":
               lambda: [1],
-          "previous_ensemble_spec":
-              lambda: tu.dummy_ensemble_spec(
-                  "old",
-                  eval_metrics=tu.create_ensemble_metrics(metric_fn=lambda: {
-                      "a": (tf.constant(1), tf.constant(2))
-                  })),
+          "previous_iteration":
+              lambda: _FakeIteration(
+                  tu.dummy_ensemble_spec(
+                      "old",
+                      eval_metrics=tu.create_ensemble_metrics(
+                          metric_fn=lambda:
+                          {"a": (tf.constant(1), tf.constant(2))}),
+                      variables=[tf.Variable(1.)])),
           "want_loss":
               1.403943,
           "want_predictions":
@@ -518,7 +556,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "want_eval_metric_ops": ["a", "iteration"],
           "want_best_candidate_index":
               1,
-      }, {
+      },
+      {
           "testcase_name": "two_subnetwork_fns",
           "ensemble_builder": _FakeEnsembleBuilder(),
           "subnetwork_builders": [
@@ -530,7 +569,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "want_loss": 1.40394,
           "want_predictions": 2.129,
           "want_best_candidate_index": 0,
-      }, {
+      },
+      {
           "testcase_name": "two_subnetwork_fns_other_best",
           "ensemble_builder": _FakeEnsembleBuilder(),
           "subnetwork_builders": [
@@ -542,7 +582,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "want_loss": -.437,
           "want_predictions": .688,
           "want_best_candidate_index": 1,
-      }, {
+      },
+      {
           "testcase_name": "two_subnetwork_one_training_fns",
           "ensemble_builder": _FakeEnsembleBuilder(),
           "subnetwork_builders":
@@ -553,7 +594,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "want_loss": 1.403943,
           "want_predictions": 2.129,
           "want_best_candidate_index": 0,
-      }, {
+      },
+      {
           "testcase_name": "two_subnetwork_done_training_fns",
           "ensemble_builder": _FakeEnsembleBuilder(),
           "subnetwork_builders":
@@ -564,7 +606,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "want_loss": 1.403943,
           "want_predictions": 2.129,
           "want_best_candidate_index": 0,
-      }, {
+      },
+      {
           "testcase_name": "two_dict_predictions_subnetwork_fns",
           "ensemble_builder": _FakeEnsembleBuilder(dict_predictions=True),
           "subnetwork_builders": [
@@ -579,7 +622,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
               "logits": 2.129
           },
           "want_best_candidate_index": 0,
-      }, {
+      },
+      {
           "testcase_name":
               "two_dict_predictions_subnetwork_fns_predict_classes",
           "ensemble_builder":
@@ -608,7 +652,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
               tu.ExportOutputKeys.CLASSIFICATION_CLASSES: [2.129],
               "serving_default": [2.129],
           },
-      }, {
+      },
+      {
           "testcase_name":
               "two_dict_predictions_subnetwork_fns_predict_scores",
           "ensemble_builder":
@@ -637,7 +682,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
               tu.ExportOutputKeys.CLASSIFICATION_SCORES: [2.129],
               "serving_default": [2.129],
           },
-      }, {
+      },
+      {
           "testcase_name":
               "two_dict_predictions_subnetwork_fns_predict_regression",
           "ensemble_builder":
@@ -664,7 +710,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
               tu.ExportOutputKeys.REGRESSION: 2.129,
               "serving_default": 2.129,
           },
-      }, {
+      },
+      {
           "testcase_name":
               "two_dict_predictions_subnetwork_fns_predict_prediction",
           "ensemble_builder":
@@ -697,7 +744,8 @@ class IterationBuilderTest(tu.AdanetTestCase):
                   "logits": 2.129
               },
           },
-      }, {
+      },
+      {
           "testcase_name": "chief_session_run_hook",
           "ensemble_builder": _FakeEnsembleBuilder(),
           "subnetwork_builders": [
@@ -719,7 +767,7 @@ class IterationBuilderTest(tu.AdanetTestCase):
                            want_predictions,
                            want_best_candidate_index,
                            want_eval_metric_ops=(),
-                           previous_ensemble_spec=lambda: None,
+                           previous_iteration=None,
                            want_loss=None,
                            want_export_outputs=None,
                            mode=tf.estimator.ModeKeys.TRAIN,
@@ -740,12 +788,13 @@ class IterationBuilderTest(tu.AdanetTestCase):
           ensemble_candidates=[
               EnsembleCandidate(b.name, [b], None) for b in subnetwork_builders
           ],
+          previous_iteration=previous_iteration()
+          if previous_iteration else None,
           subnetwork_builders=subnetwork_builders,
           features=features(),
           labels=labels(),
           mode=mode,
-          config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
-          previous_ensemble_spec=previous_ensemble_spec())
+          config=tf.estimator.RunConfig(model_dir=self.test_subdirectory))
       init = tf.group(tf_compat.v1.global_variables_initializer(),
                       tf_compat.v1.local_variables_initializer())
       self.evaluate(init)
@@ -756,7 +805,6 @@ class IterationBuilderTest(tu.AdanetTestCase):
           want_predictions,
           self.evaluate(estimator_spec.predictions),
           atol=1e-3)
-
       # A default architecture metric is always included, even if we don't
       # specify one.
       eval_metric_ops = estimator_spec.eval_metric_ops
@@ -766,7 +814,6 @@ class IterationBuilderTest(tu.AdanetTestCase):
 
       self.assertEqual(want_best_candidate_index,
                        self.evaluate(iteration.best_candidate_index))
-
       if mode == tf.estimator.ModeKeys.PREDICT:
         self.assertIsNotNone(estimator_spec.export_outputs)
         self.assertAllClose(
@@ -800,12 +847,11 @@ class IterationBuilderTest(tu.AdanetTestCase):
           "want_raises": ValueError,
       }, {
           "testcase_name":
-              "same_name_as_previous_ensemble_spec",
+              "same_ensembler_names",
           "ensemble_builder":
               _FakeEnsembleBuilder(),
-          "previous_ensemble_spec_fn":
-              lambda: tu.dummy_ensemble_spec("same_name"),
-          "subnetwork_builders": [_FakeBuilder("same_name"),],
+          "multiple_candidates": True,
+          "subnetwork_builders": [_FakeBuilder("fake_builder_name")],
           "want_raises":
               ValueError,
       }, {
@@ -829,10 +875,11 @@ class IterationBuilderTest(tu.AdanetTestCase):
                                  ensemble_builder,
                                  subnetwork_builders,
                                  want_raises,
-                                 previous_ensemble_spec_fn=lambda: None,
+                                 multiple_candidates=False,
                                  mode=tf.estimator.ModeKeys.TRAIN,
                                  summary_maker=_ScopedSummary):
     with context.graph_mode():
+      tf_compat.v1.train.create_global_step()
       builder = _IterationBuilder(
           _FakeCandidateBuilder(),
           _FakeSubnetworkManager(),
@@ -842,19 +889,23 @@ class IterationBuilderTest(tu.AdanetTestCase):
           max_steps=100)
       features = [[1., -1., 0.]]
       labels = [1]
+      ensemble_candidates = [
+          EnsembleCandidate("test", subnetwork_builders, None)
+      ]
+      if multiple_candidates:
+        ensemble_candidates += [
+            EnsembleCandidate("test", subnetwork_builders, None)
+        ]
       with self.assertRaises(want_raises):
         builder.build_iteration(
             base_global_step=0,
             iteration_number=0,
-            ensemble_candidates=[
-                EnsembleCandidate("test", subnetwork_builders, None)
-            ],
+            ensemble_candidates=ensemble_candidates,
             subnetwork_builders=subnetwork_builders,
             features=features,
             labels=labels,
             mode=mode,
-            config=tf.estimator.RunConfig(model_dir=self.test_subdirectory),
-            previous_ensemble_spec=previous_ensemble_spec_fn())
+            config=tf.estimator.RunConfig(model_dir=self.test_subdirectory))
 
 
 class _HeadEnsembleBuilder(object):
@@ -874,7 +925,8 @@ class _HeadEnsembleBuilder(object):
                           labels=None,
                           previous_ensemble_spec=None,
                           my_ensemble_index=None,
-                          params=None):
+                          params=None,
+                          previous_iteration_checkpoint=None):
     del ensembler
     del subnetwork_specs
     del summary
@@ -882,6 +934,7 @@ class _HeadEnsembleBuilder(object):
     del previous_ensemble_spec
     del my_ensemble_index
     del params
+    del previous_iteration_checkpoint
 
     logits = [[.5]]
 
@@ -893,7 +946,8 @@ class _HeadEnsembleBuilder(object):
         architecture=_Architecture("foo", "bar"),
         subnetwork_builders=candidate.subnetwork_builders,
         predictions=estimator_spec.predictions,
-        step=tf.Variable(0),
+        step=tf.Variable(0, dtype=tf.int64),
+        variables=[tf.Variable(1.)],
         loss=None,
         adanet_loss=.1,
         train_op=None,
@@ -914,6 +968,7 @@ class IterationExportOutputsTest(tu.AdanetTestCase):
   @test_util.run_in_graph_and_eager_modes
   def test_head_export_outputs(self, head):
     with context.graph_mode():
+      tf_compat.v1.train.create_global_step()
       ensemble_builder = _HeadEnsembleBuilder(head)
       builder = _IterationBuilder(
           _FakeCandidateBuilder(),
@@ -930,7 +985,7 @@ class IterationExportOutputsTest(tu.AdanetTestCase):
           base_global_step=0,
           iteration_number=0,
           ensemble_candidates=[
-              EnsembleCandidate("test", subnetwork_builders, None)
+              EnsembleCandidate("test", subnetwork_builders, [tf.Variable(1.)])
           ],
           subnetwork_builders=subnetwork_builders,
           features=features,
