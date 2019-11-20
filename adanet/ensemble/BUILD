@@ -21,6 +21,7 @@ py_library(
     name = "ensembler",
     srcs = ["ensembler.py"],
     deps = [
+        "@six_archive//:six",
     ],
 )
 
@@ -28,6 +29,7 @@ py_library(
     name = "strategy",
     srcs = ["strategy.py"],
     deps = [
+        "@six_archive//:six",
     ],
 )
 

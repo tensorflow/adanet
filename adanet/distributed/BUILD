@@ -39,6 +39,7 @@ py_library(
         ":devices",
         "//adanet/tf_compat",
         "@absl_py//absl/logging",
+        "@six_archive//:six",
     ],
 )
 

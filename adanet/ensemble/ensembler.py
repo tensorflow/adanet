@@ -20,6 +20,8 @@ from __future__ import print_function
 import abc
 import collections
 
+import six
+
 
 class TrainOpSpec(
     collections.namedtuple("TrainOpSpec",
@@ -44,10 +46,9 @@ class TrainOpSpec(
     return super(TrainOpSpec, cls).__new__(cls, train_op, chief_hooks, hooks)
 
 
-class Ensemble(object):  # pytype: disable=ignored-metaclass
+@six.add_metaclass(abc.ABCMeta)
+class Ensemble(object):
   """An abstract ensemble of subnetworks."""
-
-  __metaclass__ = abc.ABCMeta
 
   @abc.abstractproperty
   def logits(self):
@@ -68,10 +69,9 @@ class Ensemble(object):  # pytype: disable=ignored-metaclass
     return None
 
 
-class Ensembler(object):  # pytype: disable=ignored-metaclass
+@six.add_metaclass(abc.ABCMeta)
+class Ensembler(object):
   """An abstract ensembler."""
-
-  __metaclass__ = abc.ABCMeta
 
   @abc.abstractproperty
   def name(self):

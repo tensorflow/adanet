@@ -262,6 +262,7 @@ py_library(
     deps = [
         "//adanet/tf_compat",
         "@absl_py//absl/logging",
+        "@six_archive//:six",
     ],
 )
 

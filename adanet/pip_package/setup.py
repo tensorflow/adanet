@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from adanet import version
 import setuptools
 
 # Can't import the module during setup.py.
@@ -37,7 +38,7 @@ REQUIRED_PACKAGES = [
 
 setuptools.setup(
     name='adanet',  # Automatic: adanet, etc. Case insensitive.
-    version=__version__.replace('-', ''),
+    version=version.__version__.replace('-', ''),
     description=(
         'adanet is a lightweight and scalable TensorFlow AutoML framework for '
         'training and deploying adaptive neural networks using the AdaNet '

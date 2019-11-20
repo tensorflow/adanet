@@ -19,6 +19,7 @@ py_library(
     name = "generator",
     srcs = ["generator.py"],
     deps = [
+        "@six_archive//:six",
     ],
 )
 

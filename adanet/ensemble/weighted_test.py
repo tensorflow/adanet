@@ -592,8 +592,12 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
       ensembler = ensemble.ComplexityRegularizedEnsembler(
           optimizer=lambda: tf_compat.v1.train.GradientDescentOptimizer(.1))
       train_op = ensembler.build_train_op(
-          self._build_easy_ensemble([self._build_subnetwork()]), dummy_loss,
-          [dummy_weight], *[None] * 4)
+          self._build_easy_ensemble([self._build_subnetwork()]),
+          dummy_loss, [dummy_weight],
+          labels=None,
+          iteration_step=None,
+          summary=None,
+          previous_ensemble=None)
       config = tf.compat.v1.ConfigProto(
           gpu_options=tf.compat.v1.GPUOptions(allow_growth=True))
       with tf_compat.v1.Session(config=config) as sess:
@@ -609,8 +613,12 @@ class ComplexityRegularizedEnsemblerTest(parameterized.TestCase,
       ensembler = ensemble.ComplexityRegularizedEnsembler(
           optimizer=tf_compat.v1.train.GradientDescentOptimizer(.1))
       train_op = ensembler.build_train_op(
-          self._build_easy_ensemble([self._build_subnetwork()]), dummy_loss,
-          [dummy_weight], *[None] * 4)
+          self._build_easy_ensemble([self._build_subnetwork()]),
+          dummy_loss, [dummy_weight],
+          labels=None,
+          iteration_step=None,
+          summary=None,
+          previous_ensemble=None)
       config = tf.compat.v1.ConfigProto(
           gpu_options=tf.compat.v1.GPUOptions(allow_growth=True))
       with tf_compat.v1.Session(config=config) as sess:

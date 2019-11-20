@@ -20,6 +20,8 @@ from __future__ import print_function
 import abc
 import collections
 
+import six
+
 
 class Candidate(
     collections.namedtuple("Candidate", [
@@ -45,7 +47,8 @@ class Candidate(
             previous_ensemble_subnetwork_builders or []))
 
 
-class Strategy(object):  # pytype: disable=ignored-metaclass
+@six.add_metaclass(abc.ABCMeta)
+class Strategy(object):
   """An abstract ensemble strategy."""
 
   __metaclass__ = abc.ABCMeta
