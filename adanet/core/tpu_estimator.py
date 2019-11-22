@@ -388,25 +388,28 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
 
     from tensorflow_estimator.python.estimator.tpu import tpu_estimator  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
 
-    def model_fn_for_export(features, labels, mode, params, config):
-      """The model_fn to use during export for TPU."""
+    adanet_model_fn = functools.partial(self._adanet_model_fn, hooks=hooks)
 
-      assert mode == tf.estimator.ModeKeys.PREDICT
-      batch_config = tpu_estimator.BatchConfig(
-          # Set num_batch_threads to the number of TPU cores on Servomatic.
-          num_batch_threads=2,
-          max_batch_size=self._predict_batch_size,
-          # TODO: Magic number. Investigate whether there is a better
-          # way to set this, or have the user pass it in.
-          batch_timeout_micros=60 * 1000,
-          allowed_batch_sizes=[self._predict_batch_size])
-      return tpu_estimator.model_fn_inference_on_tpu(
-          functools.partial(self._adanet_model_fn, hooks=hooks),
-          features=features,
-          labels=labels,
-          config=config,
-          params=params,
-          batch_config=batch_config)
+    def _model_fn(features, labels, mode, params, config):
+      """The model_fn to return which supports exporting on TPU."""
 
-    return (model_fn_for_export if is_export and self._export_to_tpu else
-            functools.partial(self._adanet_model_fn, hooks=hooks))
+      if (is_export and params["use_tpu"] and
+          mode == tf.estimator.ModeKeys.PREDICT):
+        batch_config = tpu_estimator.BatchConfig(
+            # Set num_batch_threads to the number of TPU cores on Servomatic.
+            num_batch_threads=2,
+            max_batch_size=self._predict_batch_size,
+            # TODO: Magic number. Investigate whether there is a better
+            # way to set this, or have the user pass it in.
+            batch_timeout_micros=60 * 1000,
+            allowed_batch_sizes=[self._predict_batch_size])
+        return tpu_estimator.model_fn_inference_on_tpu(
+            adanet_model_fn,
+            features=features,
+            labels=labels,
+            config=config,
+            params=params,
+            batch_config=batch_config)
+      return adanet_model_fn(features, labels, mode, params, config)
+
+    return _model_fn
