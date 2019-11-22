@@ -21,7 +21,6 @@ from __future__ import print_function
 
 import contextlib
 import errno
-import functools
 import inspect
 import os
 import time
@@ -703,7 +702,7 @@ class Estimator(tf.estimator.Estimator):
       # added to `tf.estimator.Estimator` that are expected to be callable by
       # external functions, such as in b/110435640.
       super(Estimator, self).__init__(
-          model_fn=functools.partial(self._adanet_model_fn, hooks=None),
+          model_fn=self._create_model_fn(),
           params={},
           config=config,
           model_dir=model_dir,
@@ -890,12 +889,10 @@ class Estimator(tf.estimator.Estimator):
         # Delegate training to a temporary estimator instead of super to make
         # passing arguments more functional (via params).
         temp_estimator = self._create_temp_estimator(
-            self.config,
-            hooks=hooks,
-            params={
-                "is_inside_training_loop": True,
-                "checkpoint_path": latest_checkpoint,
-            })
+            config=self.config,
+            is_inside_training_loop=True,
+            checkpoint_path=latest_checkpoint,
+            hooks=hooks)
         result = temp_estimator.train(
             input_fn=input_fn,
             hooks=hooks,
@@ -1011,22 +1008,17 @@ class Estimator(tf.estimator.Estimator):
       checkpoint_path = tf.train.latest_checkpoint(self.model_dir)
     logging.info("Evaluating AdaNet model at checkpoint: %s", checkpoint_path)
 
-    # Ensure that the read to get the iteration number and read to restore
-    # variable values come from the same checkpoint during evaluation.
-    params = {
-        "checkpoint_path":
-            checkpoint_path,
-        "evaluation_name":
-            name,
-        "best_ensemble_index":
-            self._compute_best_ensemble_index(
-                checkpoint_path, hooks=hooks),
-    }
-
     # Delegate evaluation to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(
-        self.config, params=params, hooks=hooks)
+        config=self.config,
+        checkpoint_path=checkpoint_path,
+        evaluation_name=name,
+        # Ensure that the read to get the iteration number and read to restore
+        # variable values come from the same checkpoint during evaluation.
+        best_ensemble_index=self._compute_best_ensemble_index(
+            checkpoint_path, hooks),
+        hooks=hooks)
     with _disable_asserts_for_confusion_matrix_at_thresholds():
       result = temp_estimator.evaluate(
           input_fn,
@@ -1049,13 +1041,10 @@ class Estimator(tf.estimator.Estimator):
     # Delegate predicting to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(
-        self.config,
-        params={
-            "best_ensemble_index":
-                self._compute_best_ensemble_index(checkpoint_path, hooks=hooks),
-            "checkpoint_path":
-                checkpoint_path,
-        },
+        config=self.config,
+        best_ensemble_index=self._compute_best_ensemble_index(
+            checkpoint_path, hooks=hooks),
+        checkpoint_path=checkpoint_path,
         hooks=hooks)
     return temp_estimator.predict(
         input_fn=input_fn,
@@ -1083,14 +1072,11 @@ class Estimator(tf.estimator.Estimator):
     # Delegate exporting to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(
-        self.config,
+        config=self.config,
         hooks=hooks,
-        params={
-            "best_ensemble_index":
-                self._compute_best_ensemble_index(checkpoint_path, hooks=hooks),
-            "checkpoint_path":
-                checkpoint_path,
-        },
+        best_ensemble_index=self._compute_best_ensemble_index(
+            checkpoint_path, hooks=hooks),
+        checkpoint_path=checkpoint_path,
         is_export=True)
     with self._force_replication_strategy():
       return temp_estimator.export_savedmodel(
@@ -1116,15 +1102,11 @@ class Estimator(tf.estimator.Estimator):
     # Delegate exporting to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(
-        self.config,
+        config=self.config,
+        best_ensemble_index=self._compute_best_ensemble_index(
+            checkpoint_path, hooks=hooks),
+        checkpoint_path=checkpoint_path,
         hooks=hooks,
-        params={
-            "best_ensemble_index":
-                self._compute_best_ensemble_index(
-                    checkpoint_path, hooks=hooks),
-            "checkpoint_path":
-                checkpoint_path,
-        },
         is_export=True)
     with self._force_replication_strategy():
       return temp_estimator.export_saved_model(
@@ -1149,14 +1131,11 @@ class Estimator(tf.estimator.Estimator):
     # Delegate exporting to a temporary estimator instead of super to make
     # passing arguments more functional (via params).
     temp_estimator = self._create_temp_estimator(
-        self.config,
+        config=self.config,
+        best_ensemble_index=self._compute_best_ensemble_index(
+            checkpoint_path, hooks=hooks),
+        checkpoint_path=checkpoint_path,
         hooks=hooks,
-        params={
-            "best_ensemble_index":
-                self._compute_best_ensemble_index(checkpoint_path, hooks=hooks),
-            "checkpoint_path":
-                checkpoint_path,
-        },
         is_export=True)
     with self._force_replication_strategy():
       return temp_estimator.experimental_export_all_saved_models(
@@ -1256,16 +1235,12 @@ class Estimator(tf.estimator.Estimator):
         session_config=config.session_config,
         protocol=config.protocol)
 
-  def _create_temp_estimator(self, config, params, hooks, is_export=False):
-    # type: (tf.estimator.RunConfig, Dict[str, Any], Sequence[tf_compat.SessionRunHook], bool) -> tf.estimator.Estimator  # pylint:disable=line-too-long
+  def _create_temp_estimator(self, config, **create_model_fn_args):
+    # type: (tf.estimator.RunConfig, Any[...]) -> tf.estimator.Estimator  # pylint:disable=line-too-long
     """Creates a temp `Estimator` to grow the graph for the next iteration."""
 
-    del is_export  # Unused.
-
     return tf.estimator.Estimator(
-        model_fn=functools.partial(self._adanet_model_fn, hooks=hooks),
-        config=config,
-        params=params)
+        model_fn=self._create_model_fn(**create_model_fn_args), config=config)
 
   def _execute_bookkeeping_phase(self, train_input_fn, iteration_number,
                                  train_hooks, checkpoint_path):
@@ -1404,12 +1379,10 @@ class Estimator(tf.estimator.Estimator):
     temp_run_config = config.replace(model_dir=temp_model_sub_dir)
     temp_estimator = self._create_temp_estimator(
         config=temp_run_config,
-        hooks=train_hooks,
-        params={
-            "is_growing_phase": True,
-            "is_inside_training_loop": True,
-            "checkpoint_path": checkpoint_path,
-        })
+        is_growing_phase=True,
+        is_inside_training_loop=True,
+        checkpoint_path=checkpoint_path,
+        hooks=train_hooks)
 
     _copy_recursively(
         os.path.join(self._model_dir, "assets"),
@@ -2153,75 +2126,95 @@ class Estimator(tf.estimator.Estimator):
           previous_iteration=previous_iteration)
     return current_iteration, previous_iteration_vars
 
-  def _adanet_model_fn(self,
-                       features,
-                       labels,
-                       mode,
-                       params,
-                       config,
-                       hooks):
-    """AdaNet model_fn.
+  def _create_model_fn(self,
+                       is_growing_phase=False,
+                       is_inside_training_loop=False,
+                       is_export=False,
+                       evaluation_name=None,
+                       best_ensemble_index=None,
+                       checkpoint_path=None,
+                       hooks=None):
+    """Creates the AdaNet model_fn.
 
     Args:
-      features: Dictionary of `Tensor` objects keyed by feature name.
-      labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
-        (for multi-head). Can be `None`.
-      mode: Defines whether this is training, evaluation or prediction. See
-        `ModeKeys`.
-      params: A dict of parameters.
-      config: The current `tf.estimator.RunConfig`.
-      hooks: A list of `tf.estimator.SessionRunHook`s.
+      is_growing_phase: Whether the model_fn will be called in the growing
+        phase.
+      is_inside_training_loop: Whether the model_fn will be called inside the
+        AdaNet training loop.
+      is_export: Whether the model_fn will be called from functions which export
+        a SavedModel.
+      evaluation_name: String name to append to the eval directory.
+      best_ensemble_index: The index of the best performing ensemble in the
+        latest AdaNet iteration.
+      checkpoint_path: The checkpoint path from which to restore variables.
+      hooks: Extra hooks to use when creating the graph.
 
     Returns:
-      A `EstimatorSpec` instance.
-
-    Raises:
-      UserWarning: When calling model_fn directly in TRAIN mode.
+      The adanet_model_fn which will create the computation graph when called.
     """
 
-    # Unpack params.
-    is_growing_phase = params.get("is_growing_phase", False)
-    is_inside_training_loop = params.get("is_inside_training_loop", False)
-    evaluation_name = params.get("evaluation_name", None)
-    best_ensemble_index = params.get("best_ensemble_index", None)
-    checkpoint_path = params.get("checkpoint_path",
-                                 tf.train.latest_checkpoint(self.model_dir))
+    del is_export  # Unused.
 
-    training = mode == tf.estimator.ModeKeys.TRAIN
-    if training and not is_inside_training_loop:
-      raise UserWarning(
-          "The adanet.Estimator's model_fn should not be called directly in "
-          "TRAIN mode, because its behavior is undefined outside the context "
-          "of its `train` method. If you are trying to add custom metrics "
-          "with `tf.contrib.estimator.add_metrics`, pass the `metric_fn` to "
-          "this `Estimator's` constructor instead.")
+    def _adanet_model_fn(features, labels, mode, params, config):
+      """AdaNet model_fn.
 
-    current_iteration, previous_iteration_vars = self._create_iteration(
-        features,
-        labels,
-        mode,
-        config,
-        is_growing_phase,
-        checkpoint_path=checkpoint_path,
-        hooks=hooks,
-        best_ensemble_index_override=best_ensemble_index)
+      Args:
+        features: Dictionary of `Tensor` objects keyed by feature name.
+        labels: Labels `Tensor` or a dictionary of string label name to `Tensor`
+          (for multi-head). Can be `None`.
+        mode: Defines whether this is training, evaluation or prediction. See
+          `ModeKeys`.
+        params: A dict of parameters.
+        config: The current `tf.estimator.RunConfig`.
 
-    # Variable which allows us to read the current iteration from a checkpoint.
-    # This must be created here so it is available when calling
-    # _execute_bookkeeping_phase after the first iteration.
-    iteration_number_tensor = None
-    if not self._enable_v2_checkpoint:
-      iteration_number_tensor = tf_compat.v1.get_variable(
-          self._Keys.CURRENT_ITERATION,
-          shape=[],
-          dtype=tf.int64,
-          initializer=tf_compat.v1.zeros_initializer(),
-          trainable=False)
+      Returns:
+        A `EstimatorSpec` instance.
 
-    return self._create_estimator_spec(
-        current_iteration,
-        mode,
-        iteration_number_tensor,
-        previous_iteration_vars,
-        is_growing_phase,
-        evaluation_name=evaluation_name)
+      Raises:
+        UserWarning: When calling model_fn directly in TRAIN mode.
+      """
+
+      del params  # Unused.
+
+      path = checkpoint_path or tf.train.latest_checkpoint(self.model_dir)
+
+      training = mode == tf.estimator.ModeKeys.TRAIN
+      if training and not is_inside_training_loop:
+        raise UserWarning(
+            "The adanet.Estimator's model_fn should not be called directly in "
+            "TRAIN mode, because its behavior is undefined outside the context "
+            "of its `train` method. If you are trying to add custom metrics "
+            "with `tf.contrib.estimator.add_metrics`, pass the `metric_fn` to "
+            "this `Estimator's` constructor instead.")
+
+      current_iteration, previous_iteration_vars = self._create_iteration(
+          features,
+          labels,
+          mode,
+          config,
+          is_growing_phase,
+          checkpoint_path=path,
+          hooks=hooks,
+          best_ensemble_index_override=best_ensemble_index)
+
+      # Variable which allows us to read the current iteration from a
+      # checkpoint. This must be created here so it is available when calling
+      # _execute_bookkeeping_phase after the first iteration.
+      iteration_number_tensor = None
+      if not self._enable_v2_checkpoint:
+        iteration_number_tensor = tf_compat.v1.get_variable(
+            self._Keys.CURRENT_ITERATION,
+            shape=[],
+            dtype=tf.int64,
+            initializer=tf_compat.v1.zeros_initializer(),
+            trainable=False)
+
+      return self._create_estimator_spec(
+          current_iteration,
+          mode,
+          iteration_number_tensor,
+          previous_iteration_vars,
+          is_growing_phase,
+          evaluation_name=evaluation_name)
+
+    return _adanet_model_fn

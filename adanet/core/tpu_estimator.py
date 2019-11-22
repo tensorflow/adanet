@@ -236,15 +236,14 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
         session_config=self._original_config.session_config,
         protocol=self._original_config.protocol)
 
-  def _create_temp_estimator(self, config, params, hooks, is_export=False):
+  def _create_temp_estimator(self, config, **create_model_fn_args):
     """See the `Estimator` base class for details."""
 
     from tensorflow_estimator.python.estimator.tpu import tpu_estimator  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
 
     temp_model_dir = config.model_dir
     return tf_compat.v1.estimator.tpu.TPUEstimator(
-        model_fn=self._create_model_fn(hooks=hooks, is_export=is_export),
-        params=params,
+        model_fn=self._create_model_fn(**create_model_fn_args),
         config=config,
         model_dir=temp_model_dir,
         use_tpu=self._use_tpu,
@@ -384,11 +383,21 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
 
     return _host_call_fn, summary_kwargs
 
-  def _create_model_fn(self, hooks, is_export):
+  def _create_model_fn(self,
+                       is_growing_phase=False,
+                       is_inside_training_loop=False,
+                       is_export=False,
+                       evaluation_name=None,
+                       best_ensemble_index=None,
+                       checkpoint_path=None,
+                       hooks=None):
+    """See the `Estimator` base class for details."""
 
     from tensorflow_estimator.python.estimator.tpu import tpu_estimator  # pylint: disable=g-direct-tensorflow-import,g-import-not-at-top
 
-    adanet_model_fn = functools.partial(self._adanet_model_fn, hooks=hooks)
+    adanet_model_fn = super(TPUEstimator, self)._create_model_fn(
+        is_growing_phase, is_inside_training_loop, is_export, evaluation_name,
+        best_ensemble_index, checkpoint_path, hooks)
 
     def _model_fn(features, labels, mode, params, config):
       """The model_fn to return which supports exporting on TPU."""
@@ -410,6 +419,7 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
             config=config,
             params=params,
             batch_config=batch_config)
+
       return adanet_model_fn(features, labels, mode, params, config)
 
     return _model_fn
