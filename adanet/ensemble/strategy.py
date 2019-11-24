@@ -48,7 +48,7 @@ class Candidate(
 
 
 @six.add_metaclass(abc.ABCMeta)
-class Strategy(object):
+class Strategy(object):  # pytype: disable=ignored-metaclass
   """An abstract ensemble strategy."""
 
   __metaclass__ = abc.ABCMeta
