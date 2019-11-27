@@ -1,3 +1,4 @@
+# Lint as: python3
 """Fake dataset for testing and debugging.
 
 Copyright 2019 The AdaNet Authors. All Rights Reserved.

@@ -1,3 +1,4 @@
+# Lint as: python3
 """Image preprocessing and augmentation function for a single image.
 
 Copyright 2019 The AdaNet Authors. All Rights Reserved.

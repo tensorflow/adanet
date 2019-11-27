@@ -1,3 +1,4 @@
+# Lint as: python3
 """Script to any experiment from paper.
 
 Copyright 2019 The AdaNet Authors. All Rights Reserved.

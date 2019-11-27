@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+# Lint as: python3
 """A custom module for some common operations used by NASNet.
 
 Functions exposed in this file:
@@ -247,24 +248,28 @@ def _pooling(net, stride, operation, use_bounded_activation):
 
 
 class NasNetABaseCell(object):
-  """NASNet Cell class that is used as a 'layer' in image architectures.
-
-  Args:
-    num_conv_filters: The number of filters for each convolution operation.
-    operations: List of operations that are performed in the NASNet Cell in
-      order.
-    used_hiddenstates: Binary array that signals if the hiddenstate was used
-      within the cell. This is used to determine what outputs of the cell
-      should be concatenated together.
-    hiddenstate_indices: Determines what hiddenstates should be combined
-      together with the specified operations to create the NASNet cell.
-    use_bounded_activation: Whether or not to use bounded activations. Bounded
-      activations better lend themselves to quantized inference.
-  """
+  """NASNet Cell class that is used as a 'layer' in image architectures."""
 
   def __init__(self, num_conv_filters, operations, used_hiddenstates,
                hiddenstate_indices, drop_path_keep_prob, total_num_cells,
                total_training_steps, use_bounded_activation=False):
+    """Constructs a NasNetABaseCell.
+
+    Args:
+      num_conv_filters: The number of filters for each convolution operation.
+      operations: List of operations that are performed in the NASNet Cell in
+        order.
+      used_hiddenstates: Binary array that signals if the hiddenstate was used
+        within the cell. This is used to determine what outputs of the cell
+        should be concatenated together.
+      hiddenstate_indices: Determines what hiddenstates should be combined
+        together with the specified operations to create the NASNet cell.
+      drop_path_keep_prob: Keep probability during DropPath regularization.
+      total_num_cells: Total number of cells.
+      total_training_steps: Total training steps.
+      use_bounded_activation: Whether or not to use bounded activations. Bounded
+        activations better lend themselves to quantized inference.
+    """
     self._num_conv_filters = num_conv_filters
     self._operations = operations
     self._used_hiddenstates = used_hiddenstates

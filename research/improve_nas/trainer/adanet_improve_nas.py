@@ -1,3 +1,4 @@
+# Lint as: python3
 """Defines adanet estimator builder.
 
 Copyright 2019 The AdaNet Authors. All Rights Reserved.

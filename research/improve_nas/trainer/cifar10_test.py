@@ -1,3 +1,4 @@
+# Lint as: python3
 """Tests for cifar10 dataset.
 
 Copyright 2019 The AdaNet Authors. All Rights Reserved.

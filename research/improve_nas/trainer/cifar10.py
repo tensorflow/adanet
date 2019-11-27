@@ -1,3 +1,4 @@
+# Lint as: python3
 """CIFAR-10 data and convenience functions.
 
 Copyright 2019 The AdaNet Authors. All Rights Reserved.

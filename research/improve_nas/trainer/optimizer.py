@@ -1,3 +1,4 @@
+# Lint as: python3
 """Definition of optimizers and learning rate schedules.
 
 Copyright 2019 The AdaNet Authors. All Rights Reserved.

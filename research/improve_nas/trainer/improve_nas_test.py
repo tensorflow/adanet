@@ -1,3 +1,4 @@
+# Lint as: python3
 """Tests for improve_nas.
 
 Copyright 2019 The AdaNet Authors. All Rights Reserved.

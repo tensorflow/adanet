@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+# Lint as: python3
 """Contains the definition for the NASNet classification networks.
 
 Paper: https://arxiv.org/abs/1707.07012

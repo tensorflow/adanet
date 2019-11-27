@@ -1,3 +1,4 @@
+# Lint as: python3
 """Definition of helpful functions to work with AdaNet subnetworks.
 
 Copyright 2019 The AdaNet Authors. All Rights Reserved.
