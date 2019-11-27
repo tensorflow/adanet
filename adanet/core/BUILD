@@ -103,6 +103,8 @@ py_binary(
     name = "estimator_distributed_test_runner",
     testonly = 1,
     srcs = ["estimator_distributed_test_runner.py"],
+    python_version = "PY3",
+    srcs_version = "PY2AND3",
     deps = [
         ":estimator",
         "//adanet/autoensemble",
