@@ -20,12 +20,12 @@ from __future__ import print_function
 
 import abc
 
-from adanet.experimental.work_units import work_unit
+from adanet.experimental.work_units.work_unit import WorkUnit
 from typing import Iterator
 
 
 class Phase(abc.ABC):
 
   @abc.abstractmethod
-  def work_units(self) -> Iterator[work_unit.WorkUnit]:
+  def work_units(self) -> Iterator[WorkUnit]:
     pass

@@ -11,21 +11,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The AutoML controller for AdaNet."""
+"""A work unit for training, evaluating, and saving a Keras model."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import google_type_annotations
 from __future__ import print_function
 
-import abc
+from adanet.experimental.work_units import work_unit
+import tensorflow as tf
+from typing import Text
 
-from adanet.experimental.work_units.work_unit import WorkUnit
-from typing import Iterator
 
+class KerasTrainer(work_unit.WorkUnit):
+  """Trains, evaluates, and saves a Keras Model."""
 
-class Controller(abc.ABC):
+  def __init__(self, model: tf.keras.Model, dataset: tf.data.Dataset,
+               save_path: Text):
+    # TODO: Extend with args passed from top level to fit below.
+    self._model = model
+    self._dataset = dataset
+    self._save_path = save_path
 
-  @abc.abstractmethod
-  def work_units(self) -> Iterator[WorkUnit]:
-    pass
+  def execute(self):
+    self._model.fit(self._dataset)
+    self._model.evaluate(self._dataset)
+    self._model.save(self._save_path)

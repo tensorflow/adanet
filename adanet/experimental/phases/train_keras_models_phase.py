@@ -11,21 +11,34 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The AutoML controller for AdaNet."""
+"""A phase in the AdaNet workflow."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import google_type_annotations
 from __future__ import print_function
 
-import abc
-
+from adanet.experimental.phases.phase import Phase
+from adanet.experimental.work_units.keras_trainer import KerasTrainer
 from adanet.experimental.work_units.work_unit import WorkUnit
-from typing import Iterator
+import tensorflow as tf
+from typing import Iterator, Sequence
 
 
-class Controller(abc.ABC):
+class TrainKerasModelsPhase(Phase):
+  """Trains Keras models."""
 
-  @abc.abstractmethod
+  def __init__(self, models: Sequence[tf.keras.Model],
+               dataset: tf.data.Dataset):
+    # TODO: Consume arbitary fit inputs.
+    # Dataset should be wrapped inside a work unit.
+    # For instance when you create KerasTrainer work unit the dataset is
+    # encapsulated inside that work unit.
+    # What if you want to run on different (parts of the) datasets
+    # what if a work units consumes numpy arrays?
+    self._models = models
+    self._dataset = dataset
+
   def work_units(self) -> Iterator[WorkUnit]:
-    pass
+    for model in self._models:
+      yield KerasTrainer(model, self._dataset, "/tmp")

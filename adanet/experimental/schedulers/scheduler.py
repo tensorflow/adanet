@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The AutoML controller for AdaNet."""
+"""A scheduler for managing AdaNet phases."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -24,8 +24,8 @@ from adanet.experimental.work_units.work_unit import WorkUnit
 from typing import Iterator
 
 
-class Controller(abc.ABC):
+class Scheduler(abc.ABC):
 
   @abc.abstractmethod
-  def work_units(self) -> Iterator[WorkUnit]:
+  def schedule(self, work_units: Iterator[WorkUnit]):
     pass

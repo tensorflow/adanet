@@ -25,6 +25,26 @@ py_library(
     srcs = ["model_search.py"],
     srcs_version = "PY3",
     visibility = ["//adanet/experimental:__subpackages__"],
+    deps = [
+        "//adanet/experimental/controllers:controller",
+        "//adanet/experimental/schedulers:in_process",
+        "//adanet/experimental/schedulers:scheduler",
+    ],
+)
+
+py_strict_test(
+    name = "model_search_test",
+    srcs = ["model_search_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY3",
+    deps = [
+        ":ensemble_model",
+        ":model_search",
+        ":testing_utils",
+        "//adanet/experimental/controllers:static_controller",
+        "//adanet/experimental/phases:train_keras_models_phase",
+        "@absl_py//absl/testing:parameterized",
+    ],
 )
 
 py_library(
@@ -44,6 +64,9 @@ py_strict_test(
         ":ensemble_model",
         ":submodel",
         ":testing_utils",
+        "//adanet/experimental/controllers:controller",
+        "//adanet/experimental/schedulers:in_process",
+        "//adanet/experimental/schedulers:scheduler",
         "@absl_py//absl/testing:parameterized",
     ],
 )

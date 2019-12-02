@@ -14,3 +14,13 @@ py_library(
     deps = [
     ],
 )
+
+py_library(
+    name = "keras_trainer",
+    srcs = ["keras_trainer.py"],
+    srcs_version = "PY3",
+    visibility = ["//adanet/experimental:__subpackages__"],
+    deps = [
+        ":work_unit",
+    ],
+)

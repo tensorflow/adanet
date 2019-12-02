@@ -37,6 +37,9 @@ class EnsembleModel(tf.keras.Model):
     super().__init__()
     self.submodels = submodels
 
+  def call(self, inputs):
+    raise NotImplementedError
+
 
 class MeanEnsemble(EnsembleModel):
   """An ensemble that averages submodel outputs."""
