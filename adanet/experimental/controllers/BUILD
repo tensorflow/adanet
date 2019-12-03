@@ -17,8 +17,8 @@ py_library(
 )
 
 py_library(
-    name = "static_controller",
-    srcs = ["static_controller.py"],
+    name = "sequential_controller",
+    srcs = ["sequential_controller.py"],
     srcs_version = "PY3",
     visibility = ["//adanet/experimental:__subpackages__"],
     deps = [

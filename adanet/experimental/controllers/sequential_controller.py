@@ -24,7 +24,7 @@ from adanet.experimental.work_units.work_unit import WorkUnit
 from typing import Iterator, Sequence
 
 
-class StaticController(Controller):
+class SequentialController(Controller):
 
   def __init__(self, phases: Sequence[Phase]):
     self._phases = phases

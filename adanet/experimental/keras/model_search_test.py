@@ -19,7 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-from adanet.experimental.controllers.static_controller import StaticController
+from adanet.experimental.controllers.sequential_controller import SequentialController
 from adanet.experimental.keras import testing_utils
 from adanet.experimental.keras.ensemble_model import MeanEnsemble
 from adanet.experimental.keras.model_search import ModelSearch
@@ -60,7 +60,7 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
     ensemble.compile(
         optimizer=tf.keras.optimizers.Adam(0.01), loss='mse', metrics=['mae'])
 
-    controller = StaticController(phases=[
+    controller = SequentialController(phases=[
         TrainKerasModelsPhase([
             model1,
             model2,
@@ -75,11 +75,14 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
         num_classes=2,
         random_seed=42)
 
-    model = ModelSearch(controller)
-    model.fit()
-    # TODO: Implement evaluate using storage.
+    model_search = ModelSearch(controller)
+    model_search.run()
+
+    # TODO: Test get_best_models:
+    # models = model_search.get_best_models()
+    # model = models[0]
     # model.evaluate(test_dataset)
-    # model.save()
+    # ...
 
 
 if __name__ == '__main__':

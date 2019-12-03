@@ -41,7 +41,7 @@ py_strict_test(
         ":ensemble_model",
         ":model_search",
         ":testing_utils",
-        "//adanet/experimental/controllers:static_controller",
+        "//adanet/experimental/controllers:sequential_controller",
         "//adanet/experimental/phases:train_keras_models_phase",
         "@absl_py//absl/testing:parameterized",
     ],

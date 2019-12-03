@@ -18,9 +18,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from typing import Sequence
 from adanet.experimental.controllers.controller import Controller
 from adanet.experimental.schedulers.in_process import InProcess
 from adanet.experimental.schedulers.scheduler import Scheduler
+
 import tensorflow as tf
 
 
@@ -31,30 +33,12 @@ class ModelSearch(object):
                scheduler: Scheduler = InProcess()):
     self._controller = controller
     self._scheduler = scheduler
-    self._best_model = None  # type: tf.keras.Model
+    self._best_models = None  # type: tf.keras.Model
 
-  def compile(self, optimizer, loss, metrics):
-    pass
-
-  def fit(self):
+  def run(self):
+    """Execute the training workflow to generate models."""
     self._scheduler.schedule(self._controller.work_units())
 
-  # TODO: Since self._best_model is a `tf.keras.Model`, may be able
-  # to fully emulate evaluate, predict and save by simply passing in the
-  # arguments to the underlying ensemble.
-  def evaluate(self, dataset: tf.data.Dataset):
-    if not self._best_model:
-      raise RuntimeError("Need to fit an ensemble model before evaluation.")
-    self._best_model.evaluate(dataset)
-
-  def predict(self, dataset: tf.data.Dataset):
-    if not self._best_model:
-      raise RuntimeError("Need to fit an ensemble model before prediction.")
-    self._best_model.predict(dataset)
-
-  def save(self, filepath):
-    # TODO: Note that we should save more than just the best
-    # model, so that a given model search run can be restored.
-    if not self._best_model:
-      raise RuntimeError("Need to fit an ensemble model before saving.")
-    self._best_model.save(filepath)
+  def get_best_models(self) -> Sequence[tf.keras.Model]:
+    # TODO: Obtain best models from DB.
+    return []
