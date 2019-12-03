@@ -12,6 +12,7 @@ py_library(
     srcs_version = "PY3",
     visibility = ["//adanet/experimental:__subpackages__"],
     deps = [
+        "//adanet/experimental/storages:storage",
         "//adanet/experimental/work_units:work_unit",
     ],
 )
@@ -24,6 +25,8 @@ py_library(
     deps = [
         ":controller",
         "//adanet/experimental/phases:phase",
+        "//adanet/experimental/storages:in_memory_storage",
+        "//adanet/experimental/storages:storage",
         "//adanet/experimental/work_units:work_unit",
     ],
 )

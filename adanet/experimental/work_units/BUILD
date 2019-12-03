@@ -22,5 +22,6 @@ py_library(
     visibility = ["//adanet/experimental:__subpackages__"],
     deps = [
         ":work_unit",
+        "//adanet/experimental/storages:storage",
     ],
 )

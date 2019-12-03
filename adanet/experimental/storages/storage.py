@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""A phase in the AdaNet workflow."""
+"""A storage for persisting results and managing stage."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -20,29 +20,25 @@ from __future__ import print_function
 
 import abc
 
-from adanet.experimental.storages.storage import Storage
-from adanet.experimental.work_units.work_unit import WorkUnit
-from typing import Iterator, Optional
+import tensorflow as tf
+from typing import Sequence
 
 
-class Phase(abc.ABC):
-  """A stage in a linear workflow.
-
-  A phase is only complete once all its work units complete, as a barrier.
-  """
-
-  def build(self, storage: Storage, previous: 'Phase' = None):
-    self._storage = storage
-    self._previous = previous
-
-  @property
-  def storage(self) -> Storage:
-    return self._storage
-
-  @property
-  def previous(self) -> Optional['Phase']:
-    return self._previous
+class Storage(abc.ABC):
+  """A storage for persisting results and managing state."""
 
   @abc.abstractmethod
-  def work_units(self) -> Iterator[WorkUnit]:
+  def save_model(self, model: tf.keras.Model, score: float) -> int:
+    # TODO: How do we enforce that save_model is called only once per
+    # model?
+    pass
+
+  @abc.abstractmethod
+  def load_model(self, model_id: int) -> tf.keras.Model:
+    pass
+
+  @abc.abstractmethod
+  def get_best_models(self, num_models) -> Sequence[tf.keras.Model]:
+    # TODO: Rethink get_best_model API since it's defined in Storage,
+    # Phases, and Controllers.
     pass

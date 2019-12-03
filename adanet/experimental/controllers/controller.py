@@ -21,11 +21,17 @@ from __future__ import print_function
 import abc
 
 from adanet.experimental.work_units.work_unit import WorkUnit
-from typing import Iterator
+import tensorflow as tf
+from typing import Iterator, Sequence
 
 
 class Controller(abc.ABC):
+  """Defines the machine learning workflow to produce high-quality models."""
 
   @abc.abstractmethod
   def work_units(self) -> Iterator[WorkUnit]:
+    pass
+
+  @abc.abstractmethod
+  def get_best_models(self, num_models) -> Sequence[tf.keras.Model]:
     pass

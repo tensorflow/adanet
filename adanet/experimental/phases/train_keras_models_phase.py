@@ -18,14 +18,14 @@ from __future__ import division
 from __future__ import google_type_annotations
 from __future__ import print_function
 
-from adanet.experimental.phases.phase import Phase
+from adanet.experimental.phases.model_phase import ModelPhase
 from adanet.experimental.work_units.keras_trainer import KerasTrainer
 from adanet.experimental.work_units.work_unit import WorkUnit
 import tensorflow as tf
 from typing import Iterator, Sequence
 
 
-class TrainKerasModelsPhase(Phase):
+class TrainKerasModelsPhase(ModelPhase):
   """Trains Keras models."""
 
   def __init__(self, models: Sequence[tf.keras.Model],
@@ -41,4 +41,7 @@ class TrainKerasModelsPhase(Phase):
 
   def work_units(self) -> Iterator[WorkUnit]:
     for model in self._models:
-      yield KerasTrainer(model, self._dataset, "/tmp")
+      yield KerasTrainer(model, self._dataset, self.storage)
+
+  def get_best_models(self, num_models) -> Sequence[tf.keras.Model]:
+    return self.storage.get_best_models(num_models)

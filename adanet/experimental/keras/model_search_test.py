@@ -44,17 +44,18 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
 
     model1 = tf.keras.Sequential([
         tf.keras.layers.Dense(64, activation='relu'),
-        tf.keras.layers.Dense(64, activation='relu'),
         tf.keras.layers.Dense(10),
     ])
-    model1.compile(optimizer=tf.keras.optimizers.Adam(0.01), loss='mse')
+    model1.compile(
+        optimizer=tf.keras.optimizers.Adam(0.01), loss='mse', metrics=['mae'])
 
     model2 = tf.keras.Sequential([
         tf.keras.layers.Dense(64, activation='relu'),
         tf.keras.layers.Dense(64, activation='relu'),
         tf.keras.layers.Dense(10),
     ])
-    model2.compile(optimizer=tf.keras.optimizers.Adam(0.01), loss='mse')
+    model2.compile(
+        optimizer=tf.keras.optimizers.Adam(0.01), loss='mse', metrics=['mae'])
 
     ensemble = MeanEnsemble(submodels=[model1, model2])
     ensemble.compile(
@@ -77,12 +78,8 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
 
     model_search = ModelSearch(controller)
     model_search.run()
-
-    # TODO: Test get_best_models:
-    # models = model_search.get_best_models()
-    # model = models[0]
-    # model.evaluate(test_dataset)
-    # ...
+    self.assertIsInstance(
+        model_search.get_best_models(num_models=1)[0], MeanEnsemble)
 
 
 if __name__ == '__main__':

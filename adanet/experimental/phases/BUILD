@@ -12,7 +12,18 @@ py_library(
     srcs_version = "PY3",
     visibility = ["//adanet/experimental:__subpackages__"],
     deps = [
+        "//adanet/experimental/storages:storage",
         "//adanet/experimental/work_units:work_unit",
+    ],
+)
+
+py_library(
+    name = "model_phase",
+    srcs = ["model_phase.py"],
+    srcs_version = "PY3",
+    visibility = ["//adanet/experimental:__subpackages__"],
+    deps = [
+        ":phase",
     ],
 )
 
@@ -22,8 +33,7 @@ py_library(
     srcs_version = "PY3",
     visibility = ["//adanet/experimental:__subpackages__"],
     deps = [
-        ":phase",
-        "//adanet/experimental/keras:submodel",
+        ":model_phase",
         "//adanet/experimental/work_units:keras_trainer",
         "//adanet/experimental/work_units:work_unit",
     ],

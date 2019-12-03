@@ -18,22 +18,22 @@ from __future__ import division
 from __future__ import google_type_annotations
 from __future__ import print_function
 
+from adanet.experimental.storages.storage import Storage
 from adanet.experimental.work_units import work_unit
 import tensorflow as tf
-from typing import Text
 
 
 class KerasTrainer(work_unit.WorkUnit):
   """Trains, evaluates, and saves a Keras Model."""
 
   def __init__(self, model: tf.keras.Model, dataset: tf.data.Dataset,
-               save_path: Text):
+               storage: Storage):
     # TODO: Extend with args passed from top level to fit below.
     self._model = model
     self._dataset = dataset
-    self._save_path = save_path
+    self._storage = storage
 
   def execute(self):
     self._model.fit(self._dataset)
-    self._model.evaluate(self._dataset)
-    self._model.save(self._save_path)
+    results = self._model.evaluate(self._dataset)
+    self._storage.save_model(self._model, results[0])

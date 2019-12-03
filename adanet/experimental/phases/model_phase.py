@@ -11,20 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""An in process scheduler for managing AdaNet phases."""
+"""A phase in the AdaNet workflow."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import google_type_annotations
 from __future__ import print_function
 
-from adanet.experimental.schedulers import scheduler
-from adanet.experimental.work_units.work_unit import WorkUnit
-from typing import Iterator
+import abc
+
+from adanet.experimental.phases.phase import Phase
+import tensorflow as tf
+from typing import Sequence
 
 
-class InProcess(scheduler.Scheduler):
+class ModelPhase(Phase):
+  """A phase that manages Keras models."""
 
-  def schedule(self, work_units: Iterator[WorkUnit]):
-    for work_unit in work_units:
-      work_unit.execute()
+  @abc.abstractmethod
+  def get_best_models(self, num_models) -> Sequence[tf.keras.Model]:
+    pass

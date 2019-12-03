@@ -16,29 +16,29 @@
 
 from __future__ import absolute_import
 from __future__ import division
+from __future__ import google_type_annotations
 from __future__ import print_function
 
 from typing import Sequence
-from adanet.experimental.controllers.controller import Controller
-from adanet.experimental.schedulers.in_process import InProcess
-from adanet.experimental.schedulers.scheduler import Scheduler
 
+from adanet.experimental.controllers.controller import Controller
+from adanet.experimental.schedulers.in_process_scheduler import InProcessScheduler
+from adanet.experimental.schedulers.scheduler import Scheduler
 import tensorflow as tf
 
 
 class ModelSearch(object):
   """A Keras-like interface for performing a model search."""
 
-  def __init__(self, controller: Controller,
-               scheduler: Scheduler = InProcess()):
+  def __init__(self,
+               controller: Controller,
+               scheduler: Scheduler = InProcessScheduler()):
     self._controller = controller
     self._scheduler = scheduler
-    self._best_models = None  # type: tf.keras.Model
 
   def run(self):
     """Execute the training workflow to generate models."""
     self._scheduler.schedule(self._controller.work_units())
 
-  def get_best_models(self) -> Sequence[tf.keras.Model]:
-    # TODO: Obtain best models from DB.
-    return []
+  def get_best_models(self, num_models) -> Sequence[tf.keras.Model]:
+    return self._controller.get_best_models(num_models)

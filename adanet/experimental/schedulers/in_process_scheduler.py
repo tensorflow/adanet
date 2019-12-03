@@ -11,38 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""A phase in the AdaNet workflow."""
+"""An in process scheduler for managing AdaNet phases."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import google_type_annotations
 from __future__ import print_function
 
-import abc
-
-from adanet.experimental.storages.storage import Storage
+from adanet.experimental.schedulers import scheduler
 from adanet.experimental.work_units.work_unit import WorkUnit
-from typing import Iterator, Optional
+from typing import Iterator
 
 
-class Phase(abc.ABC):
-  """A stage in a linear workflow.
+class InProcessScheduler(scheduler.Scheduler):
 
-  A phase is only complete once all its work units complete, as a barrier.
-  """
-
-  def build(self, storage: Storage, previous: 'Phase' = None):
-    self._storage = storage
-    self._previous = previous
-
-  @property
-  def storage(self) -> Storage:
-    return self._storage
-
-  @property
-  def previous(self) -> Optional['Phase']:
-    return self._previous
-
-  @abc.abstractmethod
-  def work_units(self) -> Iterator[WorkUnit]:
-    pass
+  def schedule(self, work_units: Iterator[WorkUnit]):
+    for work_unit in work_units:
+      work_unit.execute()

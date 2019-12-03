@@ -16,10 +16,10 @@
 
 from __future__ import absolute_import
 from __future__ import division
+from __future__ import google_type_annotations
 from __future__ import print_function
 
-from typing import List
-from adanet.experimental.keras.submodel import SubModel
+from typing import Sequence
 
 import tensorflow as tf
 
@@ -27,7 +27,7 @@ import tensorflow as tf
 class EnsembleModel(tf.keras.Model):
   """An ensemble of Keras models."""
 
-  def __init__(self, submodels: List[SubModel]):
+  def __init__(self, submodels: Sequence[tf.keras.Model]):
     """Initializes an EnsembleModel.
 
     Args:
@@ -35,7 +35,11 @@ class EnsembleModel(tf.keras.Model):
     """
 
     super().__init__()
-    self.submodels = submodels
+    self._submodels = submodels
+
+  @property
+  def submodels(self) -> Sequence[tf.keras.Model]:
+    return self._submodels
 
   def call(self, inputs):
     raise NotImplementedError
@@ -56,7 +60,7 @@ class WeightedEnsemble(EnsembleModel):
 
   # TODO: Extract output shapes from submodels instead of passing in
   # as argument.
-  def __init__(self, submodels: List[SubModel], output_units: int):
+  def __init__(self, submodels: Sequence[tf.keras.Model], output_units: int):
     """Initializes a WeightedEnsemble.
 
     Args:

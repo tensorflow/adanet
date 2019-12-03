@@ -11,37 +11,44 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""A manual controller for model search."""
+"""A storage for persisting results and managing stage."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import google_type_annotations
 from __future__ import print_function
 
-from adanet.experimental.controllers.controller import Controller
-from adanet.experimental.phases.phase import Phase
-from adanet.experimental.storages.in_memory_storage import InMemoryStorage
+import heapq
+
 from adanet.experimental.storages.storage import Storage
-from adanet.experimental.work_units.work_unit import WorkUnit
 import tensorflow as tf
-from typing import Iterator, Sequence
+from typing import Sequence
 
 
-class SequentialController(Controller):
-  """A controller where the user specifies the sequences of phase to execute."""
+class InMemoryStorage(Storage):
+  """In memory storage for testing-only.
 
-  def __init__(self, phases: Sequence[Phase],
-               storage: Storage = InMemoryStorage()):
-    self._phases = phases
-    self._storage = storage
+  Uses a priority queue under the hood to sort the models according to their
+  score.
 
-  def work_units(self) -> Iterator[WorkUnit]:
-    prev_phase = None
-    for phase in self._phases:
-      phase.build(self._storage, previous=prev_phase)
-      for work_unit in phase.work_units():
-        yield work_unit
-      prev_phase = phase
+  Currently the only supported score is 'loss'.
+  """
+
+  def __init__(self):
+    self._id = 0
+    self._models = []
+
+  def save_model(self, model: tf.keras.Model, score: float) -> int:
+    model_id = self._id
+    heapq.heappush(self._models, (score, model_id, model))
+    self._id += 1
+    return model_id
+
+  def load_model(self, model_id: int) -> tf.keras.Model:
+    for _, id_, model in self._models:
+      if id_ == model_id:
+        return model
+    raise ValueError("Model with id '{}' not found".format(model_id))
 
   def get_best_models(self, num_models) -> Sequence[tf.keras.Model]:
-    return self._storage.get_best_models(num_models)
+    return [m for _, _, m in heapq.nsmallest(num_models, self._models)]

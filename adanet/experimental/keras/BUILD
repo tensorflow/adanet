@@ -27,8 +27,10 @@ py_library(
     visibility = ["//adanet/experimental:__subpackages__"],
     deps = [
         "//adanet/experimental/controllers:controller",
-        "//adanet/experimental/schedulers:in_process",
+        "//adanet/experimental/schedulers:in_process_scheduler",
         "//adanet/experimental/schedulers:scheduler",
+        "//adanet/experimental/storages:in_memory_storage",
+        "//adanet/experimental/storages:storage",
     ],
 )
 
@@ -65,7 +67,6 @@ py_strict_test(
         ":submodel",
         ":testing_utils",
         "//adanet/experimental/controllers:controller",
-        "//adanet/experimental/schedulers:in_process",
         "//adanet/experimental/schedulers:scheduler",
         "@absl_py//absl/testing:parameterized",
     ],
