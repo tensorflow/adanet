@@ -25,3 +25,13 @@ py_library(
         "//adanet/experimental/storages:storage",
     ],
 )
+
+py_library(
+    name = "keras_tuner_work_unit",
+    srcs = ["keras_tuner_work_unit.py"],
+    srcs_version = "PY3",
+    visibility = ["//adanet/experimental:__subpackages__"],
+    deps = [
+        ":work_unit",
+    ],
+)

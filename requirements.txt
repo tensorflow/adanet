@@ -9,3 +9,4 @@ protobuf>=3.6,<4.0
 mock>=3.0,<4.0
 pytype==2019.10.17
 typing==3.7.4.1
+keras-tuner>=1.0,<2.0

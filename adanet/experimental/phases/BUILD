@@ -38,3 +38,15 @@ py_library(
         "//adanet/experimental/work_units:work_unit",
     ],
 )
+
+py_library(
+    name = "keras_tuner_phase",
+    srcs = ["keras_tuner_phase.py"],
+    srcs_version = "PY3",
+    visibility = ["//adanet/experimental:__subpackages__"],
+    deps = [
+        ":model_phase",
+        "//adanet/experimental/work_units:keras_tuner_work_unit",
+        "//adanet/experimental/work_units:work_unit",
+    ],
+)

@@ -19,33 +19,24 @@ from __future__ import google_type_annotations
 from __future__ import print_function
 
 from adanet.experimental.phases.model_phase import ModelPhase
-from adanet.experimental.work_units.keras_trainer import KerasTrainer
+from adanet.experimental.work_units.keras_tuner_work_unit import KerasTunerWorkUnit
 from adanet.experimental.work_units.work_unit import WorkUnit
+from kerastuner.engine.tuner import Tuner
 import tensorflow as tf
-from typing import Callable, Iterator, Sequence, Union
+from typing import Iterator, Sequence
 
 
-class TrainKerasModelsPhase(ModelPhase):
-  """Trains Keras models."""
+class KerasTunerPhase(ModelPhase):
+  """Tunes Keras Model hyperparameters using the Keras Tuner."""
 
-  def __init__(self, models: Union[Sequence[tf.keras.Model],
-                                   Callable[[], Sequence[tf.keras.Model]]],
-               dataset: tf.data.Dataset):
-    # TODO: Consume arbitary fit inputs.
-    # Dataset should be wrapped inside a work unit.
-    # For instance when you create KerasTrainer work unit the dataset is
-    # encapsulated inside that work unit.
-    # What if you want to run on different (parts of the) datasets
-    # what if a work units consumes numpy arrays?
-    self._models = models
-    self._dataset = dataset
+  def __init__(self, tuner: Tuner, *search_args, **search_kwargs):
+    self._tuner = tuner
+    self._search_args = search_args
+    self._search_kwargs = search_kwargs
 
   def work_units(self) -> Iterator[WorkUnit]:
-    models = self._models
-    if callable(models):
-      models = models()
-    for model in models:
-      yield KerasTrainer(model, self._dataset, self.storage)
+    yield KerasTunerWorkUnit(self._tuner, *self._search_args,
+                             **self._search_kwargs)
 
   def get_best_models(self, num_models) -> Sequence[tf.keras.Model]:
-    return self.storage.get_best_models(num_models)
+    return self._tuner.get_best_models(num_models=num_models)
