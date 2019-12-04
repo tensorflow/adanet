@@ -22,7 +22,6 @@ from absl.testing import parameterized
 from adanet.experimental.keras import testing_utils
 from adanet.experimental.keras.ensemble_model import MeanEnsemble
 from adanet.experimental.keras.ensemble_model import WeightedEnsemble
-from adanet.experimental.keras.submodel import SubModel
 
 import tensorflow as tf
 
@@ -53,9 +52,6 @@ class EnsembleModelTest(parameterized.TestCase, tf.test.TestCase):
     train_dataset = train_dataset.batch(32).repeat(10)
     test_dataset = test_dataset.batch(32).repeat(10)
 
-    # TODO: Consider adding a testing_utils function for
-    # constructing the Keras submodels.
-    # TODO: Wrap each model inside a `SubModel`.
     model1 = tf.keras.Sequential([
         tf.keras.layers.Dense(64, activation='relu'),
         tf.keras.layers.Dense(64, activation='relu'),
@@ -67,7 +63,6 @@ class EnsembleModelTest(parameterized.TestCase, tf.test.TestCase):
     model1.fit(train_dataset)
     model1.trainable = False  # Since models inside ensemble should be trained.
     model1_pre_train_weights = model1.get_weights()
-    submodel1 = SubModel(model1)
 
     model2 = tf.keras.Sequential([
         tf.keras.layers.Dense(64, activation='relu'),
@@ -80,13 +75,12 @@ class EnsembleModelTest(parameterized.TestCase, tf.test.TestCase):
     model2.fit(train_dataset)
     model2.trainable = False  # Since models inside ensemble should be trained.
     model2_pre_train_weights = model2.get_weights()
-    submodel2 = SubModel(model2)
 
     if output_units:
-      ensemble = ensemble(submodels=[submodel1, submodel2],
+      ensemble = ensemble(submodels=[model1, model2],
                           output_units=output_units)
     else:
-      ensemble = ensemble(submodels=[submodel1, submodel2])
+      ensemble = ensemble(submodels=[model1, model2])
     ensemble.compile(
         optimizer=tf.keras.optimizers.Adam(0.01),
         loss='mse',

@@ -4,19 +4,11 @@
 licenses(["notice"])  # Apache 2.0
 
 py_library(
-    name = "submodel",
-    srcs = ["submodel.py"],
-    srcs_version = "PY3",
-    visibility = ["//adanet/experimental:__subpackages__"],
-)
-
-py_library(
     name = "ensemble_model",
     srcs = ["ensemble_model.py"],
     srcs_version = "PY3",
     visibility = ["//adanet/experimental:__subpackages__"],
     deps = [
-        ":submodel",
     ],
 )
 
@@ -29,8 +21,6 @@ py_library(
         "//adanet/experimental/controllers:controller",
         "//adanet/experimental/schedulers:in_process_scheduler",
         "//adanet/experimental/schedulers:scheduler",
-        "//adanet/experimental/storages:in_memory_storage",
-        "//adanet/experimental/storages:storage",
     ],
 )
 
@@ -66,10 +56,7 @@ py_strict_test(
     srcs_version = "PY3",
     deps = [
         ":ensemble_model",
-        ":submodel",
         ":testing_utils",
-        "//adanet/experimental/controllers:controller",
-        "//adanet/experimental/schedulers:scheduler",
         "@absl_py//absl/testing:parameterized",
     ],
 )

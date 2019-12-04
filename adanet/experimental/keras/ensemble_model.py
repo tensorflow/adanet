@@ -31,7 +31,7 @@ class EnsembleModel(tf.keras.Model):
     """Initializes an EnsembleModel.
 
     Args:
-      submodels: A list of `adanet.keras.SubModel` that compose the ensemble.
+      submodels: A list of `tf.keras.Model` that compose the ensemble.
     """
 
     super().__init__()
