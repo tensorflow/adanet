@@ -31,6 +31,7 @@ class Phase(abc.ABC):
   A phase is only complete once all its work units complete, as a barrier.
   """
 
+  # TODO: Remove this build function.
   def build(self, storage: Storage, previous: 'Phase' = None):
     self._storage = storage
     self._previous = previous

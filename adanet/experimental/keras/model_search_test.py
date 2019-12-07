@@ -24,6 +24,9 @@ import sys
 
 from absl import flags
 from absl.testing import parameterized
+from adanet.experimental.controllers.adanet_controller import AdaNetCandidatePhase
+from adanet.experimental.controllers.adanet_controller import AdaNetController
+from adanet.experimental.controllers.adanet_controller import AdaNetEnsemblePhase
 from adanet.experimental.controllers.sequential_controller import SequentialController
 from adanet.experimental.keras import testing_utils
 from adanet.experimental.keras.ensemble_model import MeanEnsemble
@@ -77,7 +80,10 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
     model2.compile(
         optimizer=tf.keras.optimizers.Adam(0.01), loss='mse', metrics=['mae'])
 
-    ensemble = MeanEnsemble(submodels=[model1, model2])
+    # TODO: This test could potentially have the best model be
+    # a non-ensemble Keras model. Therefore, need to address this issue and
+    # remove the freeze_submodels flag.
+    ensemble = MeanEnsemble(submodels=[model1, model2], freeze_submodels=False)
     ensemble.compile(
         optimizer=tf.keras.optimizers.Adam(0.01), loss='mse', metrics=['mae'])
 
@@ -88,13 +94,6 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
         ], dataset=train_dataset),
         TrainKerasModelsPhase([ensemble], dataset=train_dataset),
     ])
-
-    train_dataset, test_dataset = testing_utils.get_test_data(
-        train_samples=128,
-        test_samples=64,
-        input_shape=(10,),
-        num_classes=2,
-        random_seed=42)
 
     model_search = ModelSearch(controller)
     model_search.run()
@@ -154,6 +153,41 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
 
     # Execute phases.
     model_search = ModelSearch(controller)
+    model_search.run()
+    self.assertIsInstance(
+        model_search.get_best_models(num_models=1)[0], MeanEnsemble)
+
+  def test_adanet_controller_end_to_end(self):
+    train_dataset, test_dataset = testing_utils.get_test_data(
+        train_samples=1280,
+        test_samples=640,
+        input_shape=(10,),
+        num_classes=10,
+        random_seed=42)
+
+    train_dataset = train_dataset.batch(32)
+    test_dataset = test_dataset.batch(32)
+
+    candidate_phase = AdaNetCandidatePhase(
+        train_dataset,
+        candidates_per_iteration=2,
+        optimizer='adam',
+        loss='sparse_categorical_crossentropy',
+        output_units=10)
+    # TODO: Setting candidates_per_iteration greater than the one
+    # for the candidate phase will lead to unexpected behavior.
+    ensemble_phase = AdaNetEnsemblePhase(
+        train_dataset,
+        candidates_per_iteration=2,
+        optimizer='adam',
+        loss='sparse_categorical_crossentropy')
+
+    adanet_controller = AdaNetController(
+        candidate_phase,
+        ensemble_phase,
+        iterations=5)
+
+    model_search = ModelSearch(adanet_controller)
     model_search.run()
     self.assertIsInstance(
         model_search.get_best_models(num_models=1)[0], MeanEnsemble)

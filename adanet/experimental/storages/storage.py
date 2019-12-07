@@ -42,3 +42,7 @@ class Storage(abc.ABC):
     # TODO: Rethink get_best_model API since it's defined in Storage,
     # Phases, and Controllers.
     pass
+
+  @abc.abstractmethod
+  def get_newest_models(self, num_models) -> Sequence[tf.keras.Model]:
+    pass

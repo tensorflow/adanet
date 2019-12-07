@@ -52,3 +52,9 @@ class InMemoryStorage(Storage):
 
   def get_best_models(self, num_models) -> Sequence[tf.keras.Model]:
     return [m for _, _, m in heapq.nsmallest(num_models, self._models)]
+
+  def get_newest_models(self, num_models) -> Sequence[tf.keras.Model]:
+    return [
+        m for _, m_id, m in self._models
+        if m_id in [self._id - i for i in range(num_models)]
+    ]

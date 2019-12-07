@@ -36,4 +36,10 @@ class KerasTrainer(work_unit.WorkUnit):
   def execute(self):
     self._model.fit(self._dataset)
     results = self._model.evaluate(self._dataset)
-    self._storage.save_model(self._model, results[0])
+    # If the model was compiled with metrics, the results is a list of loss +
+    # metric values. If the model was compiled without metrics, it is a loss
+    # scalar.
+    if isinstance(results, list):
+      self._storage.save_model(self._model, results[0])
+    else:
+      self._storage.save_model(self._model, results)

@@ -33,6 +33,7 @@ py_strict_test(
         ":ensemble_model",
         ":model_search",
         ":testing_utils",
+        "//adanet/experimental/controllers:adanet_controller",
         "//adanet/experimental/controllers:sequential_controller",
         "//adanet/experimental/phases:keras_tuner_phase",
         "//adanet/experimental/phases:train_keras_models_phase",

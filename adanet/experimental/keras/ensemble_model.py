@@ -27,14 +27,19 @@ import tensorflow as tf
 class EnsembleModel(tf.keras.Model):
   """An ensemble of Keras models."""
 
-  def __init__(self, submodels: Sequence[tf.keras.Model]):
+  def __init__(self, submodels: Sequence[tf.keras.Model],
+               freeze_submodels: bool = True):
     """Initializes an EnsembleModel.
 
     Args:
       submodels: A list of `tf.keras.Model` that compose the ensemble.
+      freeze_submodels: Whether to freeze the weights of submodels.
     """
 
     super().__init__()
+    if freeze_submodels:
+      for submodel in submodels:
+        submodel.trainable = False
     self._submodels = submodels
 
   @property
@@ -49,6 +54,9 @@ class MeanEnsemble(EnsembleModel):
   """An ensemble that averages submodel outputs."""
 
   def call(self, inputs):
+    if len(self._submodels) == 1:
+      return self._submodels[0](inputs)
+
     submodel_outputs = []
     for submodel in self.submodels:
       submodel_outputs.append(submodel(inputs))
