@@ -1,12 +1,12 @@
 # Lint as: python3
 # Copyright 2019 The AdaNet Authors. All Rights Reserved.
-#
+
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+
 #     https://www.apache.org/licenses/LICENSE-2.0
-#
+
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,19 +14,12 @@
 # limitations under the License.
 """Tests for adanet.experimental.keras.ModelSearch."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import os
 import shutil
 import sys
 
 from absl import flags
 from absl.testing import parameterized
-from adanet.experimental.controllers.adanet_controller import AdaNetCandidatePhase
-from adanet.experimental.controllers.adanet_controller import AdaNetController
-from adanet.experimental.controllers.adanet_controller import AdaNetEnsemblePhase
 from adanet.experimental.controllers.sequential_controller import SequentialController
 from adanet.experimental.keras import testing_utils
 from adanet.experimental.keras.ensemble_model import MeanEnsemble
@@ -153,41 +146,6 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
 
     # Execute phases.
     model_search = ModelSearch(controller)
-    model_search.run()
-    self.assertIsInstance(
-        model_search.get_best_models(num_models=1)[0], MeanEnsemble)
-
-  def test_adanet_controller_end_to_end(self):
-    train_dataset, test_dataset = testing_utils.get_test_data(
-        train_samples=1280,
-        test_samples=640,
-        input_shape=(10,),
-        num_classes=10,
-        random_seed=42)
-
-    train_dataset = train_dataset.batch(32)
-    test_dataset = test_dataset.batch(32)
-
-    candidate_phase = AdaNetCandidatePhase(
-        train_dataset,
-        candidates_per_iteration=2,
-        optimizer='adam',
-        loss='sparse_categorical_crossentropy',
-        output_units=10)
-    # TODO: Setting candidates_per_iteration greater than the one
-    # for the candidate phase will lead to unexpected behavior.
-    ensemble_phase = AdaNetEnsemblePhase(
-        train_dataset,
-        candidates_per_iteration=2,
-        optimizer='adam',
-        loss='sparse_categorical_crossentropy')
-
-    adanet_controller = AdaNetController(
-        candidate_phase,
-        ensemble_phase,
-        iterations=5)
-
-    model_search = ModelSearch(adanet_controller)
     model_search.run()
     self.assertIsInstance(
         model_search.get_best_models(num_models=1)[0], MeanEnsemble)
