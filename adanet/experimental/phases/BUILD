@@ -12,29 +12,22 @@ py_library(
     srcs_version = "PY3",
     visibility = ["//adanet/experimental:__subpackages__"],
     deps = [
+        "//adanet/experimental/storages:in_memory_storage",
         "//adanet/experimental/storages:storage",
         "//adanet/experimental/work_units:work_unit",
     ],
 )
 
 py_library(
-    name = "model_phase",
-    srcs = ["model_phase.py"],
+    name = "keras_trainer_phase",
+    srcs = ["keras_trainer_phase.py"],
     srcs_version = "PY3",
     visibility = ["//adanet/experimental:__subpackages__"],
     deps = [
         ":phase",
-    ],
-)
-
-py_library(
-    name = "train_keras_models_phase",
-    srcs = ["train_keras_models_phase.py"],
-    srcs_version = "PY3",
-    visibility = ["//adanet/experimental:__subpackages__"],
-    deps = [
-        ":model_phase",
-        "//adanet/experimental/work_units:keras_trainer",
+        "//adanet/experimental/storages:in_memory_storage",
+        "//adanet/experimental/storages:storage",
+        "//adanet/experimental/work_units:keras_trainer_work_unit",
         "//adanet/experimental/work_units:work_unit",
     ],
 )
@@ -45,8 +38,18 @@ py_library(
     srcs_version = "PY3",
     visibility = ["//adanet/experimental:__subpackages__"],
     deps = [
-        ":model_phase",
+        ":phase",
         "//adanet/experimental/work_units:keras_tuner_work_unit",
         "//adanet/experimental/work_units:work_unit",
+    ],
+)
+
+py_library(
+    name = "input_phase",
+    srcs = ["input_phase.py"],
+    srcs_version = "PY3",
+    visibility = ["//adanet/experimental:__subpackages__"],
+    deps = [
+        ":phase",
     ],
 )

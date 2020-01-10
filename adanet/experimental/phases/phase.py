@@ -1,11 +1,12 @@
+# Lint as: python3
 # Copyright 2019 The AdaNet Authors. All Rights Reserved.
-
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-
+#
 #     https://www.apache.org/licenses/LICENSE-2.0
-
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -13,37 +14,55 @@
 # limitations under the License.
 """A phase in the AdaNet workflow."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import google_type_annotations
-from __future__ import print_function
-
 import abc
 
+from typing import Iterable, Iterator, Optional
+from adanet.experimental.storages.in_memory_storage import InMemoryStorage
 from adanet.experimental.storages.storage import Storage
 from adanet.experimental.work_units.work_unit import WorkUnit
-from typing import Iterator, Optional
+import tensorflow as tf
 
 
 class Phase(abc.ABC):
-  """A stage in a linear workflow.
+  """A stage in a linear workflow."""
 
-  A phase is only complete once all its work units complete, as a barrier.
-  """
-
-  # TODO: Remove this build function.
-  def build(self, storage: Storage, previous: 'Phase' = None):
+  def __init__(self, storage: Storage = InMemoryStorage()):
     self._storage = storage
-    self._previous = previous
-
-  @property
-  def storage(self) -> Storage:
-    return self._storage
-
-  @property
-  def previous(self) -> Optional['Phase']:
-    return self._previous
 
   @abc.abstractmethod
-  def work_units(self) -> Iterator[WorkUnit]:
+  def work_units(self, previous_phase: Optional['Phase']) -> Iterator[WorkUnit]:
     pass
+
+
+class DatasetProvider(Phase, abc.ABC):
+  """An interface for a phase that produces datasets."""
+
+  def __init__(self, storage: Storage = InMemoryStorage()):
+    super().__init__(storage)
+    self._train_dataset = None
+    self._eval_dataset = None
+
+  @abc.abstractmethod
+  def get_train_dataset(self) -> tf.data.Dataset:
+    """Returns dataset for train data."""
+    pass
+
+  @abc.abstractmethod
+  def get_eval_dataset(self) -> tf.data.Dataset:
+    """Returns dataset for eval data."""
+    pass
+
+
+class ModelProvider(Phase, abc.ABC):
+  """An interface for a phase that produces models."""
+
+  @abc.abstractmethod
+  def get_models(self) -> Iterable[tf.keras.Model]:
+    """Returns the models."""
+    pass
+
+  @abc.abstractmethod
+  def get_best_models(self, num_models: int = 1) -> Iterable[tf.keras.Model]:
+    """Returns the best k models."""
+    pass
+

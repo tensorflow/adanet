@@ -26,6 +26,7 @@ py_library(
 
 py_strict_test(
     name = "model_search_test",
+    size = "large",
     srcs = ["model_search_test.py"],
     python_version = "PY3",
     srcs_version = "PY3",
@@ -34,8 +35,9 @@ py_strict_test(
         ":model_search",
         ":testing_utils",
         "//adanet/experimental/controllers:sequential_controller",
+        "//adanet/experimental/phases:input_phase",
+        "//adanet/experimental/phases:keras_trainer_phase",
         "//adanet/experimental/phases:keras_tuner_phase",
-        "//adanet/experimental/phases:train_keras_models_phase",
         "@absl_py//absl/flags",
         "@absl_py//absl/testing:parameterized",
     ],

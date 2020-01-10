@@ -1,12 +1,12 @@
 # Lint as: python3
 # Copyright 2019 The AdaNet Authors. All Rights Reserved.
-
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-
+#
 #     https://www.apache.org/licenses/LICENSE-2.0
-
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,8 +24,9 @@ from adanet.experimental.controllers.sequential_controller import SequentialCont
 from adanet.experimental.keras import testing_utils
 from adanet.experimental.keras.ensemble_model import MeanEnsemble
 from adanet.experimental.keras.model_search import ModelSearch
+from adanet.experimental.phases.input_phase import InputPhase
+from adanet.experimental.phases.keras_trainer_phase import KerasTrainerPhase
 from adanet.experimental.phases.keras_tuner_phase import KerasTunerPhase
-from adanet.experimental.phases.train_keras_models_phase import TrainKerasModelsPhase
 from kerastuner import tuners
 import tensorflow as tf
 
@@ -81,11 +82,9 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
         optimizer=tf.keras.optimizers.Adam(0.01), loss='mse', metrics=['mae'])
 
     controller = SequentialController(phases=[
-        TrainKerasModelsPhase([
-            model1,
-            model2,
-        ], dataset=train_dataset),
-        TrainKerasModelsPhase([ensemble], dataset=train_dataset),
+        InputPhase(train_dataset, test_dataset),
+        KerasTrainerPhase([model1, model2]),
+        KerasTrainerPhase([ensemble]),
     ])
 
     model_search = ModelSearch(controller)
@@ -129,8 +128,7 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
         directory=self.test_subdirectory,
         project_name='helloworld')
 
-    tuner_phase = KerasTunerPhase(
-        tuner, train_dataset, validation_data=test_dataset)
+    tuner_phase = KerasTunerPhase(tuner)
 
     def build_ensemble():
       ensemble = MeanEnsemble(
@@ -139,10 +137,12 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
           optimizer=tf.keras.optimizers.Adam(0.01), loss='mse', metrics=['mae'])
       return [ensemble]
 
-    ensemble_phase = TrainKerasModelsPhase(
-        build_ensemble, dataset=train_dataset)
+    ensemble_phase = KerasTrainerPhase(build_ensemble)
+    input_phase = InputPhase(train_dataset, test_dataset)
 
-    controller = SequentialController(phases=[tuner_phase, ensemble_phase])
+    controller = SequentialController(phases=[input_phase,
+                                              tuner_phase,
+                                              ensemble_phase])
 
     # Execute phases.
     model_search = ModelSearch(controller)
