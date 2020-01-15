@@ -53,3 +53,29 @@ py_library(
         ":phase",
     ],
 )
+
+py_library(
+    name = "autoensemble_phase",
+    srcs = ["autoensemble_phase.py"],
+    srcs_version = "PY3",
+    visibility = ["//adanet/experimental:__subpackages__"],
+    deps = [
+        ":phase",
+        "//adanet/experimental/keras:ensemble_model",
+        "//adanet/experimental/storages:in_memory_storage",
+        "//adanet/experimental/storages:storage",
+        "//adanet/experimental/work_units:keras_trainer_work_unit",
+        "//adanet/experimental/work_units:work_unit",
+    ],
+)
+
+py_library(
+    name = "repeat_phase",
+    srcs = ["repeat_phase.py"],
+    srcs_version = "PY3",
+    visibility = ["//adanet/experimental:__subpackages__"],
+    deps = [
+        ":phase",
+        "//adanet/experimental/work_units:work_unit",
+    ],
+)

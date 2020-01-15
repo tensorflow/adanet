@@ -29,6 +29,8 @@ class Phase(abc.ABC):
   def __init__(self, storage: Storage = InMemoryStorage()):
     self._storage = storage
 
+  # TODO: Find a better way to ensure work_units only gets called
+  # once per phase.
   @abc.abstractmethod
   def work_units(self, previous_phase: Optional['Phase']) -> Iterator[WorkUnit]:
     pass

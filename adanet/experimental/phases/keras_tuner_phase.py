@@ -16,7 +16,7 @@
 
 import sys
 
-from typing import Iterable, Iterator
+from typing import Callable, Iterable, Iterator, Union
 from adanet.experimental.phases.phase import DatasetProvider
 from adanet.experimental.phases.phase import ModelProvider
 from adanet.experimental.work_units.keras_tuner_work_unit import KerasTunerWorkUnit
@@ -28,8 +28,13 @@ import tensorflow as tf
 class KerasTunerPhase(DatasetProvider, ModelProvider):
   """Tunes Keras Model hyperparameters using the Keras Tuner."""
 
-  def __init__(self, tuner: Tuner, *search_args, **search_kwargs):
-    self._tuner = tuner
+  def __init__(self, tuner: Union[Callable[..., Tuner], Tuner], *search_args,
+               **search_kwargs):
+
+    if callable(tuner):
+      self._tuner = tuner()
+    else:
+      self._tuner = tuner
     self._search_args = search_args
     self._search_kwargs = search_kwargs
 

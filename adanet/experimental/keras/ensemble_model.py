@@ -39,7 +39,8 @@ class EnsembleModel(tf.keras.Model):
     super().__init__()
     if freeze_submodels:
       for submodel in submodels:
-        submodel.trainable = False
+        for layer in submodel.layers:
+          layer.trainable = False
     self._submodels = submodels
 
   @property
@@ -58,7 +59,7 @@ class MeanEnsemble(EnsembleModel):
       return self._submodels[0](inputs)
 
     submodel_outputs = []
-    for submodel in self.submodels:
+    for submodel in self._submodels:
       submodel_outputs.append(submodel(inputs))
     return tf.keras.layers.average(submodel_outputs)
 

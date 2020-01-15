@@ -14,8 +14,12 @@
 # limitations under the License.
 """A work unit for training, evaluating, and saving a Keras model."""
 
+import os
+import time
+
 from adanet.experimental.work_units import work_unit
 from kerastuner.engine.tuner import Tuner
+import tensorflow as tf
 
 
 class KerasTunerWorkUnit(work_unit.WorkUnit):
@@ -26,6 +30,11 @@ class KerasTunerWorkUnit(work_unit.WorkUnit):
     self._search_args = search_args
     self._search_kwargs = search_kwargs
 
+  # TODO: Allow better customization of TensorBoard log_dir.
   def execute(self):
+    log_dir = os.path.join('/tmp', str(int(time.time())))
+    tensorboard = tf.keras.callbacks.TensorBoard(log_dir=log_dir,
+                                                 update_freq='batch')
     # We don't need to eval and store, because the Tuner does it for us.
-    self._tuner.search(*self._search_args, **self._search_kwargs)
+    self._tuner.search(callbacks=[tensorboard], *self._search_args,
+                       **self._search_kwargs)

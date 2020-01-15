@@ -14,6 +14,9 @@
 # limitations under the License.
 """A work unit for training, evaluating, and saving a Keras model."""
 
+import os
+import time
+
 from adanet.experimental.storages.storage import ModelContainer
 from adanet.experimental.storages.storage import Storage
 from adanet.experimental.work_units import work_unit
@@ -26,15 +29,24 @@ class KerasTrainerWorkUnit(work_unit.WorkUnit):
   def __init__(self, model: tf.keras.Model,
                train_dataset: tf.data.Dataset,
                eval_dataset: tf.data.Dataset,
-               storage: Storage):
+               storage: Storage,
+               tensorboard_base_dir: str = '/tmp'):
     self._model = model
     self._train_dataset = train_dataset
     self._eval_dataset = eval_dataset
     self._storage = storage
+    self._tensorboard_base_dir = tensorboard_base_dir
 
+  # TODO: Allow better customization of TensorBoard log_dir.
   def execute(self):
-    self._model.fit(self._train_dataset)
-    results = self._model.evaluate(self._eval_dataset)
+    log_dir = os.path.join(self._tensorboard_base_dir, str(int(time.time())))
+    tensorboard = tf.keras.callbacks.TensorBoard(log_dir=log_dir,
+                                                 update_freq='batch')
+    if self._model.trainable:
+      self._model.fit(self._train_dataset, callbacks=[tensorboard])
+    else:
+      print('Skipping training since model.trainable set to false.')
+    results = self._model.evaluate(self._eval_dataset, callbacks=[tensorboard])
     # If the model was compiled with metrics, the results is a list of loss +
     # metric values. If the model was compiled without metrics, it is a loss
     # scalar.

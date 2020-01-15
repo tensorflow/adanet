@@ -17,6 +17,7 @@
 import os
 import shutil
 import sys
+import time
 
 from absl import flags
 from absl.testing import parameterized
@@ -24,9 +25,14 @@ from adanet.experimental.controllers.sequential_controller import SequentialCont
 from adanet.experimental.keras import testing_utils
 from adanet.experimental.keras.ensemble_model import MeanEnsemble
 from adanet.experimental.keras.model_search import ModelSearch
+from adanet.experimental.phases.autoensemble_phase import AutoEnsemblePhase
+from adanet.experimental.phases.autoensemble_phase import GrowStrategy
+from adanet.experimental.phases.autoensemble_phase import MeanEnsembler
 from adanet.experimental.phases.input_phase import InputPhase
 from adanet.experimental.phases.keras_trainer_phase import KerasTrainerPhase
 from adanet.experimental.phases.keras_tuner_phase import KerasTunerPhase
+from adanet.experimental.phases.repeat_phase import RepeatPhase
+from adanet.experimental.storages.in_memory_storage import InMemoryStorage
 from kerastuner import tuners
 import tensorflow as tf
 
@@ -126,7 +132,8 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
         max_trials=3,
         executions_per_trial=1,
         directory=self.test_subdirectory,
-        project_name='helloworld')
+        project_name='helloworld_tuner',
+        overwrite=True)
 
     tuner_phase = KerasTunerPhase(tuner)
 
@@ -145,6 +152,67 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
                                               ensemble_phase])
 
     # Execute phases.
+    model_search = ModelSearch(controller)
+    model_search.run()
+    self.assertIsInstance(
+        model_search.get_best_models(num_models=1)[0], MeanEnsemble)
+
+  def test_autoensemble_end_to_end(self):
+
+    train_dataset, test_dataset = testing_utils.get_test_data(
+        train_samples=128,
+        test_samples=64,
+        input_shape=(10,),
+        num_classes=10,
+        random_seed=42)
+
+    # TODO: Consider performing `tf.data.Dataset` transformations
+    # within get_test_data function.
+    train_dataset = train_dataset.batch(32)
+    test_dataset = test_dataset.batch(32)
+
+    def build_model(hp):
+      model = tf.keras.Sequential()
+      model.add(
+          tf.keras.layers.Dense(
+              units=hp.Int('units', min_value=32, max_value=512, step=32),
+              activation='relu'))
+      model.add(tf.keras.layers.Dense(10, activation='softmax'))
+      model.compile(
+          optimizer=tf.keras.optimizers.Adam(
+              hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])),
+          loss='sparse_categorical_crossentropy',
+          metrics=['accuracy'])
+      return model
+
+    # This allows us to have a shared storage for all the autoensemble phases
+    # that occur in the repeat phase.
+    autoensemble_storage = InMemoryStorage()
+    input_phase = InputPhase(train_dataset, test_dataset)
+    # pylint: disable=g-long-lambda
+    repeat_phase = RepeatPhase(
+        [
+            lambda: KerasTunerPhase(
+                tuners.RandomSearch(
+                    build_model,
+                    objective='val_accuracy',
+                    max_trials=3,
+                    executions_per_trial=1,
+                    directory=self.test_subdirectory,
+                    project_name='helloworld_' + str(int(time.time())),
+                    overwrite=True)),
+            lambda: AutoEnsemblePhase(
+                ensemblers=[
+                    MeanEnsembler('sparse_categorical_crossentropy', 'adam',
+                                  ['accuracy'])
+                ],
+                ensemble_strategies=[GrowStrategy()],
+                storage=autoensemble_storage)
+        ], repetitions=3)
+    # pylint: enable=g-long-lambda
+
+    controller = SequentialController(phases=[input_phase, repeat_phase])
+
     model_search = ModelSearch(controller)
     model_search.run()
     self.assertIsInstance(
