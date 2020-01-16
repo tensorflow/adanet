@@ -4,10 +4,21 @@
 licenses(["notice"])  # Apache 2.0
 
 py_library(
+    name = "keras",
+    srcs = ["__init__.py"],
+    srcs_version = "PY3",
+    visibility = ["//adanet:__subpackages__"],
+    deps = [
+        ":ensemble_model",
+        ":model_search",
+    ],
+)
+
+py_library(
     name = "ensemble_model",
     srcs = ["ensemble_model.py"],
     srcs_version = "PY3",
-    visibility = ["//adanet/experimental:__subpackages__"],
+    visibility = ["//adanet:__subpackages__"],
     deps = [
     ],
 )
@@ -16,7 +27,7 @@ py_library(
     name = "model_search",
     srcs = ["model_search.py"],
     srcs_version = "PY3",
-    visibility = ["//adanet/experimental:__subpackages__"],
+    visibility = ["//adanet:__subpackages__"],
     deps = [
         "//adanet/experimental/controllers:controller",
         "//adanet/experimental/schedulers:in_process_scheduler",

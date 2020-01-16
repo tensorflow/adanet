@@ -7,10 +7,24 @@ licenses(["notice"])  # Apache 2.0
 exports_files(["LICENSE"])
 
 py_library(
+    name = "phases",
+    srcs = ["__init__.py"],
+    srcs_version = "PY3",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":autoensemble_phase",
+        ":input_phase",
+        ":keras_trainer_phase",
+        ":keras_tuner_phase",
+        ":repeat_phase",
+    ],
+)
+
+py_library(
     name = "phase",
     srcs = ["phase.py"],
     srcs_version = "PY3",
-    visibility = ["//adanet/experimental:__subpackages__"],
+    visibility = ["//adanet:__subpackages__"],
     deps = [
         "//adanet/experimental/storages:in_memory_storage",
         "//adanet/experimental/storages:storage",
@@ -22,7 +36,7 @@ py_library(
     name = "keras_trainer_phase",
     srcs = ["keras_trainer_phase.py"],
     srcs_version = "PY3",
-    visibility = ["//adanet/experimental:__subpackages__"],
+    visibility = ["//adanet:__subpackages__"],
     deps = [
         ":phase",
         "//adanet/experimental/storages:in_memory_storage",

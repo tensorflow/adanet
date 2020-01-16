@@ -30,6 +30,17 @@ py_test(
     srcs = ["adanet_test.py"],
     deps = [
         ":adanet",
-        "//adanet/examples",
+        "//adanet/examples:simple_dnn",
+    ],
+)
+
+py_strict_test(
+    name = "modelflow_test",
+    srcs = ["modelflow_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY3",
+    deps = [
+        ":adanet",
+        "//adanet/experimental",
     ],
 )

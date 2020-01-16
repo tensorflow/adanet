@@ -7,10 +7,18 @@ licenses(["notice"])  # Apache 2.0
 exports_files(["LICENSE"])
 
 py_library(
+    name = "controllers",
+    srcs = ["__init__.py"],
+    srcs_version = "PY3",
+    visibility = ["//adanet:__subpackages__"],
+    deps = [":sequential_controller"],
+)
+
+py_library(
     name = "controller",
     srcs = ["controller.py"],
     srcs_version = "PY3",
-    visibility = ["//adanet/experimental:__subpackages__"],
+    visibility = ["//adanet:__subpackages__"],
     deps = [
         "//adanet/experimental/storages:storage",
         "//adanet/experimental/work_units:work_unit",
@@ -21,7 +29,7 @@ py_library(
     name = "sequential_controller",
     srcs = ["sequential_controller.py"],
     srcs_version = "PY3",
-    visibility = ["//adanet/experimental:__subpackages__"],
+    visibility = ["//adanet:__subpackages__"],
     deps = [
         ":controller",
         "//adanet/experimental/phases:phase",
