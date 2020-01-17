@@ -40,18 +40,22 @@ class Storage(abc.ABC):
 
   @abc.abstractmethod
   def save_model(self, model_container: ModelContainer):
+    """Stores a model and its metadata."""
     # TODO: How do we enforce that save_model is called only once per
     # model?
     pass
 
   @abc.abstractmethod
   def get_models(self) -> Iterable[tf.keras.Model]:
+    """Returns all stored models."""
     pass
 
   @abc.abstractmethod
   def get_best_models(self, num_models: int = 1) -> Iterable[tf.keras.Model]:
+    """Returns the top `num_models` stored models in descending order."""
     pass
 
   @abc.abstractmethod
   def get_model_metrics(self) -> Iterable[Iterable[float]]:
+    """Returns the metrics for all stored models."""
     pass

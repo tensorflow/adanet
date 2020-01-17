@@ -35,17 +35,25 @@ class InMemoryStorage(Storage):
     self._model_containers = []
 
   def save_model(self, model_container: ModelContainer):
+    """Stores a model.
+
+    Args:
+      model_container: A `ModelContainer` instance.
+    """
     # We use a counter since heappush will compare on the second item in the
     # tuple in the case of a tie in the first item comparison. This is for the
     # off chance that two models have the same loss.
     heapq.heappush(self._model_containers, model_container)
 
   def get_models(self) -> List[tf.keras.Model]:
+    """Returns all stored models."""
     return [c.model for c in self._model_containers]
 
   def get_best_models(self, num_models: int = 1) -> List[tf.keras.Model]:
+    """Returns the top `num_models` stored models in descending order."""
     return [c.model
             for c in heapq.nsmallest(num_models, self._model_containers)]
 
   def get_model_metrics(self) -> List[List[float]]:
+    """Returns the metrics for all stored models."""
     return [c.metrics for c in self._model_containers]

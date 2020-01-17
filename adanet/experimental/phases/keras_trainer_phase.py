@@ -31,6 +31,13 @@ class KerasTrainerPhase(DatasetProvider, ModelProvider):
                models: Union[Iterable[tf.keras.Model],
                              Callable[[], Iterable[tf.keras.Model]]],
                storage: Storage = InMemoryStorage()):
+    """Initializes a KerasTrainerPhase.
+
+    Args:
+      models: A list of `tf.keras.Model` instances or a list of callables that
+        return `tf.keras.Model` instances.
+      storage: A `Storage` instance.
+    """
     # TODO: Consume arbitary fit inputs.
     # Dataset should be wrapped inside a work unit.
     # For instance when you create KerasTrainer work unit the dataset is

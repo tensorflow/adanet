@@ -25,6 +25,13 @@ class InputPhase(DatasetProvider):
 
   def __init__(self, train_dataset: tf.data.Dataset,
                eval_dataset: tf.data.Dataset):
+    """Initializes an InputPhase.
+
+    Args:
+      train_dataset: A `tf.data.Dataset` for training.
+      eval_dataset: A `tf.data.Dataset` for evaluation.
+    """
+
     self._train_dataset = train_dataset
     self._eval_dataset = eval_dataset
 

@@ -40,18 +40,24 @@ class DatasetProvider(Phase, abc.ABC):
   """An interface for a phase that produces datasets."""
 
   def __init__(self, storage: Storage = InMemoryStorage()):
+    """Initializes a Phase.
+
+    Args:
+      storage: A `Storage` instance.
+    """
+
     super().__init__(storage)
     self._train_dataset = None
     self._eval_dataset = None
 
   @abc.abstractmethod
   def get_train_dataset(self) -> tf.data.Dataset:
-    """Returns dataset for train data."""
+    """Returns the dataset for train data."""
     pass
 
   @abc.abstractmethod
   def get_eval_dataset(self) -> tf.data.Dataset:
-    """Returns dataset for eval data."""
+    """Returns the dataset for eval data."""
     pass
 
 
@@ -60,11 +66,11 @@ class ModelProvider(Phase, abc.ABC):
 
   @abc.abstractmethod
   def get_models(self) -> Iterable[tf.keras.Model]:
-    """Returns the models."""
+    """Returns the models produced by this phase."""
     pass
 
   @abc.abstractmethod
   def get_best_models(self, num_models: int = 1) -> Iterable[tf.keras.Model]:
-    """Returns the best k models."""
+    """Returns the `k` best models produced by this phase."""
     pass
 

@@ -30,8 +30,10 @@ class Controller(abc.ABC):
 
   @abc.abstractmethod
   def work_units(self) -> Iterator[WorkUnit]:
+    """Yields `WorkUnit` instances."""
     pass
 
   @abc.abstractmethod
   def get_best_models(self, num_models) -> Sequence[tf.keras.Model]:
+    """Returns the top models produced from executing the controller."""
     pass

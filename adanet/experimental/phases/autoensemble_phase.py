@@ -89,12 +89,26 @@ class AllStrategy(EnsembleStrategy):
 class RandomKStrategy(EnsembleStrategy):
   """An ensemble strategy that adds k random candidates (with replacement)."""
 
-  def __init__(self, k):
+  def __init__(self, k, seed=None):
+    """Initializes a RandomKStrategy ensemble strategy.
+
+    Args:
+      k: Number of candidates to sample.
+      seed: Random seed.
+    """
     self._k = k
+    self._seed = seed
 
   def __call__(
       self, candidates: List[tf.keras.Model]) -> Iterable[List[tf.keras.Model]]:
-    return [random.choices(candidates, k=self._k)]
+    if self._seed:
+      random_state = random.getstate()
+      random.seed(self._seed)
+      candidates = [random.choices(candidates, k=self._k)]
+      random_state = random.setstate(random_state)
+    else:
+      candidates = [random.choices(candidates, k=self._k)]
+    return [candidates]
 
 
 class AutoEnsemblePhase(DatasetProvider, ModelProvider):
@@ -105,7 +119,7 @@ class AutoEnsemblePhase(DatasetProvider, ModelProvider):
                ensemble_strategies: List[EnsembleStrategy],
                storage: Storage = InMemoryStorage(),
                num_candidates: int = None):
-    """Instantiates an AutoEnsemblePhase.
+    """Initializes an AutoEnsemblePhase.
 
     Args:
       ensemblers: A list of `Ensembler` instances to determine how to combine

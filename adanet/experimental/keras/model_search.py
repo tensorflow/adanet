@@ -28,17 +28,25 @@ import tensorflow as tf
 
 
 class ModelSearch(object):
-  """A Keras-like interface for performing a model search."""
+  """An AutoML pipeline manager."""
 
   def __init__(self,
                controller: Controller,
                scheduler: Scheduler = InProcessScheduler()):
+    """Initializes a ModelSearch.
+
+    Args:
+      controller: A `Controller` instance.
+      scheduler: A `Scheduler` instance.
+    """
+
     self._controller = controller
     self._scheduler = scheduler
 
   def run(self):
-    """Execute the training workflow to generate models."""
+    """Executes the training workflow to generate models."""
     self._scheduler.schedule(self._controller.work_units())
 
   def get_best_models(self, num_models) -> Sequence[tf.keras.Model]:
+    """Returns the top models from the run."""
     return self._controller.get_best_models(num_models)

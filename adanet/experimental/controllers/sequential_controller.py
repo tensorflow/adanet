@@ -27,6 +27,12 @@ class SequentialController(Controller):
 
   # TODO: Add checks to make sure phases are valid.
   def __init__(self, phases: Sequence[Phase]):
+    """Initializes a SequentialController.
+
+    Args:
+      phases: A list of `Phase` instances.
+    """
+
     self._phases = phases
 
   def work_units(self) -> Iterator[WorkUnit]:

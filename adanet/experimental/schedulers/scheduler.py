@@ -25,7 +25,13 @@ from typing import Iterator
 
 
 class Scheduler(abc.ABC):
+  """Abstract interface for a scheduler to be used in ModelFlow pipelines."""
 
   @abc.abstractmethod
   def schedule(self, work_units: Iterator[WorkUnit]):
+    """Schedules and executes work units.
+
+    Args:
+      work_units: An iterator that yields `WorkUnit` instances.
+    """
     pass

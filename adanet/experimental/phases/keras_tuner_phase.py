@@ -30,6 +30,14 @@ class KerasTunerPhase(DatasetProvider, ModelProvider):
 
   def __init__(self, tuner: Union[Callable[..., Tuner], Tuner], *search_args,
                **search_kwargs):
+    """Initializes a KerasTunerPhase.
+
+    Args:
+      tuner: A `kerastuner.tuners.tuner.Tuner` instance or a callable that
+        returns a `kerastuner.tuners.tuner.Tuner` instance.
+      *search_args: Arguments to pass to the tuner search method.
+      **search_kwargs: Keyword arguments to pass to the tuner search method.
+    """
 
     if callable(tuner):
       self._tuner = tuner()

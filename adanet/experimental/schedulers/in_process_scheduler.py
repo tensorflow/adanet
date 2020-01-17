@@ -24,7 +24,14 @@ from typing import Iterator
 
 
 class InProcessScheduler(scheduler.Scheduler):
+  """A scheduler that executes in a single process."""
 
   def schedule(self, work_units: Iterator[WorkUnit]):
+    """Schedules and execute work units in a single process.
+
+    Args:
+      work_units: An iterator that yields `WorkUnit` instances.
+    """
+
     for work_unit in work_units:
       work_unit.execute()
