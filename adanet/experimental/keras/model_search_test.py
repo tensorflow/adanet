@@ -14,25 +14,19 @@
 # limitations under the License.
 """Tests for adanet.experimental.keras.ModelSearch."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import os
 import shutil
 import sys
 
 from absl import flags
 from absl.testing import parameterized
-from adanet.experimental.controllers.adanet_controller import AdaNetCandidatePhase
-from adanet.experimental.controllers.adanet_controller import AdaNetController
-from adanet.experimental.controllers.adanet_controller import AdaNetEnsemblePhase
 from adanet.experimental.controllers.sequential_controller import SequentialController
 from adanet.experimental.keras import testing_utils
 from adanet.experimental.keras.ensemble_model import MeanEnsemble
 from adanet.experimental.keras.model_search import ModelSearch
+from adanet.experimental.phases.input_phase import InputPhase
+from adanet.experimental.phases.keras_trainer_phase import KerasTrainerPhase
 from adanet.experimental.phases.keras_tuner_phase import KerasTunerPhase
-from adanet.experimental.phases.train_keras_models_phase import TrainKerasModelsPhase
 from kerastuner import tuners
 import tensorflow as tf
 
@@ -88,11 +82,9 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
         optimizer=tf.keras.optimizers.Adam(0.01), loss='mse', metrics=['mae'])
 
     controller = SequentialController(phases=[
-        TrainKerasModelsPhase([
-            model1,
-            model2,
-        ], dataset=train_dataset),
-        TrainKerasModelsPhase([ensemble], dataset=train_dataset),
+        InputPhase(train_dataset, test_dataset),
+        KerasTrainerPhase([model1, model2]),
+        KerasTrainerPhase([ensemble]),
     ])
 
     model_search = ModelSearch(controller)
@@ -136,8 +128,7 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
         directory=self.test_subdirectory,
         project_name='helloworld')
 
-    tuner_phase = KerasTunerPhase(
-        tuner, train_dataset, validation_data=test_dataset)
+    tuner_phase = KerasTunerPhase(tuner)
 
     def build_ensemble():
       ensemble = MeanEnsemble(
@@ -146,48 +137,15 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
           optimizer=tf.keras.optimizers.Adam(0.01), loss='mse', metrics=['mae'])
       return [ensemble]
 
-    ensemble_phase = TrainKerasModelsPhase(
-        build_ensemble, dataset=train_dataset)
+    ensemble_phase = KerasTrainerPhase(build_ensemble)
+    input_phase = InputPhase(train_dataset, test_dataset)
 
-    controller = SequentialController(phases=[tuner_phase, ensemble_phase])
+    controller = SequentialController(phases=[input_phase,
+                                              tuner_phase,
+                                              ensemble_phase])
 
     # Execute phases.
     model_search = ModelSearch(controller)
-    model_search.run()
-    self.assertIsInstance(
-        model_search.get_best_models(num_models=1)[0], MeanEnsemble)
-
-  def test_adanet_controller_end_to_end(self):
-    train_dataset, test_dataset = testing_utils.get_test_data(
-        train_samples=1280,
-        test_samples=640,
-        input_shape=(10,),
-        num_classes=10,
-        random_seed=42)
-
-    train_dataset = train_dataset.batch(32)
-    test_dataset = test_dataset.batch(32)
-
-    candidate_phase = AdaNetCandidatePhase(
-        train_dataset,
-        candidates_per_iteration=2,
-        optimizer='adam',
-        loss='sparse_categorical_crossentropy',
-        output_units=10)
-    # TODO: Setting candidates_per_iteration greater than the one
-    # for the candidate phase will lead to unexpected behavior.
-    ensemble_phase = AdaNetEnsemblePhase(
-        train_dataset,
-        candidates_per_iteration=2,
-        optimizer='adam',
-        loss='sparse_categorical_crossentropy')
-
-    adanet_controller = AdaNetController(
-        candidate_phase,
-        ensemble_phase,
-        iterations=5)
-
-    model_search = ModelSearch(adanet_controller)
     model_search.run()
     self.assertIsInstance(
         model_search.get_best_models(num_models=1)[0], MeanEnsemble)
