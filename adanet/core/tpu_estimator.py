@@ -28,8 +28,6 @@ from adanet import tf_compat
 from adanet.core.estimator import Estimator
 import tensorflow as tf
 
-tf = tf.compat.v2
-
 
 # pylint: disable=g-classes-have-attributes
 class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):

@@ -22,7 +22,6 @@ import collections
 from adanet.ensemble.ensembler import Ensemble
 from adanet.ensemble.ensembler import Ensembler
 import tensorflow as tf
-tf = tf.compat.v2
 
 
 class MeanEnsemble(

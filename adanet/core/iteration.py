@@ -36,8 +36,6 @@ import numpy as np
 import tensorflow as tf
 from typing import Any
 
-tf = tf.compat.v2
-
 
 class _TrainManager(object):
   """Manages the training of SubnetworkSpecs and EnsembleSpecs.

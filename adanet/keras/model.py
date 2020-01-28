@@ -23,7 +23,6 @@ from absl import logging
 from adanet import core
 
 import tensorflow as tf
-tf = tf.compat.v2
 
 
 class _KerasHead(object):

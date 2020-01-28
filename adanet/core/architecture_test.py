@@ -21,7 +21,7 @@ from __future__ import print_function
 
 from absl.testing import parameterized
 from adanet.core.architecture import _Architecture
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 class ArchitectureTest(parameterized.TestCase, tf.test.TestCase):

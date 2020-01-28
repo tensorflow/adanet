@@ -25,7 +25,7 @@ from absl import flags
 from absl.testing import parameterized
 from adanet.research.improve_nas.trainer import adanet_improve_nas
 from adanet.research.improve_nas.trainer import fake_data
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 class AdaNetQuetzalBuilderTest(parameterized.TestCase, tf.test.TestCase):

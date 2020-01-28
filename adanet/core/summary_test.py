@@ -29,7 +29,7 @@ from adanet.core.summary import _ScopedSummary
 from adanet.core.summary import _TPUScopedSummary
 from adanet.core.summary import monkey_patched_summaries
 from six.moves import range
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.ops import summary_ops_v2

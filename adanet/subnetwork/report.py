@@ -23,7 +23,7 @@ import collections
 
 from adanet import tf_compat
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 class Report(

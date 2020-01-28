@@ -20,7 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 from adanet.research.improve_nas.trainer import cifar100
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 class Cifar100Test(tf.test.TestCase):

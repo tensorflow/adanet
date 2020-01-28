@@ -26,15 +26,14 @@ import os
 from absl import logging
 from adanet import tf_compat
 import six
-import tensorflow as tf_v1
+import tensorflow.compat.v1 as tf_v1
+import tensorflow as tf
 
 # pylint: disable=g-direct-tensorflow-import
 from tensorboard import compat
 from tensorflow.python.ops import summary_op_util
 from tensorflow.python.summary import summary as summary_lib
 # pylint: enable=g-direct-tensorflow-import
-
-tf = tf_v1.compat.v2
 
 _DEFAULT_SCOPE = "default"
 

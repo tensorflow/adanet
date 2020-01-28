@@ -38,8 +38,6 @@ from adanet.core.eval_metrics import _IterationMetrics
 from adanet.core.eval_metrics import _SubnetworkMetrics
 import tensorflow as tf
 
-tf = tf.compat.v2
-
 
 def dummy_tensor(shape=(), random_seed=42):
   """Returns a randomly initialized tensor."""

@@ -21,7 +21,7 @@ from __future__ import print_function
 
 import adanet
 from adanet.examples import simple_dnn
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 class AdaNetTest(tf.test.TestCase):

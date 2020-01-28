@@ -46,8 +46,6 @@ import six
 import tensorflow as tf
 from typing import Any, Callable, Dict, Optional, Sequence, Text  # (b/144172555) pylint:disable=unused-import
 
-tf = tf.compat.v2
-
 
 class _StopAfterTrainingHook(tf_compat.SessionRunHook):
   """Hook that requests stop once iteration is over."""

@@ -37,7 +37,6 @@ py_test(
 py_strict_test(
     name = "modelflow_test",
     srcs = ["modelflow_test.py"],
-    python_version = "PY3",
     srcs_version = "PY3",
     deps = [
         ":adanet",

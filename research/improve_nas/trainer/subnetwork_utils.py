@@ -19,7 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 
 import copy
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 def capture_variables(fn):

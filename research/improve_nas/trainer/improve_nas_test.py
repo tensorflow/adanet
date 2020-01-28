@@ -27,7 +27,7 @@ from absl.testing import parameterized
 import adanet
 from adanet.research.improve_nas.trainer import improve_nas
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 _IMAGE_DIM = 32

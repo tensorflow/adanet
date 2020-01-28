@@ -48,7 +48,7 @@ from adanet.subnetwork import Builder
 from adanet.subnetwork import SimpleGenerator
 from adanet.subnetwork import Subnetwork
 # TODO: Switch back to TF 2.0 once the distribution bug is fixed.
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 # pylint: disable=g-direct-tensorflow-import
 

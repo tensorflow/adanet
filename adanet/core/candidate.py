@@ -23,7 +23,6 @@ import collections
 
 from adanet import tf_compat
 import tensorflow as tf
-tf = tf.compat.v2
 
 
 class _Candidate(

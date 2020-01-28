@@ -39,7 +39,6 @@ py_strict_test(
     name = "model_search_test",
     size = "large",
     srcs = ["model_search_test.py"],
-    python_version = "PY3",
     srcs_version = "PY3",
     deps = [
         ":ensemble_model",
@@ -68,7 +67,6 @@ py_library(
 py_strict_test(
     name = "ensemble_model_test",
     srcs = ["ensemble_model_test.py"],
-    python_version = "PY3",
     srcs_version = "PY3",
     deps = [
         ":ensemble_model",

@@ -18,7 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 from distutils.version import LooseVersion
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import tensorflow as tf_v2
 # pylint: disable=unused-import
 # pylint: disable=g-direct-tensorflow-import

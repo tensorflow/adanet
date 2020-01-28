@@ -31,7 +31,7 @@ from adanet import tf_compat
 from adanet.autoensemble.common import AutoEnsembleSubestimator
 from adanet.autoensemble.estimator import _GeneratorFromCandidatePool
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.estimator.export import export

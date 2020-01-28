@@ -3,7 +3,6 @@ licenses(["notice"])  # Apache 2.0
 py_binary(
     name = "trainer",
     srcs = ["trainer.py"],
-    python_version = "PY3",
     srcs_version = "PY3",
     deps = [
         ":adanet_improve_nas",
@@ -27,7 +26,6 @@ py_library(
 py_test(
     name = "improve_nas_test",
     srcs = ["improve_nas_test.py"],
-    python_version = "PY3",
     srcs_version = "PY3",
     deps = [
         ":fake_data",
@@ -51,7 +49,6 @@ py_library(
 py_test(
     name = "adanet_improve_nas_test",
     srcs = ["adanet_improve_nas_test.py"],
-    python_version = "PY3",
     srcs_version = "PY3",
     deps = [
         ":adanet_improve_nas",
@@ -85,7 +82,6 @@ py_library(
 py_test(
     name = "cifar10_test",
     srcs = ["cifar10_test.py"],
-    python_version = "PY3",
     srcs_version = "PY3",
     deps = [
         ":cifar10",
@@ -104,7 +100,6 @@ py_library(
 py_test(
     name = "cifar100_test",
     srcs = ["cifar100_test.py"],
-    python_version = "PY3",
     srcs_version = "PY3",
     deps = [
         ":cifar100",

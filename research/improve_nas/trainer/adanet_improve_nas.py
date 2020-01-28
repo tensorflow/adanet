@@ -20,7 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 import adanet
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 # pylint: disable=g-import-not-at-top
 try:
