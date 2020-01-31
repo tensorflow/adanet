@@ -40,7 +40,7 @@ class EnsembleModelTest(parameterized.TestCase, tf.test.TestCase):
           'want_results': [0.42579408, 0.53439462],
       })
   def test_lifecycle(self, ensemble, want_results, output_units=None):
-    train_dataset, test_dataset = testing_utils.get_test_data(
+    train_dataset, test_dataset = testing_utils.get_holdout_data(
         train_samples=128,
         test_samples=64,
         input_shape=(10,),
@@ -48,7 +48,7 @@ class EnsembleModelTest(parameterized.TestCase, tf.test.TestCase):
         random_seed=42)
 
     # TODO: Consider performing `tf.data.Dataset` transformations
-    # within get_test_data function.
+    # within get_holdout_data function.
     train_dataset = train_dataset.batch(32).repeat(10)
     test_dataset = test_dataset.batch(32).repeat(10)
 

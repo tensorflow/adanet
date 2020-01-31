@@ -91,12 +91,12 @@ To get you started:
 
 ## Requirements
 
-Requires [Python](https://www.python.org/) 2.7, 3.4, 3.5, 3.6, or 3.7.
+Requires [Python](https://www.python.org/) 3.6 or above.
 
-`adanet` supports both TensorFlow 2.0 and TensorFlow >=1.15. It depends on bug fixes and enhancements not present in TensorFlow releases prior to 1.15. You must install or upgrade your TensorFlow package to at least 1.15:
+`adanet` is built on TensorFlow 2.1. It depends on bug fixes and enhancements not present in TensorFlow releases prior to 2.1. You must install or upgrade your TensorFlow package to at least 2.1:
 
 ```shell
-$ pip install "tensorflow==2.0.0" # Or pip install "tensorflow==1.15.*"
+$ pip install "tensorflow==2.1"
 ```
 
 ## Installing with Pip

@@ -26,7 +26,7 @@ import tensorflow as tf
 
 # TODO: Add ability to choose the problem type: regression,
 # classification, multi-class etc.
-def get_test_data(
+def get_holdout_data(
     train_samples: int,
     test_samples: int,
     input_shape: Tuple[int],
