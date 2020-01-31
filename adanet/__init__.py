@@ -22,7 +22,6 @@ from adanet import distributed
 from adanet import ensemble
 from adanet import replay
 from adanet import subnetwork
-from adanet.autoensemble import AutoEnsemble
 from adanet.autoensemble import AutoEnsembleEstimator
 from adanet.autoensemble import AutoEnsembleSubestimator
 from adanet.autoensemble import AutoEnsembleTPUEstimator
@@ -41,7 +40,6 @@ from adanet.subnetwork import Subnetwork
 from adanet.version import __version__
 
 __all__ = [
-    "AutoEnsemble",
     "AutoEnsembleEstimator",
     "AutoEnsembleSubestimator",
     "AutoEnsembleTPUEstimator",
