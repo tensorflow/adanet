@@ -12,7 +12,6 @@ py_library(
     deps = [
         ":common",
         ":estimator",
-        ":keras",
     ],
 )
 
@@ -27,33 +26,11 @@ py_library(
 )
 
 py_library(
-    name = "keras",
-    srcs = ["keras.py"],
-    visibility = ["//adanet/keras:__subpackages__"],
-    deps = [
-        ":common",
-        "//adanet/keras:model",
-        "@absl_py//absl/logging",
-    ],
-)
-
-py_library(
     name = "estimator",
     srcs = ["estimator.py"],
     deps = [
         ":common",
         "//adanet/core",
-    ],
-)
-
-py_test(
-    name = "keras_test",
-    size = "medium",
-    srcs = ["keras_test.py"],
-    deps = [
-        ":keras",
-        "//adanet/tf_compat",
-        "@absl_py//absl/testing:parameterized",
     ],
 )
 
