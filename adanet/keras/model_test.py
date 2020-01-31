@@ -28,7 +28,11 @@ from adanet.subnetwork import SimpleGenerator
 from adanet.subnetwork import Subnetwork
 from adanet.subnetwork import TrainOpSpec
 import tensorflow as tf
-from tensorflow.python.framework import test_util  # pylint: disable=g-direct-tensorflow-import
+
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import context
+from tensorflow.python.framework import test_util
+# pylint: enable=g-direct-tensorflow-import
 
 XOR_FEATURES = [[1., 0.], [0., 0.], [0., 1.], [1., 1.]]
 XOR_LABELS = [[1.], [0.], [1.], [0.]]
@@ -196,42 +200,42 @@ class ModelTest(tu.AdanetTestCase):
                      dataset=None,
                      epochs=None,
                      steps_per_epoch=None):
+    with context.graph_mode():
+      keras_model = model.Model(
+          subnetwork_generator=subnetwork_generator,
+          max_iteration_steps=max_iteration_steps,
+          logits_dimension=logits_dimension,
+          ensemblers=ensemblers,
+          ensemble_strategies=ensemble_strategies,
+          evaluator=evaluator,
+          adanet_loss_decay=adanet_loss_decay,
+          filepath=self.test_subdirectory)
 
-    keras_model = model.Model(
-        subnetwork_generator=subnetwork_generator,
-        max_iteration_steps=max_iteration_steps,
-        logits_dimension=logits_dimension,
-        ensemblers=ensemblers,
-        ensemble_strategies=ensemble_strategies,
-        evaluator=evaluator,
-        adanet_loss_decay=adanet_loss_decay,
-        filepath=self.test_subdirectory)
+      keras_model.compile(loss=loss, metrics=metrics)
+      if want_metrics_names is None:
+        want_metrics_names = ["loss"]
+      # Make sure we have access to metrics_names immediately after compilation.
+      self.assertEqual(want_metrics_names, keras_model.metrics_names)
 
-    keras_model.compile(loss=loss, metrics=metrics)
-    if want_metrics_names is None:
-      want_metrics_names = ["loss"]
-    # Make sure we have access to metrics_names immediately after compilation.
-    self.assertEqual(want_metrics_names, keras_model.metrics_names)
+      if dataset is None:
+        dataset = lambda: tf.data.Dataset.from_tensors(  # pylint: disable=g-long-lambda
+            ({"x": XOR_FEATURES}, XOR_LABELS)).repeat()
 
-    if dataset is None:
-      dataset = lambda: tf.data.Dataset.from_tensors(  # pylint: disable=g-long-lambda
-          ({"x": XOR_FEATURES}, XOR_LABELS)).repeat()
+      keras_model.fit(dataset, epochs=epochs, steps_per_epoch=steps_per_epoch)
 
-    keras_model.fit(dataset, epochs=epochs, steps_per_epoch=steps_per_epoch)
+      eval_results = keras_model.evaluate(dataset, steps=3)
+      self.assertAlmostEqual(want_loss, eval_results[0], places=3)
+      if metrics:
+        self.assertAllClose(want_metrics, eval_results[1:], 1e-3, 1e-3)
 
-    eval_results = keras_model.evaluate(dataset, steps=3)
-    self.assertAlmostEqual(want_loss, eval_results[0], places=3)
-    if metrics:
-      self.assertAllClose(want_metrics, eval_results[1:], 1e-3, 1e-3)
+      prediction_data = lambda: tf.data.Dataset.from_tensors(({  # pylint: disable=g-long-lambda
+          "x": XOR_FEATURES
+      }))
 
-    prediction_data = lambda: tf.data.Dataset.from_tensors(({  # pylint: disable=g-long-lambda
-        "x": XOR_FEATURES
-    }))
-
-    # TODO: Change the assertion to actually check the values rather
-    # than the length of the returned predictions array.
-    predictions = keras_model.predict(prediction_data)
-    self.assertLen(predictions, 4)
+      # TODO: Change the assertion to actually check the values rather
+      # than the length of the returned predictions array.
+      predictions = keras_model.predict(prediction_data)
+      self.assertLen(predictions, 4)
 
   @test_util.run_in_graph_and_eager_modes
   def test_compile_exceptions(self):

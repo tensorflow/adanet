@@ -11,7 +11,7 @@ env:
     - CODECOV_TOKEN="0d2c482b-f42c-4d4c-b092-cb628ad20857"
     - BAZEL_VERSION=0.20.0
     - COVERAGE_PROCESS_START=$PWD/.coveragerc
-    - NODE_TOTAL=4  # Total machines running per test setting
+    - NODE_TOTAL=8  # Total machines running per test setting
   matrix:
     # We test against recent versions of TensorFlow and tf-nightly.
 
@@ -19,10 +19,18 @@ env:
     - TF_VERSION="tf-nightly" NODE_INDEX=1
     - TF_VERSION="tf-nightly" NODE_INDEX=2
     - TF_VERSION="tf-nightly" NODE_INDEX=3
+    - TF_VERSION="tf-nightly" NODE_INDEX=4
+    - TF_VERSION="tf-nightly" NODE_INDEX=5
+    - TF_VERSION="tf-nightly" NODE_INDEX=6
+    - TF_VERSION="tf-nightly" NODE_INDEX=7
     - TF_VERSION="2.1" NODE_INDEX=0
     - TF_VERSION="2.1" NODE_INDEX=1
     - TF_VERSION="2.1" NODE_INDEX=2
     - TF_VERSION="2.1" NODE_INDEX=3
+    - TF_VERSION="2.1" NODE_INDEX=4
+    - TF_VERSION="2.1" NODE_INDEX=5
+    - TF_VERSION="2.1" NODE_INDEX=6
+    - TF_VERSION="2.1" NODE_INDEX=7
 
 matrix:
   allow_failures:
@@ -34,6 +42,14 @@ matrix:
       env: TF_VERSION="tf-nightly" NODE_INDEX=2
     - python: "3.6"
       env: TF_VERSION="tf-nightly" NODE_INDEX=3
+    - python: "3.6"
+      env: TF_VERSION="tf-nightly" NODE_INDEX=4
+    - python: "3.6"
+      env: TF_VERSION="tf-nightly" NODE_INDEX=5
+    - python: "3.6"
+      env: TF_VERSION="tf-nightly" NODE_INDEX=6
+    - python: "3.6"
+      env: TF_VERSION="tf-nightly" NODE_INDEX=7
 
 before_install:
   - sudo apt-get -y install pkg-config zip g++ zlib1g-dev unzip
