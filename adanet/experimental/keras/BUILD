@@ -35,7 +35,7 @@ py_library(
     ],
 )
 
-py_strict_test(
+py_test(
     name = "model_search_test",
     size = "large",
     srcs = ["model_search_test.py"],
@@ -64,7 +64,7 @@ py_library(
     ],
 )
 
-py_strict_test(
+py_test(
     name = "ensemble_model_test",
     srcs = ["ensemble_model_test.py"],
     srcs_version = "PY3",

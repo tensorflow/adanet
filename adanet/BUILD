@@ -34,7 +34,7 @@ py_test(
     ],
 )
 
-py_strict_test(
+py_test(
     name = "modelflow_test",
     srcs = ["modelflow_test.py"],
     srcs_version = "PY3",

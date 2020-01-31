@@ -28,4 +28,4 @@ else
 fi
 
 # Build adanet pip packaging script
-bazel build -c opt //... --local_resources 2048,.5,1.0
+bazel build -c opt //... --local_resources 2048,.5,1.0 --force_python=PY3
