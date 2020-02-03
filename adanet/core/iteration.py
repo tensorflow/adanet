@@ -1179,7 +1179,9 @@ class _IterationBuilder(object):
           value = tf.stack(export_outputs[key])[best_candidate_index]
           output = tf.estimator.export.RegressionOutput(value)
         else:
-          output = tf.estimator.export.PredictOutput(best_predictions)
+          predictions = copy.copy(export_output.outputs)
+          predictions.update(best_predictions)
+          output = tf.estimator.export.PredictOutput(predictions)
         best_export_outputs[key] = output
       return best_export_outputs
 
