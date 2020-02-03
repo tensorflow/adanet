@@ -17,7 +17,7 @@
 import abc
 
 from typing import Iterable, List
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class ModelContainer:

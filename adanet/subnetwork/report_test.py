@@ -21,7 +21,7 @@ from __future__ import print_function
 
 from absl.testing import parameterized
 from adanet.subnetwork.report import Report
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import context

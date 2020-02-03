@@ -34,7 +34,7 @@ from adanet.experimental.phases.keras_tuner_phase import KerasTunerPhase
 from adanet.experimental.phases.repeat_phase import RepeatPhase
 from adanet.experimental.storages.in_memory_storage import InMemoryStorage
 from kerastuner import tuners
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
@@ -53,7 +53,7 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
     shutil.rmtree(self.test_subdirectory, ignore_errors=True)
 
   def test_phases_end_to_end(self):
-    train_dataset, test_dataset = testing_utils.get_test_data(
+    train_dataset, test_dataset = testing_utils.get_holdout_data(
         train_samples=128,
         test_samples=64,
         input_shape=(10,),
@@ -99,7 +99,7 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
         model_search.get_best_models(num_models=1)[0], MeanEnsemble)
 
   def test_tuner_end_to_end(self):
-    train_dataset, test_dataset = testing_utils.get_test_data(
+    train_dataset, test_dataset = testing_utils.get_holdout_data(
         train_samples=128,
         test_samples=64,
         input_shape=(10,),
@@ -107,7 +107,7 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
         random_seed=42)
 
     # TODO: Consider performing `tf.data.Dataset` transformations
-    # within get_test_data function.
+    # within get_holdout_data function.
     train_dataset = train_dataset.batch(32)
     test_dataset = test_dataset.batch(32)
 
@@ -159,7 +159,7 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
 
   def test_autoensemble_end_to_end(self):
 
-    train_dataset, test_dataset = testing_utils.get_test_data(
+    train_dataset, test_dataset = testing_utils.get_holdout_data(
         train_samples=128,
         test_samples=64,
         input_shape=(10,),
@@ -167,7 +167,7 @@ class ModelSearchTest(parameterized.TestCase, tf.test.TestCase):
         random_seed=42)
 
     # TODO: Consider performing `tf.data.Dataset` transformations
-    # within get_test_data function.
+    # within get_holdout_data function.
     train_dataset = train_dataset.batch(32)
     test_dataset = test_dataset.batch(32)
 

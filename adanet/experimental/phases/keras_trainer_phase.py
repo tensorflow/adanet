@@ -21,7 +21,7 @@ from adanet.experimental.storages.in_memory_storage import InMemoryStorage
 from adanet.experimental.storages.storage import Storage
 from adanet.experimental.work_units.keras_trainer_work_unit import KerasTrainerWorkUnit
 from adanet.experimental.work_units.work_unit import WorkUnit
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class KerasTrainerPhase(DatasetProvider, ModelProvider):

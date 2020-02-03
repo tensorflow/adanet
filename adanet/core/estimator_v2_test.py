@@ -29,7 +29,7 @@ from adanet.core.report_materializer import ReportMaterializer
 from adanet.subnetwork import Builder
 from adanet.subnetwork import SimpleGenerator
 from adanet.subnetwork import Subnetwork
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 from tensorflow_estimator.python.estimator.head import regression_head
 

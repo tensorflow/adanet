@@ -23,7 +23,7 @@ from absl.testing import parameterized
 from adanet import tf_compat
 from adanet.subnetwork.generator import Builder
 from adanet.subnetwork.generator import Subnetwork
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 def dummy_tensor(shape=(), random_seed=42):

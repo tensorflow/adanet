@@ -45,7 +45,7 @@ from adanet.subnetwork import SimpleGenerator
 from adanet.subnetwork import Subnetwork
 from adanet.subnetwork import TrainOpSpec
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import context
 from tensorflow.python.framework import test_util

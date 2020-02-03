@@ -24,7 +24,7 @@ from adanet import subnetwork
 from adanet import tf_compat
 from adanet.core.report_materializer import ReportMaterializer
 import adanet.core.testing_utils as tu
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import context

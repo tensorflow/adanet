@@ -21,12 +21,12 @@ from __future__ import print_function
 from typing import Optional, Tuple
 
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 # TODO: Add ability to choose the problem type: regression,
 # classification, multi-class etc.
-def get_test_data(
+def get_holdout_data(
     train_samples: int,
     test_samples: int,
     input_shape: Tuple[int],

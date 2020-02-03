@@ -30,7 +30,7 @@ from absl.testing import parameterized
 from adanet import tf_compat
 from adanet.autoensemble.estimator import AutoEnsembleTPUEstimator
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 # pylint: disable=g-import-not-at-top
 # pylint: disable=g-direct-tensorflow-import

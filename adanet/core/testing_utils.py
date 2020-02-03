@@ -36,7 +36,7 @@ from adanet.core.ensemble_builder import _SubnetworkSpec
 from adanet.core.eval_metrics import _EnsembleMetrics
 from adanet.core.eval_metrics import _IterationMetrics
 from adanet.core.eval_metrics import _SubnetworkMetrics
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 def dummy_tensor(shape=(), random_seed=42):

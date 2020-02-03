@@ -26,7 +26,6 @@ py_library(
 py_library(
     name = "estimator",
     srcs = ["estimator.py"],
-    visibility = ["//adanet/keras:__subpackages__"],
     deps = [
         ":architecture",
         ":candidate",

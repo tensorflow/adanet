@@ -24,7 +24,7 @@ import math
 from absl import logging
 from adanet import tf_compat
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 # TODO: Remove uses of Evaluator once AdaNet Ranker is implemented.

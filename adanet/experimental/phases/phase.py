@@ -20,7 +20,7 @@ from typing import Iterable, Iterator, Optional
 from adanet.experimental.storages.in_memory_storage import InMemoryStorage
 from adanet.experimental.storages.storage import Storage
 from adanet.experimental.work_units.work_unit import WorkUnit
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class Phase(abc.ABC):

@@ -25,7 +25,7 @@ import inspect
 from adanet import subnetwork as subnetwork_lib
 from adanet import tf_compat
 
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 def _default_logits(estimator_spec):

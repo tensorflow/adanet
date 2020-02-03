@@ -35,7 +35,7 @@ from adanet.ensemble import MixtureWeightType
 from adanet.subnetwork import Builder
 from adanet.subnetwork import Subnetwork
 import tensorflow.compat.v1 as tf_v1
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import context
 from tensorflow.python.framework import test_util

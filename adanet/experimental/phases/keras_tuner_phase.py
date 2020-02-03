@@ -22,7 +22,7 @@ from adanet.experimental.phases.phase import ModelProvider
 from adanet.experimental.work_units.keras_tuner_work_unit import KerasTunerWorkUnit
 from adanet.experimental.work_units.work_unit import WorkUnit
 from kerastuner.engine.tuner import Tuner
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class KerasTunerPhase(DatasetProvider, ModelProvider):

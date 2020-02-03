@@ -19,7 +19,7 @@ from __future__ import print_function
 
 from distutils.version import LooseVersion
 import tensorflow.compat.v1 as tf
-import tensorflow as tf_v2
+import tensorflow.compat.v2 as tf_v2
 # pylint: disable=unused-import
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python import tf2

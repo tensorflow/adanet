@@ -22,7 +22,7 @@ from __future__ import print_function
 from absl.testing import parameterized
 from adanet import subnetwork
 from adanet.core.report_accessor import _ReportAccessor
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class ReportAccessorTest(parameterized.TestCase, tf.test.TestCase):

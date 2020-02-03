@@ -24,7 +24,7 @@ from adanet import ensemble
 from adanet import subnetwork
 from adanet import tf_compat
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import context

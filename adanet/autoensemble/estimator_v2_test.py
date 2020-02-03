@@ -27,7 +27,7 @@ from absl import flags
 from absl.testing import parameterized
 from adanet import tf_compat
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.estimator.export import export

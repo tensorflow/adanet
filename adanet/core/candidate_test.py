@@ -26,7 +26,7 @@ from adanet import tf_compat
 from adanet.core.candidate import _Candidate
 from adanet.core.candidate import _CandidateBuilder
 import adanet.core.testing_utils as tu
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import context
 from tensorflow.python.framework import test_util

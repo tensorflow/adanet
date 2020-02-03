@@ -19,7 +19,7 @@ from adanet.experimental.phases.phase import DatasetProvider
 from adanet.experimental.phases.phase import ModelProvider
 from adanet.experimental.phases.phase import Phase
 from adanet.experimental.work_units.work_unit import WorkUnit
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class RepeatPhase(DatasetProvider, ModelProvider):

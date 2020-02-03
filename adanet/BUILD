@@ -19,7 +19,6 @@ py_library(
         "//adanet/core",
         "//adanet/distributed",
         "//adanet/ensemble",
-        "//adanet/keras",
         "//adanet/replay",
         "//adanet/subnetwork",
     ],

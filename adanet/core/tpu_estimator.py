@@ -26,7 +26,7 @@ import functools
 from absl import logging
 from adanet import tf_compat
 from adanet.core.estimator import Estimator
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 # pylint: disable=g-classes-have-attributes

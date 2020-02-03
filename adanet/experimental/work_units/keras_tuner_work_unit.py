@@ -19,7 +19,7 @@ import time
 
 from adanet.experimental.work_units import work_unit
 from kerastuner.engine.tuner import Tuner
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class KerasTunerWorkUnit(work_unit.WorkUnit):

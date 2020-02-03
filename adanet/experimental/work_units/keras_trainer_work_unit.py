@@ -20,7 +20,7 @@ import time
 from adanet.experimental.storages.storage import ModelContainer
 from adanet.experimental.storages.storage import Storage
 from adanet.experimental.work_units import work_unit
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class KerasTrainerWorkUnit(work_unit.WorkUnit):

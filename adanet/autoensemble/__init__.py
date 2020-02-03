@@ -22,11 +22,9 @@ from __future__ import print_function
 from adanet.autoensemble.common import AutoEnsembleSubestimator
 from adanet.autoensemble.estimator import AutoEnsembleEstimator
 from adanet.autoensemble.estimator import AutoEnsembleTPUEstimator
-from adanet.autoensemble.keras import AutoEnsemble
 
 __all__ = [
     "AutoEnsembleEstimator",
     "AutoEnsembleSubestimator",
     "AutoEnsembleTPUEstimator",
-    "AutoEnsemble",
 ]

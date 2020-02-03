@@ -22,7 +22,7 @@ from __future__ import print_function
 import collections
 
 from adanet import tf_compat
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class _Candidate(

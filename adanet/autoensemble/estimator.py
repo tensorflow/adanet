@@ -22,7 +22,7 @@ from __future__ import print_function
 from adanet import core
 from adanet.autoensemble.common import _GeneratorFromCandidatePool
 
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class AutoEnsembleEstimator(core.Estimator):  # pylint: disable=g-classes-have-attributes

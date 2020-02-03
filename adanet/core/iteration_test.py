@@ -38,7 +38,7 @@ from adanet.subnetwork import Builder as SubnetworkBuilder
 from adanet.subnetwork import Report as SubnetworkReport
 from adanet.subnetwork import Subnetwork
 from adanet.subnetwork import TrainOpSpec
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import context
 from tensorflow.python.framework import test_util

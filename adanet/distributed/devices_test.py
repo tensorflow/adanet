@@ -20,7 +20,7 @@ from __future__ import print_function
 from absl.testing import parameterized
 from adanet.distributed.devices import monkey_patch_default_variable_placement_strategy
 
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import context
 from tensorflow.python.framework import test_util

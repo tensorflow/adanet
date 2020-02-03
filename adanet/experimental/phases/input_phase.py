@@ -17,7 +17,7 @@
 from typing import Optional
 from adanet.experimental.phases.phase import DatasetProvider
 from adanet.experimental.phases.phase import Phase
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class InputPhase(DatasetProvider):

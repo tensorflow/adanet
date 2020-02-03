@@ -24,7 +24,7 @@ import math
 from absl import logging
 from adanet import subnetwork
 from adanet import tf_compat
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class ReportMaterializer(object):

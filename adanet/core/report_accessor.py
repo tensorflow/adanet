@@ -27,7 +27,7 @@ from adanet import subnetwork
 
 import numpy as np
 import six
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 # TODO: Encapsulate conversion and serialization of a

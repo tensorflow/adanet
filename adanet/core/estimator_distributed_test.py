@@ -35,7 +35,7 @@ from absl import logging
 from absl.testing import parameterized
 from adanet import tf_compat
 from adanet.core.timer import _CountDownTimer
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 # A process. name is a string identifying the process in logs. stderr is a file
 # object of the process's stderr.

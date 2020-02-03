@@ -22,7 +22,7 @@ from __future__ import print_function
 from adanet import ensemble
 from adanet import subnetwork
 import mock
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.framework import test_util
 # pylint: enable=g-direct-tensorflow-import

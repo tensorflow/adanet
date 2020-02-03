@@ -15,7 +15,7 @@
 """Test ModelFlow imports."""
 
 import adanet.experimental as adanet
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class ModelFlowTest(tf.test.TestCase):

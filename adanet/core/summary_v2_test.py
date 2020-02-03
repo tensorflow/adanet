@@ -26,7 +26,7 @@ from absl.testing import parameterized
 from adanet import tf_compat
 from adanet.core import testing_utils as tu
 from adanet.core.summary import _ScopedSummaryV2
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import context

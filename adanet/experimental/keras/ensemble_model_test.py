@@ -23,7 +23,7 @@ from adanet.experimental.keras import testing_utils
 from adanet.experimental.keras.ensemble_model import MeanEnsemble
 from adanet.experimental.keras.ensemble_model import WeightedEnsemble
 
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class EnsembleModelTest(parameterized.TestCase, tf.test.TestCase):
@@ -40,7 +40,7 @@ class EnsembleModelTest(parameterized.TestCase, tf.test.TestCase):
           'want_results': [0.42579408, 0.53439462],
       })
   def test_lifecycle(self, ensemble, want_results, output_units=None):
-    train_dataset, test_dataset = testing_utils.get_test_data(
+    train_dataset, test_dataset = testing_utils.get_holdout_data(
         train_samples=128,
         test_samples=64,
         input_shape=(10,),

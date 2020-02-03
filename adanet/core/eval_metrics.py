@@ -25,7 +25,7 @@ import inspect
 from absl import logging
 from adanet import tf_compat
 import six
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 def _call_eval_metrics(eval_metrics):

@@ -19,7 +19,7 @@ import heapq
 from typing import List
 from adanet.experimental.storages.storage import ModelContainer
 from adanet.experimental.storages.storage import Storage
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 class InMemoryStorage(Storage):

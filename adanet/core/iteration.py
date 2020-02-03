@@ -33,7 +33,7 @@ from adanet.core.ensemble_builder import _EnsembleSpec
 from adanet.core.eval_metrics import _IterationMetrics
 
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 from typing import Any
 
 

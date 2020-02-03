@@ -35,7 +35,7 @@ from adanet.core.eval_metrics import _EnsembleMetrics
 from adanet.core.eval_metrics import _SubnetworkMetrics
 from adanet.core.summary import monkey_patched_summaries
 import tensorflow.compat.v1 as tf_v1
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 _VALID_METRIC_FN_ARGS = {"features", "labels", "predictions"}
 

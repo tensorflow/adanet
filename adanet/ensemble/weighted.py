@@ -23,7 +23,7 @@ from absl import logging
 from adanet import tf_compat
 from adanet.ensemble.ensembler import Ensemble
 from adanet.ensemble.ensembler import Ensembler
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 def _stringify(key):

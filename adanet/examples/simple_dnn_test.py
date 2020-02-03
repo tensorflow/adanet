@@ -22,7 +22,7 @@ from __future__ import print_function
 from absl.testing import parameterized
 import adanet
 from adanet.examples import simple_dnn
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import context

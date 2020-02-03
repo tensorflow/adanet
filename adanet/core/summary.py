@@ -27,7 +27,7 @@ from absl import logging
 from adanet import tf_compat
 import six
 import tensorflow.compat.v1 as tf_v1
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 # pylint: disable=g-direct-tensorflow-import
 from tensorboard import compat

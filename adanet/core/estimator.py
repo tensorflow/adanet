@@ -43,7 +43,7 @@ from adanet.core.timer import _CountDownTimer
 from adanet.distributed.devices import monkey_patch_default_variable_placement_strategy
 import numpy as np
 import six
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 from typing import Any, Callable, Dict, Optional, Sequence, Text  # (b/144172555) pylint:disable=unused-import
 
 
