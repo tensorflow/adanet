@@ -58,7 +58,7 @@ class _SecondaryTrainOpRunnerHook(tf_compat.SessionRunHook):
 
 class AutoEnsembleSubestimator(  # pylint: disable=g-classes-have-attributes
     collections.namedtuple("AutoEnsembleSubestimator",
-                           ["estimator", "train_input_fn"])):
+                           ["estimator", "train_input_fn", "prediction_only"])):
   """A subestimator to train and consider for ensembling.
 
   Args:
@@ -79,6 +79,8 @@ class AutoEnsembleSubestimator(  # pylint: disable=g-classes-have-attributes
          `Tensor` or a dictionary of string label name to `Tensor`. Both
          `features` and `labels` are consumed by `estimator#model_fn`. They
          should satisfy the expectation of `estimator#model_fn` from inputs.
+     prediction_only: If set to True, only runs the subestimator in prediction
+       mode.
 
   Returns:
     An `AutoEnsembleSubestimator` instance to be auto-ensembled.
@@ -86,9 +88,9 @@ class AutoEnsembleSubestimator(  # pylint: disable=g-classes-have-attributes
 
   # pylint: enable=g-classes-have-attributes
 
-  def __new__(cls, estimator, train_input_fn=None):
-    return super(AutoEnsembleSubestimator, cls).__new__(cls, estimator,
-                                                        train_input_fn)
+  def __new__(cls, estimator, train_input_fn=None, prediction_only=False):
+    return super(AutoEnsembleSubestimator,
+                 cls).__new__(cls, estimator, train_input_fn, prediction_only)
 
 
 class _BuilderFromSubestimator(subnetwork_lib.Builder):
@@ -136,8 +138,9 @@ class _BuilderFromSubestimator(subnetwork_lib.Builder):
                        previous_ensemble,
                        config=None):
     # We don't need an EVAL mode since AdaNet takes care of evaluation for us.
+    subestimator = self._subestimator(config)
     mode = tf.estimator.ModeKeys.PREDICT
-    if training:
+    if training and not subestimator.prediction_only:
       mode = tf.estimator.ModeKeys.TRAIN
 
     # Call in template to ensure that variables are created once and reused.
@@ -145,7 +148,6 @@ class _BuilderFromSubestimator(subnetwork_lib.Builder):
                                                         self._call_model_fn)
     subestimator_features, subestimator_labels = features, labels
     local_init_ops = []
-    subestimator = self._subestimator(config)
     if training and subestimator.train_input_fn:
       # TODO: Consider tensorflow_estimator/python/estimator/util.py.
       inputs = subestimator.train_input_fn()
