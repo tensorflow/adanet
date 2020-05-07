@@ -82,6 +82,9 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
     global_step_combiner_fn: See :class:`adanet.Estimator`.
     max_iterations: See :class:`adanet.Estimator`.
     replay_config: See :class:`adanet.Estimator`.
+    add_predict_batch_config: If True, supplies a default
+      `tpu_estimator.BatchConfig` when calling
+      `tpu_estimator.model_fn_inference_on_tpu`, otherwise supplies None.
     **kwargs: Extra keyword args passed to the parent.
   """
 
@@ -115,6 +118,7 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
                global_step_combiner_fn=tf.math.reduce_mean,
                max_iterations=None,
                replay_config=None,
+               add_predict_batch_config=True,
                **kwargs):
     self._use_tpu = use_tpu
     if not self._use_tpu:
@@ -131,6 +135,7 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
     self._predict_batch_size = (
         predict_batch_size or eval_batch_size or train_batch_size or 0)
     self._embedding_config_spec = embedding_config_spec
+    self._add_predict_batch_config = add_predict_batch_config
     if self._embedding_config_spec:
       logging.warning(
           "TPU does not support inference with TPUEmbedding. Force setting "
@@ -402,14 +407,16 @@ class TPUEstimator(Estimator, tf.compat.v1.estimator.tpu.TPUEstimator):
 
       if (is_export and params["use_tpu"] and
           mode == tf.estimator.ModeKeys.PREDICT):
-        batch_config = tpu_estimator.BatchConfig(
-            # Set num_batch_threads to the number of TPU cores on Servomatic.
-            num_batch_threads=2,
-            max_batch_size=self._predict_batch_size,
-            # TODO: Magic number. Investigate whether there is a better
-            # way to set this, or have the user pass it in.
-            batch_timeout_micros=60 * 1000,
-            allowed_batch_sizes=[self._predict_batch_size])
+        batch_config = None
+        if self._add_predict_batch_config:
+          batch_config = tpu_estimator.BatchConfig(
+              # Set num_batch_threads to the number of TPU cores on Servomatic.
+              num_batch_threads=2,
+              max_batch_size=self._predict_batch_size,
+              # TODO: Magic number. Investigate whether there is a
+              # better way to set this, or have the user pass it in.
+              batch_timeout_micros=60 * 1000,
+              allowed_batch_sizes=[self._predict_batch_size])
         return tpu_estimator.model_fn_inference_on_tpu(
             adanet_model_fn,
             features=features,
