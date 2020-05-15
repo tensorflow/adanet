@@ -688,6 +688,8 @@ class Estimator(tf.estimator.Estimator):
           "%s is an experimental feature. Its behavior is not guaranteed "
           "to be backwards compatible.", placement_strategy_arg)
 
+    self._warm_start_settings = kwargs.get("warm_start_from")
+
     # Monkey patch the default variable placement strategy that Estimator uses
     # since it does not support workers having different graphs from the chief.
     # TODO: Consider using `RunConfig.replace` with the new device_fn,
@@ -1238,7 +1240,9 @@ class Estimator(tf.estimator.Estimator):
     """Creates a temp `Estimator` to grow the graph for the next iteration."""
 
     return tf.estimator.Estimator(
-        model_fn=self._create_model_fn(**create_model_fn_args), config=config)
+        model_fn=self._create_model_fn(**create_model_fn_args),
+        config=config,
+        warm_start_from=self._warm_start_settings)
 
   def _execute_bookkeeping_phase(self, train_input_fn, iteration_number,
                                  train_hooks, checkpoint_path):
