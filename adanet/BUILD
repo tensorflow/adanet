@@ -27,6 +27,7 @@ py_library(
 py_test(
     name = "adanet_test",
     srcs = ["adanet_test.py"],
+    srcs_version = "PY3",
     deps = [
         ":adanet",
         "//adanet/examples:simple_dnn",
