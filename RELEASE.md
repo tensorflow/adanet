@@ -13,14 +13,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================-->
 
-# Current version (0.9.0.dev)
+# Current version (0.10.0.dev)
  * Under development.
+
+# Release (0.9.0)
+ * Drop support for Tensorflow 1.* . Only TensorFlow >= 2.1 is supported.
+ * Drop support for Python 2.* . Only Python >= 3.6 is supported.
+ * Preserved the outputs in the PredictionOutput that are not in the best_export_outputs.
+ * Add warm_start support to adanet Estimators.
  * Added support for predicting/serving on TPU.
  * Introduce support for `AutoEnsembleTPUEstimator`.
- * Introduce experimental `adanet.keras.Model` API.
- * Introduce experimental `adanet.keras.AutoEnsemble` API.
+ * Introduce experimental `adanet.experimental` Keras ModelFlow APIs.
  * Replace reports.proto with simple serialized JSON. No longer have proto dependencies.
- * Support only TensorFlow 1.15+. Drop support for TensorFlow 1.14.
 
 # Release 0.8.0
  * Add support for TensorFlow 2.0.
