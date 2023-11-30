@@ -43,7 +43,7 @@ rigorous manner.
     learner's weight is inversely proportional to the Rademacher complexity of
     its function class, and all the weights in the logits layer sum to 1.
     Additionally, at training time, we don't have to discourage the trainer from
-    learning complex models -- it is only when we consider the how much the
+    learning complex models -- it is only when we consider how much the
     model should contribute to the ensemble do we take the complexity of the
     model into account.
 *   **Complexity is not just about the weights.** The Rademacher complexity of a

@@ -46,7 +46,7 @@ architecture search to grow an ensemble of subnetworks:
 
 Each AdaNet **iteration** has the given lifecycle:
 
-![AdaNet iteration lifecucle](./assets/lifecycle.svg "The lifecycle of an AdaNet iteration.")
+![AdaNet iteration lifecycle](./assets/lifecycle.svg "The lifecycle of an AdaNet iteration.")
 
 Each of these concepts has an associated Python object:
 
